@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flowboard — Project & Task Prioritization Dashboard</title>
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('flowboard_theme');
+      if (stored !== 'light') document.documentElement.classList.add('dark');
+    } catch (e) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+        colors: {
+          brand: {
+            50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+            400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+            800: '#3730a3', 900: '#312e81'
+          }
+        },
+        boxShadow: {
+          card: '0 1px 2px 0 rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.08)',
+          pop: '0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08)'
+        }
+      }
+    }
+  };
+</script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
+  html, body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+  * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+  *::-webkit-scrollbar { height: 8px; width: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 9999px; }
+  *::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+  .dark * { scrollbar-color: #3f4a5f transparent; }
+  .dark *::-webkit-scrollbar-thumb { background-color: #3f4a5f; }
+  .dark *::-webkit-scrollbar-thumb:hover { background-color: #566179; }
+
+  body, header, .task-card, #task-modal > div, #confirm-modal > div {
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  [data-view]{ display: none; }
+  [data-view].active-view{ display: block; }
+
+  .task-card.dragging { opacity: 0.4; }
+  .col-drop-target { background-color: rgba(99, 102, 241, 0.06); outline: 2px dashed #a5b4fc; outline-offset: -4px; }
+  .dark .col-drop-target { background-color: rgba(99, 102, 241, 0.1); outline-color: #4f46e5; }
+
+  .modal-backdrop { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+  .dark .modal-backdrop { background: rgba(2, 6, 23, 0.75); }
+
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .toast-anim { animation: toast-in 0.18s ease-out; }
+
+  .gantt-bar { transition: filter 0.15s ease; }
+  .gantt-bar:hover { filter: brightness(0.95); }
+
+  input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+</style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 min-h-screen">
+
+<div id="app" class="min-h-screen flex flex-col">
+
+  <!-- ============ HEADER ============ -->
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-3">
+      <div class="flex flex-wrap items-center gap-3 justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card shrink-0">
+            <i data-lucide="layout-dashboard" class="w-5 h-5 text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">Flowboard</h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-none mt-1">Project &amp; task prioritization dashboard</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700 text-xs">
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-400"></span><span id="stat-total" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">tasks</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">overdue</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span id="stat-high" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">high priority</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">done</span></div>
+          </div>
+
+          <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            <i data-lucide="sun" class="w-4 h-4"></i>
+          </button>
+          <button id="btn-export" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            <i data-lucide="download" class="w-4 h-4"></i><span class="hidden sm:inline">Export</span>
+          </button>
+          <button id="btn-import" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            <i data-lucide="upload" class="w-4 h-4"></i><span class="hidden sm:inline">Import</span>
+          </button>
+          <input type="file" id="import-file-input" accept="application/json" class="hidden">
+          <button id="btn-add-task" class="inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card transition">
+            <i data-lucide="plus" class="w-4 h-4"></i><span>Add Task</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar: search / filters / view switch -->
+      <div class="flex flex-wrap items-center gap-2 mt-3">
+        <div class="relative flex-1 min-w-[180px] max-w-xs">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        </div>
+        <select id="filter-priority" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
+          <option value="">All priorities</option>
+          <option value="High">High priority</option>
+          <option value="Medium">Medium priority</option>
+          <option value="Low">Low priority</option>
+        </select>
+        <select id="filter-project" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
+          <option value="">All projects</option>
+        </select>
+        <select id="filter-assignee" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
+          <option value="">Everyone</option>
+        </select>
+        <button id="btn-clear-filters" class="text-xs font-medium text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
+
+        <div class="ml-auto flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+          <button data-view-btn="board" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <i data-lucide="columns-3" class="w-4 h-4"></i>Board
+          </button>
+          <button data-view-btn="gantt" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <i data-lucide="gantt-chart-square" class="w-4 h-4"></i>Timeline
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col gap-6">
+
+    <!-- ============ FOCUS OF THE DAY ============ -->
+    <section id="focus-section">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center">
+            <i data-lucide="flame" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>
+          </div>
+          <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100">Focus of the Day</h2>
+          <span class="text-xs text-slate-400 dark:text-slate-500">— highest priority &amp; most urgent, auto-sorted</span>
+        </div>
+      </div>
+      <div id="focus-list" class="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1"></div>
+    </section>
+
+    <!-- ============ BOARD VIEW ============ -->
+    <section id="view-board" data-view class="active-view flex-1">
+      <div id="board-columns" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start"></div>
+    </section>
+
+    <!-- ============ GANTT VIEW ============ -->
+    <section id="view-gantt" data-view class="flex-1">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="gantt-chart-square" class="w-4 h-4 text-slate-400 dark:text-slate-500"></i>
+            <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100">Workload Timeline</h2>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span>High</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>Medium</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
+            <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
+          </div>
+        </div>
+        <div id="gantt-wrap"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="text-center text-xs text-slate-400 dark:text-slate-600 py-4">
+    Flowboard — data is stored locally in your browser. Nothing leaves your device.
+  </footer>
+</div>
+
+<!-- ============ TASK MODAL ============ -->
+<div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+  <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+      <h3 id="task-modal-title" class="text-base font-bold text-slate-900 dark:text-slate-100">Add Task</h3>
+      <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500">
+        <i data-lucide="x" class="w-4.5 h-4.5"></i>
+      </button>
+    </div>
+    <form id="task-form" class="px-5 py-4 space-y-4 overflow-y-auto">
+      <input type="hidden" id="task-id">
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Task Name <span class="text-rose-500">*</span></label>
+        <input id="task-name" type="text" required maxlength="120" placeholder="e.g. Cut social teaser v2" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Project <span class="text-rose-500">*</span></label>
+          <input id="task-project" list="project-suggestions" type="text" required maxlength="60" placeholder="e.g. Q3 Campaign" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <datalist id="project-suggestions"></datalist>
+          <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
+          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="e.g. Priya Nair" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <datalist id="assignee-suggestions"></datalist>
+          <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Priority</label>
+          <select id="task-priority" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <option value="High">High</option>
+            <option value="Medium" selected>Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Status</label>
+          <select id="task-status" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <option value="Pipeline" selected>Pipeline</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Review">Review</option>
+            <option value="Done">Done</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Start Date</label>
+          <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Deadline <span class="text-rose-500">*</span></label>
+          <input id="task-deadline" type="date" required class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
+          <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Google Drive Link</label>
+        <div class="relative">
+          <i data-lucide="link" class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        </div>
+        <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+      </div>
+    </form>
+    <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+      <button id="task-delete-btn" class="hidden text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1.5">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>Delete
+      </button>
+      <div class="flex items-center gap-2 ml-auto">
+        <button id="task-cancel-btn" type="button" class="text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700">Cancel</button>
+        <button id="task-save-btn" form="task-form" type="submit" class="text-sm font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card">Save Task</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CONFIRM MODAL ============ -->
+<div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+  <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
+    <div class="p-5">
+      <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 dark:text-rose-400"></i>
+      </div>
+      <h3 id="confirm-title" class="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Are you sure?</h3>
+      <p id="confirm-body" class="text-sm text-slate-500 dark:text-slate-400"></p>
+    </div>
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+      <button id="confirm-cancel-btn" class="text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700">Cancel</button>
+      <button id="confirm-ok-btn" class="text-sm font-semibold px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TOASTS ============ -->
+<div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     CONSTANTS
+  ========================================================= */
+  var STORAGE_KEY = 'flowboard_tasks_v1';
+  var STATUSES = ['Pipeline', 'In Progress', 'Review', 'Done'];
+  var PRIORITIES = ['High', 'Medium', 'Low'];
+  var PRIORITY_WEIGHT = { High: 3, Medium: 2, Low: 1 };
+  var GANTT_DAY_WIDTH = 36;
+  var GANTT_LABEL_WIDTH = 232;
+
+  var STATUS_META = {
+    'Pipeline':    { color: 'slate',  dot: 'bg-slate-400',  chip: 'bg-slate-100 text-slate-600',   headerBg: 'bg-slate-50 dark:bg-slate-900/60',  icon: 'inbox' },
+    'In Progress': { color: 'sky',    dot: 'bg-sky-500',    chip: 'bg-sky-100 text-sky-700',       headerBg: 'bg-sky-50 dark:bg-sky-500/5',    icon: 'loader-circle' },
+    'Review':      { color: 'violet', dot: 'bg-violet-500', chip: 'bg-violet-100 text-violet-700', headerBg: 'bg-violet-50 dark:bg-violet-500/5', icon: 'eye' },
+    'Done':        { color: 'emerald',dot: 'bg-emerald-500',chip: 'bg-emerald-100 text-emerald-700',headerBg: 'bg-emerald-50 dark:bg-emerald-500/5',icon: 'circle-check-big' }
+  };
+
+  var PRIORITY_META = {
+    High:   { badge: 'bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25', dot: 'bg-rose-500', bar: 'bg-rose-400', barLight: 'bg-rose-100 dark:bg-rose-500/10', border: 'border-l-rose-500' },
+    Medium: { badge: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25', dot: 'bg-amber-500', bar: 'bg-amber-400', barLight: 'bg-amber-100 dark:bg-amber-500/10', border: 'border-l-amber-500' },
+    Low:    { badge: 'bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25', dot: 'bg-sky-500', bar: 'bg-sky-400', barLight: 'bg-sky-100 dark:bg-sky-500/10', border: 'border-l-sky-500' }
+  };
+
+  var AVATAR_PALETTE = ['bg-brand-500', 'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-teal-500'];
+
+  /* =========================================================
+     STATE
+  ========================================================= */
+  var tasks = [];
+  var currentView = 'board';
+  var pendingImportData = null;
+  var draggedTaskId = null;
+
+  var filters = { search: '', priority: '', project: '', assignee: '' };
+
+  /* =========================================================
+     UTILITIES
+  ========================================================= */
+  function uid() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function todayMidnight() {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function parseDate(str) {
+    if (!str) return null;
+    var d = new Date(str + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function toDateInputValue(date) {
+    var y = date.getFullYear();
+    var m = String(date.getMonth() + 1).padStart(2, '0');
+    var d = String(date.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+
+  function addDays(date, n) {
+    var d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((b.getTime() - a.getTime()) / 86400000);
+  }
+
+  function daysUntil(dateStr) {
+    var d = parseDate(dateStr);
+    if (!d) return null;
+    return daysBetween(todayMidnight(), d);
+  }
+
+  function formatShortDate(dateStr) {
+    var d = parseDate(dateStr);
+    if (!d) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function initials(name) {
+    if (!name) return '?';
+    var parts = name.trim().split(/\s+/);
+    var s = parts[0] ? parts[0][0] : '';
+    if (parts.length > 1) s += parts[parts.length - 1][0];
+    return s.toUpperCase();
+  }
+
+  function avatarColor(name) {
+    var hash = 0;
+    for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+  }
+
+  function normalizeUrl(url) {
+    url = (url || '').trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return url;
+  }
+
+  function debounce(fn, wait) {
+    var t = null;
+    return function () {
+      var args = arguments;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(null, args); }, wait);
+    };
+  }
+
+  function refreshIcons() {
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  /* =========================================================
+     THEME
+  ========================================================= */
+  var THEME_KEY = 'flowboard_theme';
+
+  function isDarkMode() {
+    return document.documentElement.classList.contains('dark');
+  }
+
+  function syncThemeToggleIcon() {
+    var btn = document.getElementById('btn-theme-toggle');
+    if (!btn) return;
+    btn.innerHTML = isDarkMode()
+      ? '<i data-lucide="sun" class="w-4 h-4"></i>'
+      : '<i data-lucide="moon" class="w-4 h-4"></i>';
+    refreshIcons();
+  }
+
+  function toggleTheme() {
+    var next = !isDarkMode();
+    document.documentElement.classList.toggle('dark', next);
+    try { localStorage.setItem(THEME_KEY, next ? 'dark' : 'light'); } catch (e) { /* ignore */ }
+    syncThemeToggleIcon();
+  }
+
+  document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
+
+  /* =========================================================
+     PERSISTENCE
+  ========================================================= */
+  function loadTasks() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) { /* ignore corrupt storage */ }
+    return null;
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch (e) {
+      showToast('Could not save to local storage (' + e.message + ')', 'error');
+    }
+  }
+
+  function seedDemoData() {
+    var today = todayMidnight();
+    var samples = [
+      { name: 'Shoot brand hero video', project: 'Q3 Rebrand', priority: 'High', status: 'In Progress', assignee: 'Priya Nair', startOffset: -3, dueOffset: 1, drive: 'https://drive.google.com/drive/folders/brand-hero' },
+      { name: 'Client feedback revisions — homepage', project: 'Nova Website', priority: 'High', status: 'Review', assignee: 'Marcus Lee', startOffset: -2, dueOffset: 0, drive: 'https://drive.google.com/drive/folders/nova-revisions' },
+      { name: 'Edit social teaser cutdown', project: 'Q3 Rebrand', priority: 'High', status: 'Pipeline', assignee: 'Ava Chen', startOffset: 0, dueOffset: 2, drive: '' },
+      { name: 'Finalize deck for pitch meeting', project: 'Atlas Pitch', priority: 'Medium', status: 'In Progress', assignee: 'Marcus Lee', startOffset: -1, dueOffset: 3, drive: 'https://drive.google.com/drive/folders/atlas-pitch-deck' },
+      { name: 'Storyboard episode 4', project: 'Podcast Series', priority: 'Medium', status: 'Pipeline', assignee: 'Diego Ruiz', startOffset: 1, dueOffset: 6, drive: '' },
+      { name: 'Color grade final cut', project: 'Nova Website', priority: 'Medium', status: 'Review', assignee: 'Ava Chen', startOffset: -4, dueOffset: -1, drive: 'https://drive.google.com/drive/folders/nova-grade' },
+      { name: 'Organize asset library', project: 'Internal Ops', priority: 'Low', status: 'Pipeline', assignee: 'Sam Osei', startOffset: 2, dueOffset: 9, drive: '' },
+      { name: 'Send wrap report to client', project: 'Atlas Pitch', priority: 'Low', status: 'Done', assignee: 'Priya Nair', startOffset: -8, dueOffset: -5, drive: 'https://drive.google.com/drive/folders/atlas-wrap' },
+      { name: 'Publish podcast episode 3', project: 'Podcast Series', priority: 'Medium', status: 'Done', assignee: 'Diego Ruiz', startOffset: -6, dueOffset: -3, drive: '' },
+      { name: 'Draft Q4 content calendar', project: 'Internal Ops', priority: 'Low', status: 'In Progress', assignee: 'Sam Osei', startOffset: -1, dueOffset: 8, drive: '' }
+    ];
+    return samples.map(function (s) {
+      return {
+        id: uid(),
+        name: s.name,
+        project: s.project,
+        priority: s.priority,
+        status: s.status,
+        assignee: s.assignee,
+        startDate: toDateInputValue(addDays(today, s.startOffset)),
+        deadline: toDateInputValue(addDays(today, s.dueOffset)),
+        driveLink: s.drive,
+        createdAt: new Date().toISOString()
+      };
+    });
+  }
+
+  /* =========================================================
+     FILTERING / SORTING / SCORING
+  ========================================================= */
+  function applyFilters(list) {
+    var q = filters.search.trim().toLowerCase();
+    return list.filter(function (t) {
+      if (filters.priority && t.priority !== filters.priority) return false;
+      if (filters.project && t.project !== filters.project) return false;
+      if (filters.assignee && t.assignee !== filters.assignee) return false;
+      if (q) {
+        var hay = (t.name + ' ' + t.project + ' ' + t.assignee).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function focusScore(t) {
+    var days = daysUntil(t.deadline);
+    var pw = PRIORITY_WEIGHT[t.priority] || 1;
+    var score = pw * 1000;
+    if (days === null) return score;
+    if (days < 0) score += 6000 + Math.min(Math.abs(days), 100) * 10;
+    else score += Math.max(0, 30 - days) * 15;
+    return score;
+  }
+
+  function sortByFocus(list) {
+    return list.slice().sort(function (a, b) { return focusScore(b) - focusScore(a); });
+  }
+
+  function uniqueValues(field) {
+    var set = {};
+    tasks.forEach(function (t) { if (t[field]) set[t[field]] = true; });
+    return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
+  }
+
+  /* =========================================================
+     TOASTS
+  ========================================================= */
+  function showToast(message, type) {
+    type = type || 'success';
+    var iconMap = { success: 'circle-check', error: 'circle-alert', info: 'info' };
+    var colorMap = {
+      success: 'bg-emerald-600',
+      error: 'bg-rose-600',
+      info: 'bg-slate-800'
+    };
+    var container = document.getElementById('toast-container');
+    var el = document.createElement('div');
+    el.className = 'toast-anim flex items-center gap-2 text-white text-sm font-medium pl-3 pr-4 py-2.5 rounded-lg shadow-pop ' + colorMap[type];
+    el.innerHTML = '<i data-lucide="' + iconMap[type] + '" class="w-4 h-4 shrink-0"></i><span></span>';
+    el.querySelector('span').textContent = message;
+    container.appendChild(el);
+    refreshIcons();
+    setTimeout(function () {
+      el.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(6px)';
+      setTimeout(function () { el.remove(); }, 260);
+    }, 2800);
+  }
+
+  /* =========================================================
+     CONFIRM MODAL
+  ========================================================= */
+  var confirmModal = document.getElementById('confirm-modal');
+  var confirmCallback = null;
+
+  function openConfirm(title, body, onConfirm) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').textContent = body;
+    confirmCallback = onConfirm;
+    confirmModal.classList.remove('hidden');
+    confirmModal.classList.add('flex');
+  }
+
+  function closeConfirm() {
+    confirmModal.classList.add('hidden');
+    confirmModal.classList.remove('flex');
+    confirmCallback = null;
+  }
+
+  document.getElementById('confirm-cancel-btn').addEventListener('click', closeConfirm);
+  document.getElementById('confirm-ok-btn').addEventListener('click', function () {
+    var cb = confirmCallback;
+    closeConfirm();
+    if (cb) cb();
+  });
+  confirmModal.addEventListener('click', function (e) { if (e.target === confirmModal) closeConfirm(); });
+
+  /* =========================================================
+     TASK MODAL
+  ========================================================= */
+  var taskModal = document.getElementById('task-modal');
+  var taskForm = document.getElementById('task-form');
+  var editingTaskId = null;
+
+  function clearFieldErrors() {
+    taskForm.querySelectorAll('.field-error').forEach(function (el) {
+      el.textContent = '';
+      el.classList.add('hidden');
+    });
+    taskForm.querySelectorAll('input, select').forEach(function (el) {
+      el.classList.remove('border-rose-400', 'ring-2', 'ring-rose-200');
+    });
+  }
+
+  function setFieldError(inputEl, message) {
+    inputEl.classList.add('border-rose-400');
+    var errEl = inputEl.parentElement.querySelector('.field-error');
+    if (errEl) {
+      errEl.textContent = message;
+      errEl.classList.remove('hidden');
+    }
+  }
+
+  function openTaskModal(task) {
+    clearFieldErrors();
+    editingTaskId = task ? task.id : null;
+    document.getElementById('task-modal-title').textContent = task ? 'Edit Task' : 'Add Task';
+    document.getElementById('task-id').value = task ? task.id : '';
+    document.getElementById('task-name').value = task ? task.name : '';
+    document.getElementById('task-project').value = task ? task.project : '';
+    document.getElementById('task-assignee').value = task ? task.assignee : '';
+    document.getElementById('task-priority').value = task ? task.priority : 'Medium';
+    document.getElementById('task-status').value = task ? task.status : 'Pipeline';
+    document.getElementById('task-start').value = task ? task.startDate : toDateInputValue(todayMidnight());
+    document.getElementById('task-deadline').value = task ? task.deadline : '';
+    document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
+    document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
+
+    populateDatalists();
+    taskModal.classList.remove('hidden');
+    taskModal.classList.add('flex');
+    setTimeout(function () { document.getElementById('task-name').focus(); }, 30);
+  }
+
+  function closeTaskModal() {
+    taskModal.classList.add('hidden');
+    taskModal.classList.remove('flex');
+    editingTaskId = null;
+    taskForm.reset();
+  }
+
+  function populateDatalists() {
+    var projectList = document.getElementById('project-suggestions');
+    var assigneeList = document.getElementById('assignee-suggestions');
+    projectList.innerHTML = uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
+    assigneeList.innerHTML = uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">'; }).join('');
+  }
+
+  document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
+  document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
+  document.getElementById('task-cancel-btn').addEventListener('click', closeTaskModal);
+  taskModal.addEventListener('click', function (e) { if (e.target === taskModal) closeTaskModal(); });
+
+  document.getElementById('task-delete-btn').addEventListener('click', function () {
+    var id = editingTaskId;
+    if (!id) return;
+    var t = tasks.find(function (x) { return x.id === id; });
+    closeTaskModal();
+    openConfirm('Delete this task?', 'This will permanently remove "' + (t ? t.name : 'this task') + '" from your board. This cannot be undone.', function () {
+      deleteTask(id);
+    });
+  });
+
+  taskForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearFieldErrors();
+
+    var nameEl = document.getElementById('task-name');
+    var projectEl = document.getElementById('task-project');
+    var assigneeEl = document.getElementById('task-assignee');
+    var startEl = document.getElementById('task-start');
+    var deadlineEl = document.getElementById('task-deadline');
+    var driveEl = document.getElementById('task-drive');
+
+    var name = nameEl.value.trim();
+    var project = projectEl.value.trim();
+    var assignee = assigneeEl.value.trim();
+    var priority = document.getElementById('task-priority').value;
+    var status = document.getElementById('task-status').value;
+    var startDate = startEl.value || toDateInputValue(todayMidnight());
+    var deadline = deadlineEl.value;
+    var driveLink = normalizeUrl(driveEl.value);
+
+    var hasError = false;
+    if (!name) { setFieldError(nameEl, 'Task name is required.'); hasError = true; }
+    if (!project) { setFieldError(projectEl, 'Project is required.'); hasError = true; }
+    if (!assignee) { setFieldError(assigneeEl, 'Assignee is required.'); hasError = true; }
+    if (!deadline) { setFieldError(deadlineEl, 'Deadline is required.'); hasError = true; }
+    if (deadline && startDate && parseDate(startDate) > parseDate(deadline)) {
+      setFieldError(deadlineEl, 'Deadline must be on or after the start date.');
+      hasError = true;
+    }
+    if (driveEl.value.trim() && !/^https?:\/\/.+\..+/.test(driveLink)) {
+      setFieldError(driveEl, 'Please enter a valid link.');
+      hasError = true;
+    }
+    if (hasError) return;
+
+    if (editingTaskId) {
+      var idx = tasks.findIndex(function (t) { return t.id === editingTaskId; });
+      if (idx !== -1) {
+        tasks[idx] = Object.assign({}, tasks[idx], {
+          name: name, project: project, assignee: assignee, priority: priority,
+          status: status, startDate: startDate, deadline: deadline, driveLink: driveLink
+        });
+      }
+      showToast('Task updated', 'success');
+    } else {
+      tasks.push({
+        id: uid(), name: name, project: project, assignee: assignee, priority: priority,
+        status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
+        createdAt: new Date().toISOString()
+      });
+      showToast('Task added', 'success');
+    }
+
+    persist();
+    closeTaskModal();
+    renderAll();
+  });
+
+  function deleteTask(id) {
+    tasks = tasks.filter(function (t) { return t.id !== id; });
+    persist();
+    renderAll();
+    showToast('Task deleted', 'info');
+  }
+
+  function updateTaskStatus(id, newStatus) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (!t || t.status === newStatus) return;
+    t.status = newStatus;
+    persist();
+    renderAll();
+  }
+
+  /* =========================================================
+     RENDER: STATS
+  ========================================================= */
+  function renderStats() {
+    var overdue = 0, high = 0, done = 0;
+    tasks.forEach(function (t) {
+      var d = daysUntil(t.deadline);
+      if (d !== null && d < 0 && t.status !== 'Done') overdue++;
+      if (t.priority === 'High' && t.status !== 'Done') high++;
+      if (t.status === 'Done') done++;
+    });
+    document.getElementById('stat-total').textContent = tasks.length;
+    document.getElementById('stat-overdue').textContent = overdue;
+    document.getElementById('stat-high').textContent = high;
+    document.getElementById('stat-done').textContent = done;
+  }
+
+  /* =========================================================
+     RENDER: FOCUS OF THE DAY
+  ========================================================= */
+  function renderFocus() {
+    var container = document.getElementById('focus-list');
+    var candidates = tasks.filter(function (t) { return t.status !== 'Done'; });
+    var top = sortByFocus(candidates).slice(0, 6);
+
+    if (top.length === 0) {
+      container.innerHTML = '<div class="flex items-center gap-2 text-sm text-slate-400 dark:text-slate-500 py-4 px-1">' +
+        '<i data-lucide="party-popper" class="w-4 h-4"></i>Nothing urgent right now — nice work staying ahead.</div>';
+      refreshIcons();
+      return;
+    }
+
+    container.innerHTML = top.map(function (t) {
+      var days = daysUntil(t.deadline);
+      var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+      var urgencyLabel, urgencyClass;
+      if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
+      else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'; }
+      else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'; }
+      else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-800'; }
+
+      return (
+        '<button data-open-task="' + t.id + '" class="text-left group shrink-0 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
+          '<div class="flex items-center justify-between mb-1.5">' +
+            '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
+            '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
+          '</div>' +
+          '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 mb-2">' + escapeHtml(t.project) + '</p>' +
+          '<div class="flex items-center gap-1.5">' +
+            '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center">' + initials(t.assignee) + '</span>' +
+            '<span class="text-xs text-slate-500 dark:text-slate-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
+          '</div>' +
+        '</button>'
+      );
+    }).join('');
+    refreshIcons();
+  }
+
+  /* =========================================================
+     RENDER: BOARD
+  ========================================================= */
+  function taskCardHtml(t) {
+    var days = daysUntil(t.deadline);
+    var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+    var overdue = days !== null && days < 0 && t.status !== 'Done';
+    var dueSoon = days !== null && days >= 0 && days <= 1 && t.status !== 'Done';
+    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
+    var hasDrive = !!t.driveLink;
+
+    return (
+      '<div draggable="true" data-task-id="' + t.id + '" class="task-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-grab active:cursor-grabbing group hover:shadow-pop transition">' +
+        '<div class="flex items-start justify-between gap-2 mb-2">' +
+          '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + ' inline-flex items-center gap-1">' +
+            '<span class="w-1.5 h-1.5 rounded-full ' + pm.dot + '"></span>' + t.priority +
+          '</span>' +
+          '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">' +
+            '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>' +
+            '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' +
+          '</div>' +
+        '</div>' +
+        '<button data-open-task="' + t.id + '" class="block text-left w-full">' +
+          '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 hover:text-brand-700 dark:hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+        '</button>' +
+        '<p class="text-xs text-slate-400 dark:text-slate-500 mb-3 line-clamp-1">' + escapeHtml(t.project) + '</p>' +
+        '<div class="flex items-center justify-between text-xs mb-3">' +
+          '<span class="flex items-center gap-1 ' + dateClass + '"><i data-lucide="calendar" class="w-3.5 h-3.5"></i>' + formatShortDate(t.deadline) + '</span>' +
+          (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
+        '</div>' +
+        '<div class="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800">' +
+          '<div class="flex items-center gap-1.5 min-w-0">' +
+            '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[10px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            '<span class="text-xs text-slate-600 dark:text-slate-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
+          '</div>' +
+          '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800') + ' shrink-0">' +
+            '<i data-lucide="hard-drive" class="w-4 h-4"></i>' +
+          '</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderBoard() {
+    var filtered = applyFilters(tasks);
+    var container = document.getElementById('board-columns');
+    container.innerHTML = STATUSES.map(function (status) {
+      var meta = STATUS_META[status];
+      var items = sortByFocus(filtered.filter(function (t) { return t.status === status; }));
+      var cardsHtml = items.length
+        ? items.map(taskCardHtml).join('')
+        : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">No tasks here</div>';
+
+      return (
+        '<div class="flex flex-col rounded-xl ' + meta.headerBg + ' border border-slate-200/70 dark:border-slate-800 min-h-[200px]" data-column="' + status + '">' +
+          '<div class="flex items-center justify-between px-3.5 py-3">' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="w-2 h-2 rounded-full ' + meta.dot + '"></span>' +
+              '<h3 class="text-sm font-bold text-slate-700 dark:text-slate-200">' + status + '</h3>' +
+            '</div>' +
+            '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-900/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
+          '</div>' +
+          '<div class="flex flex-col gap-2.5 px-2.5 pb-3 flex-1" data-column-body="' + status + '">' + cardsHtml + '</div>' +
+        '</div>'
+      );
+    }).join('');
+    refreshIcons();
+    attachBoardDnD();
+  }
+
+  function attachBoardDnD() {
+    document.querySelectorAll('.task-card').forEach(function (card) {
+      card.addEventListener('dragstart', function (e) {
+        draggedTaskId = card.getAttribute('data-task-id');
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', function () {
+        card.classList.remove('dragging');
+        draggedTaskId = null;
+      });
+    });
+
+    document.querySelectorAll('[data-column]').forEach(function (col) {
+      col.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        col.classList.add('col-drop-target');
+      });
+      col.addEventListener('dragleave', function () { col.classList.remove('col-drop-target'); });
+      col.addEventListener('drop', function (e) {
+        e.preventDefault();
+        col.classList.remove('col-drop-target');
+        var status = col.getAttribute('data-column');
+        if (draggedTaskId) updateTaskStatus(draggedTaskId, status);
+      });
+    });
+  }
+
+  /* =========================================================
+     RENDER: GANTT
+  ========================================================= */
+  function renderGantt() {
+    var wrap = document.getElementById('gantt-wrap');
+    var list = applyFilters(tasks).filter(function (t) { return t.startDate && t.deadline; });
+
+    if (list.length === 0) {
+      wrap.innerHTML = '<div class="text-sm text-slate-400 dark:text-slate-600 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">' +
+        'No tasks match the current filters yet.</div>';
+      return;
+    }
+
+    list = list.slice().sort(function (a, b) { return parseDate(a.startDate) - parseDate(b.startDate); });
+
+    var today = todayMidnight();
+    var allDates = [today];
+    list.forEach(function (t) {
+      allDates.push(parseDate(t.startDate));
+      allDates.push(parseDate(t.deadline));
+    });
+    var rangeStart = addDays(new Date(Math.min.apply(null, allDates.map(function (d) { return d.getTime(); }))), -2);
+    var rangeEnd = addDays(new Date(Math.max.apply(null, allDates.map(function (d) { return d.getTime(); }))), 4);
+    var totalDays = daysBetween(rangeStart, rangeEnd) + 1;
+
+    var days = [];
+    for (var i = 0; i < totalDays; i++) days.push(addDays(rangeStart, i));
+
+    var monthSpans = [];
+    days.forEach(function (d) {
+      var label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      var last = monthSpans[monthSpans.length - 1];
+      if (last && last.label === label) last.span++;
+      else monthSpans.push({ label: label, span: 1 });
+    });
+
+    var headerRowsHeight = 64;
+    var rowHeight = 52;
+    var totalGridHeight = headerRowsHeight + list.length * rowHeight;
+    var todayIndex = daysBetween(rangeStart, today);
+
+    var html = '';
+    html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + GANTT_DAY_WIDTH + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:fit-content;">';
+
+    // corner cells
+    html += '<div class="sticky top-0 left-0 z-40 bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-800 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-slate-500 dark:text-slate-400">Task</span></div>';
+
+    // month header row
+    var colCursor = 2;
+    monthSpans.forEach(function (m) {
+      html += '<div class="sticky top-0 z-30 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center px-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      colCursor += m.span;
+    });
+
+    // day header row
+    days.forEach(function (d, i) {
+      var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      var isToday = i === todayIndex;
+      html += '<div class="sticky top-8 z-30 border-b border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-[10px] leading-tight ' +
+        (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-slate-100/70 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500' : 'bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400')) +
+        '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
+        '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
+      '</div>';
+    });
+
+    // task rows
+    list.forEach(function (t, r) {
+      var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+      var rowIdx = r + 3;
+      var days_ = daysUntil(t.deadline);
+      var overdue = days_ !== null && days_ < 0 && t.status !== 'Done';
+
+      html += '<div class="sticky left-0 z-20 bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-800 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+        '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
+        '<div class="min-w-0">' +
+          '<p class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.project) + '</p>' +
+        '</div>' +
+      '</div>';
+
+      var barLeft = daysBetween(rangeStart, parseDate(t.startDate)) * GANTT_DAY_WIDTH;
+      var barWidth = (daysBetween(parseDate(t.startDate), parseDate(t.deadline)) + 1) * GANTT_DAY_WIDTH - 6;
+      var fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
+
+      html += '<div class="relative border-b border-slate-100 dark:border-slate-800/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
+      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
+        'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
+        'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
+          '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
+          '</div>' +
+          '<span class="absolute inset-0 flex items-center px-2 text-[11px] font-medium text-slate-700 dark:text-slate-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
+          (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"></span>' : '') +
+      '</button>';
+      html += '</div>';
+    });
+
+    // today vertical line
+    html += '<div class="absolute bg-rose-400/70 pointer-events-none" style="left:' + (GANTT_LABEL_WIDTH + todayIndex * GANTT_DAY_WIDTH) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
+
+    html += '</div>';
+
+    wrap.innerHTML = '<div class="overflow-auto border border-slate-200 dark:border-slate-800 rounded-lg" style="max-height:600px;">' + html + '</div>';
+    refreshIcons();
+  }
+
+  /* =========================================================
+     FILTER OPTIONS
+  ========================================================= */
+  function renderFilterOptions() {
+    var projectSel = document.getElementById('filter-project');
+    var assigneeSel = document.getElementById('filter-assignee');
+    var curProject = projectSel.value;
+    var curAssignee = assigneeSel.value;
+
+    projectSel.innerHTML = '<option value="">All projects</option>' +
+      uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('');
+    assigneeSel.innerHTML = '<option value="">Everyone</option>' +
+      uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>'; }).join('');
+
+    if (uniqueValues('project').indexOf(curProject) !== -1) projectSel.value = curProject;
+    if (uniqueValues('assignee').indexOf(curAssignee) !== -1) assigneeSel.value = curAssignee;
+
+    var anyFilter = filters.search || filters.priority || filters.project || filters.assignee;
+    document.getElementById('btn-clear-filters').classList.toggle('hidden', !anyFilter);
+  }
+
+  /* =========================================================
+     VIEW SWITCH
+  ========================================================= */
+  function setView(view) {
+    currentView = view;
+    document.querySelectorAll('[data-view]').forEach(function (el) { el.classList.remove('active-view'); });
+    document.getElementById('view-' + view).classList.add('active-view');
+    document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+      var active = btn.getAttribute('data-view-btn') === view;
+      btn.classList.toggle('bg-white', active);
+      btn.classList.toggle('dark:bg-slate-700', active);
+      btn.classList.toggle('shadow-card', active);
+      btn.classList.toggle('text-brand-700', active);
+      btn.classList.toggle('dark:text-brand-400', active);
+      btn.classList.toggle('text-slate-500', !active);
+      btn.classList.toggle('dark:text-slate-400', !active);
+    });
+    if (view === 'gantt') renderGantt();
+  }
+
+  document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { setView(btn.getAttribute('data-view-btn')); });
+  });
+
+  /* =========================================================
+     GLOBAL CLICK DELEGATION (cards, drive links, edit, delete)
+  ========================================================= */
+  document.addEventListener('click', function (e) {
+    var openBtn = e.target.closest('[data-open-task]');
+    var editBtn = e.target.closest('[data-edit-task]');
+    var delBtn = e.target.closest('[data-delete-task]');
+    var driveBtn = e.target.closest('[data-drive-link]');
+
+    if (editBtn) {
+      var t1 = tasks.find(function (x) { return x.id === editBtn.getAttribute('data-edit-task'); });
+      if (t1) openTaskModal(t1);
+      return;
+    }
+    if (delBtn) {
+      var id = delBtn.getAttribute('data-delete-task');
+      var t2 = tasks.find(function (x) { return x.id === id; });
+      openConfirm('Delete this task?', 'This will permanently remove "' + (t2 ? t2.name : 'this task') + '" from your board. This cannot be undone.', function () {
+        deleteTask(id);
+      });
+      return;
+    }
+    if (driveBtn) {
+      var id2 = driveBtn.getAttribute('data-drive-link');
+      var t3 = tasks.find(function (x) { return x.id === id2; });
+      if (t3 && t3.driveLink) {
+        window.open(t3.driveLink, '_blank', 'noopener,noreferrer');
+      } else {
+        showToast('No Google Drive link added for this task yet', 'info');
+      }
+      return;
+    }
+    if (openBtn) {
+      var t4 = tasks.find(function (x) { return x.id === openBtn.getAttribute('data-open-task'); });
+      if (t4) openTaskModal(t4);
+      return;
+    }
+  });
+
+  /* =========================================================
+     FILTER BAR EVENTS
+  ========================================================= */
+  var debouncedRender = debounce(function () { renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions(); }, 150);
+
+  document.getElementById('filter-search').addEventListener('input', function (e) {
+    filters.search = e.target.value;
+    debouncedRender();
+  });
+  document.getElementById('filter-priority').addEventListener('change', function (e) {
+    filters.priority = e.target.value;
+    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+  });
+  document.getElementById('filter-project').addEventListener('change', function (e) {
+    filters.project = e.target.value;
+    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+  });
+  document.getElementById('filter-assignee').addEventListener('change', function (e) {
+    filters.assignee = e.target.value;
+    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+  });
+  document.getElementById('btn-clear-filters').addEventListener('click', function () {
+    filters = { search: '', priority: '', project: '', assignee: '' };
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-priority').value = '';
+    document.getElementById('filter-project').value = '';
+    document.getElementById('filter-assignee').value = '';
+    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+  });
+
+  /* =========================================================
+     EXPORT / IMPORT
+  ========================================================= */
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var payload = {
+      app: 'Flowboard',
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      tasks: tasks
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var stamp = toDateInputValue(new Date());
+    a.href = url;
+    a.download = 'flowboard-export-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Dashboard exported as JSON', 'success');
+  });
+
+  var importInput = document.getElementById('import-file-input');
+  document.getElementById('btn-import').addEventListener('click', function () { importInput.click(); });
+
+  importInput.addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        var incoming = Array.isArray(data) ? data : data.tasks;
+        if (!Array.isArray(incoming)) throw new Error('File does not contain a valid task list.');
+
+        var cleaned = incoming.filter(function (t) { return t && typeof t === 'object' && t.name && t.deadline; })
+          .map(function (t) {
+            return {
+              id: uid(),
+              name: String(t.name).slice(0, 200),
+              project: String(t.project || 'Untitled Project').slice(0, 100),
+              priority: PRIORITIES.indexOf(t.priority) !== -1 ? t.priority : 'Medium',
+              status: STATUSES.indexOf(t.status) !== -1 ? t.status : 'Pipeline',
+              assignee: String(t.assignee || 'Unassigned').slice(0, 100),
+              startDate: parseDate(t.startDate) ? t.startDate : toDateInputValue(todayMidnight()),
+              deadline: parseDate(t.deadline) ? t.deadline : toDateInputValue(todayMidnight()),
+              driveLink: t.driveLink ? normalizeUrl(t.driveLink) : '',
+              createdAt: t.createdAt || new Date().toISOString()
+            };
+          });
+
+        if (cleaned.length === 0) throw new Error('No valid tasks were found in this file.');
+
+        pendingImportData = cleaned;
+        openConfirm(
+          'Import ' + cleaned.length + ' task' + (cleaned.length === 1 ? '' : 's') + '?',
+          'This will replace your current board (' + tasks.length + ' task' + (tasks.length === 1 ? '' : 's') + ') with the contents of this file. Export your current data first if you want to keep a backup.',
+          function () {
+            tasks = pendingImportData;
+            pendingImportData = null;
+            persist();
+            renderAll();
+            showToast('Imported ' + tasks.length + ' tasks', 'success');
+          }
+        );
+      } catch (err) {
+        showToast('Import failed: ' + err.message, 'error');
+      } finally {
+        importInput.value = '';
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  /* =========================================================
+     KEYBOARD SHORTCUTS
+  ========================================================= */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (!taskModal.classList.contains('hidden')) closeTaskModal();
+      if (!confirmModal.classList.contains('hidden')) closeConfirm();
+    }
+  });
+
+  /* =========================================================
+     MASTER RENDER
+  ========================================================= */
+  function renderAll() {
+    renderStats();
+    renderFocus();
+    renderBoard();
+    renderFilterOptions();
+    if (currentView === 'gantt') renderGantt();
+    refreshIcons();
+  }
+
+  /* =========================================================
+     INIT
+  ========================================================= */
+  function init() {
+    syncThemeToggleIcon();
+    var loaded = loadTasks();
+    tasks = loaded && loaded.length ? loaded : seedDemoData();
+    if (!loaded) persist();
+    setView('board');
+    renderAll();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
