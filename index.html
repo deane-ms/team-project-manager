@@ -73,15 +73,20 @@
   .gantt-bar:hover { filter: brightness(0.95); }
 
   input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+
+  /* Matches content-hub-firebase.html's .app rule so both tools share the same
+     content-column width instead of Flowboard stretching noticeably wider. */
+  .app-container { max-width: 78rem; }
+  @media (min-width: 1600px) { .app-container { max-width: min(92vw, 150rem); } }
 </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 min-h-screen">
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
 
 <div id="app" class="min-h-screen flex flex-col">
 
   <!-- ============ HEADER ============ -->
-  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-3">
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
+    <div class="app-container mx-auto px-4 sm:px-6 py-3">
       <div class="flex flex-wrap items-center gap-3 justify-between">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card shrink-0">
@@ -101,13 +106,13 @@
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">done</span></div>
           </div>
 
-          <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+          <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>
           </button>
-          <button id="btn-export" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+          <button id="btn-export" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span class="hidden sm:inline">Export</span>
           </button>
-          <button id="btn-import" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+          <button id="btn-import" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><span class="hidden sm:inline">Import</span>
           </button>
           <input type="file" id="import-file-input" accept="application/json" class="hidden">
@@ -121,23 +126,23 @@
       <div class="flex flex-wrap items-center gap-2 mt-3">
         <div class="relative flex-1 min-w-[180px] max-w-xs">
           <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
-        <select id="filter-priority" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
+        <select id="filter-priority" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
           <option value="">All priorities</option>
           <option value="High">High priority</option>
           <option value="Medium">Medium priority</option>
           <option value="Low">Low priority</option>
         </select>
-        <select id="filter-project" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
+        <select id="filter-project" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
           <option value="">All projects</option>
         </select>
-        <select id="filter-assignee" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
+        <select id="filter-assignee" class="text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 px-2.5">
           <option value="">Everyone</option>
         </select>
         <button id="btn-clear-filters" class="text-xs font-medium text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
 
-        <div class="ml-auto flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+        <div class="ml-auto flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
           <button data-view-btn="board" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>Board
           </button>
@@ -149,7 +154,7 @@
     </div>
   </header>
 
-  <main class="max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col gap-6">
+  <main class="app-container w-full mx-auto px-4 sm:px-6 pt-5 pb-16 flex-1 flex flex-col gap-6">
 
     <!-- ============ FOCUS OF THE DAY ============ -->
     <section id="focus-section">
@@ -172,7 +177,7 @@
 
     <!-- ============ GANTT VIEW ============ -->
     <section id="view-gantt" data-view class="flex-1">
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-card p-4">
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
             <svg class="w-4 h-4 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>
@@ -198,10 +203,10 @@
 
 <!-- ============ TASK MODAL ============ -->
 <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
-  <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+  <div class="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700">
       <h3 id="task-modal-title" class="text-base font-bold text-slate-900 dark:text-slate-100">Add Task</h3>
-      <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500">
+      <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500">
         <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -210,20 +215,20 @@
 
       <div>
         <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Task Name <span class="text-rose-500">*</span></label>
-        <input id="task-name" type="text" required maxlength="120" placeholder="e.g. Cut social teaser v2" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <input id="task-name" type="text" required maxlength="120" placeholder="e.g. Cut social teaser v2" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Project <span class="text-rose-500">*</span></label>
-          <input id="task-project" list="project-suggestions" type="text" required maxlength="60" placeholder="e.g. Q3 Campaign" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="task-project" list="project-suggestions" type="text" required maxlength="60" placeholder="e.g. Q3 Campaign" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="project-suggestions"></datalist>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
-          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="e.g. Priya Nair" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="e.g. Priya Nair" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="assignee-suggestions"></datalist>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
@@ -232,7 +237,7 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Priority</label>
-          <select id="task-priority" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <select id="task-priority" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
             <option value="High">High</option>
             <option value="Medium" selected>Medium</option>
             <option value="Low">Low</option>
@@ -240,7 +245,7 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Status</label>
-          <select id="task-status" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <select id="task-status" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
             <option value="Pipeline" selected>Pipeline</option>
             <option value="In Progress">In Progress</option>
             <option value="Review">Review</option>
@@ -252,11 +257,11 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Start Date</label>
-          <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
+          <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Deadline <span class="text-rose-500">*</span></label>
-          <input id="task-deadline" type="date" required class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
+          <input id="task-deadline" type="date" required class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
       </div>
@@ -265,12 +270,12 @@
         <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Google Drive Link</label>
         <div class="relative">
           <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
     </form>
-    <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+    <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
       <button id="task-delete-btn" class="hidden text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1.5">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>Delete
       </button>
@@ -284,7 +289,7 @@
 
 <!-- ============ CONFIRM MODAL ============ -->
 <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
-  <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
+  <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
     <div class="p-5">
       <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
         <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -292,7 +297,7 @@
       <h3 id="confirm-title" class="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Are you sure?</h3>
       <p id="confirm-body" class="text-sm text-slate-500 dark:text-slate-400"></p>
     </div>
-    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
       <button id="confirm-cancel-btn" class="text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700">Cancel</button>
       <button id="confirm-ok-btn" class="text-sm font-semibold px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700">Confirm</button>
     </div>
@@ -317,7 +322,7 @@
   var GANTT_LABEL_WIDTH = 232;
 
   var STATUS_META = {
-    'Pipeline':    { color: 'slate',  dot: 'bg-slate-400',  chip: 'bg-slate-100 text-slate-600',   headerBg: 'bg-slate-50 dark:bg-slate-900/60',  icon: 'inbox' },
+    'Pipeline':    { color: 'slate',  dot: 'bg-slate-400',  chip: 'bg-slate-100 text-slate-600',   headerBg: 'bg-slate-50 dark:bg-slate-800/60',  icon: 'inbox' },
     'In Progress': { color: 'sky',    dot: 'bg-sky-500',    chip: 'bg-sky-100 text-sky-700',       headerBg: 'bg-sky-50 dark:bg-sky-500/5',    icon: 'loader-circle' },
     'Review':      { color: 'violet', dot: 'bg-violet-500', chip: 'bg-violet-100 text-violet-700', headerBg: 'bg-violet-50 dark:bg-violet-500/5', icon: 'eye' },
     'Done':        { color: 'emerald',dot: 'bg-emerald-500',chip: 'bg-emerald-100 text-emerald-700',headerBg: 'bg-emerald-50 dark:bg-emerald-500/5',icon: 'circle-check-big' }
@@ -813,10 +818,10 @@
       if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
       else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'; }
       else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'; }
-      else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-800'; }
+      else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
 
       return (
-        '<button data-open-task="' + t.id + '" class="text-left group shrink-0 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
+        '<button data-open-task="' + t.id + '" class="text-left group shrink-0 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
           '<div class="flex items-center justify-between mb-1.5">' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
             '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
@@ -844,13 +849,13 @@
     var hasDrive = !!t.driveLink;
 
     return (
-      '<div draggable="true" data-task-id="' + t.id + '" class="task-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-grab active:cursor-grabbing group hover:shadow-pop transition">' +
+      '<div draggable="true" data-task-id="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-grab active:cursor-grabbing group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + ' inline-flex items-center gap-1">' +
             '<span class="w-1.5 h-1.5 rounded-full ' + pm.dot + '"></span>' + t.priority +
           '</span>' +
           '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">' +
-            '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+            '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
             '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
@@ -862,12 +867,12 @@
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + formatShortDate(t.deadline) + '</span>' +
           (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
         '</div>' +
-        '<div class="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800">' +
+        '<div class="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-700">' +
           '<div class="flex items-center gap-1.5 min-w-0">' +
             '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[10px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-slate-600 dark:text-slate-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
-          '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800') + ' shrink-0">' +
+          '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700') + ' shrink-0">' +
             svgIcon('drive', 'w-4 h-4') +
           '</button>' +
         '</div>' +
@@ -883,16 +888,16 @@
       var items = sortByFocus(filtered.filter(function (t) { return t.status === status; }));
       var cardsHtml = items.length
         ? items.map(taskCardHtml).join('')
-        : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">No tasks here</div>';
+        : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">No tasks here</div>';
 
       return (
-        '<div class="flex flex-col rounded-xl ' + meta.headerBg + ' border border-slate-200/70 dark:border-slate-800 min-h-[200px]" data-column="' + status + '">' +
+        '<div class="flex flex-col rounded-xl ' + meta.headerBg + ' border border-slate-200/70 dark:border-slate-700 min-h-[200px]" data-column="' + status + '">' +
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<span class="w-2 h-2 rounded-full ' + meta.dot + '"></span>' +
               '<h3 class="text-sm font-bold text-slate-700 dark:text-slate-200">' + status + '</h3>' +
             '</div>' +
-            '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-900/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
+            '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
           '</div>' +
           '<div class="flex flex-col gap-2.5 px-2.5 pb-3 flex-1" data-column-body="' + status + '">' + cardsHtml + '</div>' +
         '</div>'
@@ -938,7 +943,7 @@
     var list = applyFilters(tasks).filter(function (t) { return t.startDate && t.deadline; });
 
     if (list.length === 0) {
-      wrap.innerHTML = '<div class="text-sm text-slate-400 dark:text-slate-600 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">' +
+      wrap.innerHTML = '<div class="text-sm text-slate-400 dark:text-slate-600 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">' +
         'No tasks match the current filters yet.</div>';
       return;
     }
@@ -975,12 +980,12 @@
     html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + GANTT_DAY_WIDTH + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:fit-content;">';
 
     // corner cells
-    html += '<div class="sticky top-0 left-0 z-40 bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-800 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-slate-500 dark:text-slate-400">Task</span></div>';
+    html += '<div class="sticky top-0 left-0 z-40 bg-white dark:bg-slate-800 border-b border-r border-slate-200 dark:border-slate-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-slate-500 dark:text-slate-400">Task</span></div>';
 
     // month header row
     var colCursor = 2;
     monthSpans.forEach(function (m) {
-      html += '<div class="sticky top-0 z-30 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center px-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      html += '<div class="sticky top-0 z-30 bg-slate-50 dark:bg-slate-700/80 border-b border-slate-200 dark:border-slate-700 flex items-center px-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -988,8 +993,8 @@
     days.forEach(function (d, i) {
       var isWeekend = d.getDay() === 0 || d.getDay() === 6;
       var isToday = i === todayIndex;
-      html += '<div class="sticky top-8 z-30 border-b border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-[10px] leading-tight ' +
-        (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-slate-100/70 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500' : 'bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400')) +
+      html += '<div class="sticky top-8 z-30 border-b border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-[10px] leading-tight ' +
+        (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-slate-100/70 dark:bg-slate-700/40 text-slate-400 dark:text-slate-500' : 'bg-slate-50 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400')) +
         '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
@@ -1002,7 +1007,7 @@
       var days_ = daysUntil(t.deadline);
       var overdue = days_ !== null && days_ < 0 && t.status !== 'Done';
 
-      html += '<div class="sticky left-0 z-20 bg-white dark:bg-slate-900 border-b border-r border-slate-200 dark:border-slate-800 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+      html += '<div class="sticky left-0 z-20 bg-white dark:bg-slate-800 border-b border-r border-slate-200 dark:border-slate-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
           '<p class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
@@ -1014,14 +1019,14 @@
       var barWidth = (daysBetween(parseDate(t.startDate), parseDate(t.deadline)) + 1) * GANTT_DAY_WIDTH - 6;
       var fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
 
-      html += '<div class="relative border-b border-slate-100 dark:border-slate-800/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
+      html += '<div class="relative border-b border-slate-100 dark:border-slate-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
       html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
         'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
         'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
           '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
           '</div>' +
           '<span class="absolute inset-0 flex items-center px-2 text-[11px] font-medium text-slate-700 dark:text-slate-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
-          (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"></span>' : '') +
+          (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-800"></span>' : '') +
       '</button>';
       html += '</div>';
     });
@@ -1031,7 +1036,7 @@
 
     html += '</div>';
 
-    wrap.innerHTML = '<div class="overflow-auto border border-slate-200 dark:border-slate-800 rounded-lg" style="max-height:600px;">' + html + '</div>';
+    wrap.innerHTML = '<div class="overflow-auto border border-slate-200 dark:border-slate-700 rounded-lg" style="max-height:600px;">' + html + '</div>';
   }
 
   /* =========================================================
@@ -1065,7 +1070,7 @@
     document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
       var active = btn.getAttribute('data-view-btn') === view;
       btn.classList.toggle('bg-white', active);
-      btn.classList.toggle('dark:bg-slate-700', active);
+      btn.classList.toggle('dark:bg-slate-600', active);
       btn.classList.toggle('shadow-card', active);
       btn.classList.toggle('text-brand-700', active);
       btn.classList.toggle('dark:text-brand-400', active);
