@@ -1548,6 +1548,47 @@
   });
 
   /* =========================================================
+     LIVE UPDATE: auto-reload when a new version is deployed
+     GitHub Pages has no push mechanism, so this polls a tiny version.txt
+     (bumped on every push, alongside the same stamp baked into this page)
+     and reloads once a new one shows up. Never reloads out from under
+     someone with a modal open -- Firestore data already updates live via
+     onSnapshot, so the only thing lagging behind is this page's own code,
+     and losing an in-progress draft to a surprise reload would be worse
+     than waiting a few seconds for the tab to be idle.
+  ========================================================= */
+  var CURRENT_BUILD_VERSION = "2026-07-30T06:39:14Z";
+  var pendingBuildVersion = null;
+
+  function anyModalOpen() {
+    return !!document.querySelector('.modal-backdrop:not(.hidden)');
+  }
+
+  function reloadIfPendingAndSafe() {
+    if (pendingBuildVersion && !anyModalOpen()) location.reload();
+  }
+
+  function checkForNewVersion() {
+    fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (text) {
+        if (!text) return;
+        var latest = text.trim();
+        if (latest && latest !== CURRENT_BUILD_VERSION) {
+          pendingBuildVersion = latest;
+          reloadIfPendingAndSafe();
+        }
+      })
+      .catch(function () {});
+  }
+
+  setInterval(checkForNewVersion, 60000);
+  setInterval(reloadIfPendingAndSafe, 5000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') checkForNewVersion();
+  });
+
+  /* =========================================================
      INIT
   ========================================================= */
   function init() {
