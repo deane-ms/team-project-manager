@@ -723,6 +723,28 @@
     return Math.round((done / items.length) * 100);
   }
 
+  function describeTaskChanges(oldTask, data) {
+    var changes = [];
+    if (oldTask.name !== data.name) changes.push('renamed to "' + data.name + '"');
+    if (oldTask.priority !== data.priority) changes.push('priority ' + oldTask.priority + ' → ' + data.priority);
+    if (oldTask.status !== data.status) changes.push('status ' + (STATUS_LABELS[oldTask.status] || oldTask.status) + ' → ' + (STATUS_LABELS[data.status] || data.status));
+    if (oldTask.assignee !== data.assignee) changes.push('reassigned ' + oldTask.assignee + ' → ' + data.assignee);
+    if (oldTask.project !== data.project) changes.push('project ' + oldTask.project + ' → ' + data.project);
+    if (oldTask.deadline !== data.deadline) changes.push('deadline ' + formatShortDate(oldTask.deadline) + ' → ' + formatShortDate(data.deadline));
+    if (oldTask.startDate !== data.startDate) changes.push('start date ' + formatShortDate(oldTask.startDate) + ' → ' + formatShortDate(data.startDate));
+    if ((oldTask.driveLink || '') !== (data.driveLink || '')) changes.push(data.driveLink ? 'Drive link updated' : 'Drive link removed');
+    var oldChecklist = oldTask.checklist || [];
+    var newChecklist = data.checklist || [];
+    if (oldChecklist.length !== newChecklist.length) {
+      changes.push('checklist ' + oldChecklist.length + ' → ' + newChecklist.length + ' items');
+    } else if (newChecklist.length) {
+      var oldDone = oldChecklist.filter(function (i) { return i.done; }).length;
+      var newDone = newChecklist.filter(function (i) { return i.done; }).length;
+      if (oldDone !== newDone) changes.push(newDone + '/' + newChecklist.length + ' checklist items done');
+    }
+    return changes;
+  }
+
   function escapeHtml(str) {
     return String(str == null ? '' : str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1246,6 +1268,7 @@
     if (hasError) return;
 
     var isEditing = !!editingTaskId;
+    var oldTask = isEditing ? tasks.find(function (x) { return x.id === editingTaskId; }) : null;
     var id = isEditing ? editingTaskId : uid();
     var taskData = {
       name: name, project: project, assignee: assignee, priority: priority,
@@ -1264,7 +1287,12 @@
 
     setDoc(doc(tasksCol, id), taskData, { merge: true }).then(function () {
       showToast(isEditing ? 'Task updated' : 'Task added', 'success');
-      logActivity(isEditing ? 'task_updated' : 'task_created', (isEditing ? 'Updated' : 'Added') + ' task "' + name + '"');
+      if (isEditing) {
+        var changes = describeTaskChanges(oldTask, taskData);
+        logActivity('task_updated', changes.length ? 'Updated "' + name + '": ' + changes.slice(0, 3).join(', ') : 'Updated task "' + name + '"');
+      } else {
+        logActivity('task_created', 'Added task "' + name + '"');
+      }
       closeTaskModal();
     }).catch(function (err) {
       showToast('Could not save this task: ' + err.message, 'error');
@@ -1333,7 +1361,8 @@
       input.value = '';
       closeMentionMenu();
       notifyMentions(text, t);
-      logActivity('task_comment', 'Added a comment on "' + (t ? t.name : editingTaskId) + '"');
+      var snippet = text.length > 60 ? text.slice(0, 60) + '…' : text;
+      logActivity('task_comment', 'Commented on "' + (t ? t.name : editingTaskId) + '": "' + snippet + '"');
     }).catch(function (err) {
       showToast('Could not add comment: ' + err.message, 'error');
     });
@@ -1353,10 +1382,12 @@
   });
 
   function removeCommentAt(t, list, idx) {
+    var removedText = list[idx] ? list[idx].text : '';
+    var snippet = removedText.length > 60 ? removedText.slice(0, 60) + '…' : removedText;
     list = list.slice();
     list.splice(idx, 1);
     updateDoc(doc(tasksCol, editingTaskId), { comments: list }).then(function () {
-      logActivity('task_comment', 'Removed a comment on "' + t.name + '"');
+      logActivity('task_comment', 'Removed a comment on "' + t.name + '": "' + snippet + '"');
     }).catch(function (err) {
       showToast('Could not remove comment: ' + err.message, 'error');
     });
@@ -1376,7 +1407,7 @@
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t || t.status === newStatus) return;
     updateDoc(doc(tasksCol, id), { status: newStatus, updatedAt: new Date().toISOString() }).then(function () {
-      logActivity('task_moved', 'Moved "' + t.name + '" to ' + (STATUS_LABELS[newStatus] || newStatus));
+      logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus));
     }).catch(function (err) {
       showToast('Could not move task: ' + err.message, 'error');
     });
@@ -2323,7 +2354,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T10:39:07Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T10:48:03Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
