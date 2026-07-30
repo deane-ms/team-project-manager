@@ -149,6 +149,9 @@
           <button data-view-btn="gantt" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>Timeline
           </button>
+          <button data-view-btn="people" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>People
+          </button>
         </div>
       </div>
     </div>
@@ -192,6 +195,11 @@
         </div>
         <div id="gantt-wrap"></div>
       </div>
+    </section>
+
+    <!-- ============ PEOPLE VIEW ============ -->
+    <section id="view-people" data-view class="flex-1">
+      <div id="people-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start"></div>
     </section>
 
   </main>
@@ -322,10 +330,10 @@
   var GANTT_LABEL_WIDTH = 232;
 
   var STATUS_META = {
-    'Pipeline':    { color: 'slate',  dot: 'bg-slate-400',  chip: 'bg-slate-100 text-slate-600',   headerBg: 'bg-slate-50 dark:bg-slate-800/60',  icon: 'inbox' },
-    'In Progress': { color: 'sky',    dot: 'bg-sky-500',    chip: 'bg-sky-100 text-sky-700',       headerBg: 'bg-sky-50 dark:bg-sky-500/5',    icon: 'loader-circle' },
-    'Review':      { color: 'violet', dot: 'bg-violet-500', chip: 'bg-violet-100 text-violet-700', headerBg: 'bg-violet-50 dark:bg-violet-500/5', icon: 'eye' },
-    'Done':        { color: 'emerald',dot: 'bg-emerald-500',chip: 'bg-emerald-100 text-emerald-700',headerBg: 'bg-emerald-50 dark:bg-emerald-500/5',icon: 'circle-check-big' }
+    'Pipeline':    { color: 'slate',  dot: 'bg-slate-400',  chip: 'bg-slate-100 text-slate-600',   icon: 'inbox' },
+    'In Progress': { color: 'sky',    dot: 'bg-sky-500',    chip: 'bg-sky-100 text-sky-700',       icon: 'loader-circle' },
+    'Review':      { color: 'violet', dot: 'bg-violet-500', chip: 'bg-violet-100 text-violet-700', icon: 'eye' },
+    'Done':        { color: 'emerald',dot: 'bg-emerald-500',chip: 'bg-emerald-100 text-emerald-700',icon: 'circle-check-big' }
   };
 
   var PRIORITY_META = {
@@ -362,7 +370,8 @@
     drive: '<line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line>',
     check: '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
     alertCircle: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
-    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>'
+    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -821,15 +830,15 @@
       else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
 
       return (
-        '<button data-open-task="' + t.id + '" class="text-left group shrink-0 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
+        '<button data-open-task="' + t.id + '" class="flex flex-col text-left group shrink-0 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
           '<div class="flex items-center justify-between mb-1.5">' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
             '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
           '</div>' +
           '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<p class="text-xs text-slate-400 dark:text-slate-500 mb-2">' + escapeHtml(t.project) + '</p>' +
-          '<div class="flex items-center gap-1.5">' +
-            '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center">' + initials(t.assignee) + '</span>' +
+          '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
+            '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-slate-500 dark:text-slate-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
         '</button>'
@@ -891,7 +900,7 @@
         : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">No tasks here</div>';
 
       return (
-        '<div class="flex flex-col rounded-xl ' + meta.headerBg + ' border border-slate-200/70 dark:border-slate-700 min-h-[200px]" data-column="' + status + '">' +
+        '<div class="flex flex-col rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700 min-h-[200px]" data-column="' + status + '">' +
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<span class="w-2 h-2 rounded-full ' + meta.dot + '"></span>' +
@@ -1040,6 +1049,79 @@
   }
 
   /* =========================================================
+     RENDER: PEOPLE (workload comparison, for delegation)
+  ========================================================= */
+  function personTaskRowHtml(t) {
+    var days = daysUntil(t.deadline);
+    var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+    var overdue = days !== null && days < 0 && t.status !== 'Done';
+    var dueSoon = days !== null && days >= 0 && days <= 1 && t.status !== 'Done';
+    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400' : (dueSoon ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500');
+    var dueLabel = overdue ? Math.abs(days) + 'd overdue' : formatShortDate(t.deadline);
+
+    return (
+      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
+        '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · ' + escapeHtml(t.status) + '</p>' +
+        '</div>' +
+        '<span class="text-[10px] font-semibold shrink-0 ' + dateClass + '">' + dueLabel + '</span>' +
+      '</button>'
+    );
+  }
+
+  function renderPeople() {
+    var filtered = applyFilters(tasks);
+    var container = document.getElementById('people-grid');
+    var people = uniqueValues('assignee').filter(function (name) {
+      return filtered.some(function (t) { return t.assignee === name; });
+    });
+
+    if (people.length === 0) {
+      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 col-span-full text-center py-10">No one matches the current filters.</p>';
+      return;
+    }
+
+    var summaries = people.map(function (name) {
+      var mine = filtered.filter(function (t) { return t.assignee === name; });
+      var active = mine.filter(function (t) { return t.status !== 'Done'; });
+      var overdue = active.filter(function (t) { return daysUntil(t.deadline) !== null && daysUntil(t.deadline) < 0; }).length;
+      var high = active.filter(function (t) { return t.priority === 'High'; }).length;
+      return { name: name, mine: mine, active: sortByFocus(active), overdue: overdue, high: high };
+    });
+
+    summaries.sort(function (a, b) { return (b.overdue - a.overdue) || (b.active.length - a.active.length) || (b.high - a.high); });
+
+    container.innerHTML = summaries.map(function (p) {
+      var rowsHtml = p.active.length
+        ? p.active.map(personTaskRowHtml).join('')
+        : '<p class="text-xs text-slate-400 dark:text-slate-500 text-center py-6">All caught up — no active tasks.</p>';
+
+      var chips = '';
+      if (p.overdue > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
+      if (p.high > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.high + ' high</span>';
+
+      return (
+        '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card overflow-hidden">' +
+          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-slate-700">' +
+            '<span class="w-8 h-8 rounded-full ' + avatarColor(p.name) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(p.name) + '</span>' +
+            '<div class="min-w-0 flex-1">' +
+              '<p class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<div class="flex items-center gap-1.5 mt-0.5">' +
+                '<span class="text-[11px] text-slate-400 dark:text-slate-500">' + p.active.length + ' active</span>' +
+                chips +
+              '</div>' +
+            '</div>' +
+            '<span class="text-xl font-bold text-slate-200 dark:text-slate-600 shrink-0">' + p.active.length + '</span>' +
+          '</div>' +
+          '<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-700">' + rowsHtml + '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  /* =========================================================
      FILTER OPTIONS
   ========================================================= */
   function renderFilterOptions() {
@@ -1077,7 +1159,7 @@
       btn.classList.toggle('text-slate-500', !active);
       btn.classList.toggle('dark:text-slate-400', !active);
     });
-    if (view === 'gantt') renderGantt();
+    renderCurrentSecondaryView();
   }
 
   document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
@@ -1126,7 +1208,12 @@
   /* =========================================================
      FILTER BAR EVENTS
   ========================================================= */
-  var debouncedRender = debounce(function () { renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions(); }, 150);
+  function renderCurrentSecondaryView() {
+    if (currentView === 'gantt') renderGantt();
+    if (currentView === 'people') renderPeople();
+  }
+
+  var debouncedRender = debounce(function () { renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); }, 150);
 
   document.getElementById('filter-search').addEventListener('input', function (e) {
     filters.search = e.target.value;
@@ -1134,15 +1221,15 @@
   });
   document.getElementById('filter-priority').addEventListener('change', function (e) {
     filters.priority = e.target.value;
-    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('filter-project').addEventListener('change', function (e) {
     filters.project = e.target.value;
-    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('filter-assignee').addEventListener('change', function (e) {
     filters.assignee = e.target.value;
-    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('btn-clear-filters').addEventListener('click', function () {
     filters = { search: '', priority: '', project: '', assignee: '' };
@@ -1150,7 +1237,7 @@
     document.getElementById('filter-priority').value = '';
     document.getElementById('filter-project').value = '';
     document.getElementById('filter-assignee').value = '';
-    renderBoard(); if (currentView === 'gantt') renderGantt(); renderFilterOptions();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
 
   /* =========================================================
@@ -1246,7 +1333,7 @@
     renderFocus();
     renderBoard();
     renderFilterOptions();
-    if (currentView === 'gantt') renderGantt();
+    renderCurrentSecondaryView();
   }
 
   /* =========================================================
