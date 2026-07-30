@@ -938,13 +938,13 @@
       return (
         '<button data-open-task="' + t.id + '" class="flex flex-col text-left group shrink-0 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
           '<div class="flex items-center justify-between mb-1.5">' +
-            '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
-            '<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
+            '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
+            '<span class="text-xs font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
           '</div>' +
           '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<p class="text-xs text-slate-400 dark:text-slate-500 mb-2">' + escapeHtml(t.project) + '</p>' +
           '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
-            '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[10px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-slate-500 dark:text-slate-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
         '</button>'
@@ -966,7 +966,7 @@
     return (
       '<div draggable="true" data-task-id="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-grab active:cursor-grabbing group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
-          '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + ' inline-flex items-center gap-1">' +
+          '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + ' inline-flex items-center gap-1">' +
             '<span class="w-1.5 h-1.5 rounded-full ' + pm.dot + '"></span>' + t.priority +
           '</span>' +
           '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">' +
@@ -980,11 +980,11 @@
         '<p class="text-xs text-slate-400 dark:text-slate-500 mb-3 line-clamp-1">' + escapeHtml(t.project) + '</p>' +
         '<div class="flex items-center justify-between text-xs mb-3">' +
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + formatShortDate(t.deadline) + '</span>' +
-          (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
+          (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
         '</div>' +
         '<div class="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-700">' +
           '<div class="flex items-center gap-1.5 min-w-0">' +
-            '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[10px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-slate-600 dark:text-slate-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
           '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700') + ' shrink-0">' +
@@ -1105,7 +1105,7 @@
     // month header row
     var colCursor = 2;
     monthSpans.forEach(function (m) {
-      html += '<div class="sticky top-0 z-30 bg-slate-50 dark:bg-slate-700/80 border-b border-slate-200 dark:border-slate-700 flex items-center px-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      html += '<div class="sticky top-0 z-30 bg-slate-50 dark:bg-slate-700/80 border-b border-slate-200 dark:border-slate-700 flex items-center px-2 text-xs font-semibold text-slate-500 dark:text-slate-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -1113,7 +1113,7 @@
     days.forEach(function (d, i) {
       var isWeekend = d.getDay() === 0 || d.getDay() === 6;
       var isToday = i === todayIndex;
-      html += '<div class="sticky top-8 z-30 border-b border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-[10px] leading-tight ' +
+      html += '<div class="sticky top-8 z-30 border-b border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-xs leading-tight ' +
         (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-slate-100/70 dark:bg-slate-700/40 text-slate-400 dark:text-slate-500' : 'bg-slate-50 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400')) +
         '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
@@ -1130,8 +1130,8 @@
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-slate-800 border-b border-r border-slate-200 dark:border-slate-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
-          '<p class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.project) + '</p>' +
+          '<p class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.project) + '</p>' +
         '</div>' +
       '</div>';
 
@@ -1145,7 +1145,7 @@
         'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
           '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
           '</div>' +
-          '<span class="absolute inset-0 flex items-center px-2 text-[11px] font-medium text-slate-700 dark:text-slate-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
+          '<span class="absolute inset-0 flex items-center px-2 text-xs font-medium text-slate-700 dark:text-slate-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
           (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-800"></span>' : '') +
       '</button>';
       html += '</div>';
@@ -1174,10 +1174,10 @@
       '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
         '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · ' + escapeHtml(t.status) + '</p>' +
+          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · ' + escapeHtml(t.status) + '</p>' +
         '</div>' +
-        '<span class="text-[10px] font-semibold shrink-0 ' + dateClass + '">' + dueLabel + '</span>' +
+        '<span class="text-xs font-semibold shrink-0 ' + dateClass + '">' + dueLabel + '</span>' +
       '</button>'
     );
   }
@@ -1207,20 +1207,20 @@
     container.innerHTML = summaries.map(function (p) {
       var rowsHtml = p.active.length
         ? p.active.map(personTaskRowHtml).join('')
-        : '<p class="text-xs text-slate-400 dark:text-slate-500 text-center py-6">All caught up — no active tasks.</p>';
+        : '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-6">All caught up — no active tasks.</p>';
 
       var chips = '';
-      if (p.overdue > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
-      if (p.high > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">' + p.high + ' high</span>';
+      if (p.overdue > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
+      if (p.high > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">' + p.high + ' high</span>';
 
       return (
         '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card overflow-hidden">' +
           '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-slate-700">' +
-            '<span class="w-8 h-8 rounded-full ' + avatarColor(p.name) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(p.name) + '</span>' +
+            '<span class="w-8 h-8 rounded-full ' + avatarColor(p.name) + ' text-white text-sm font-bold flex items-center justify-center shrink-0">' + initials(p.name) + '</span>' +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<p class="text-base font-bold text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(p.name) + '</p>' +
               '<div class="flex items-center gap-1.5 mt-0.5">' +
-                '<span class="text-[11px] text-slate-400 dark:text-slate-500">' + p.active.length + ' active</span>' +
+                '<span class="text-xs text-slate-400 dark:text-slate-500">' + p.active.length + ' active</span>' +
                 chips +
               '</div>' +
             '</div>' +
@@ -1557,7 +1557,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T06:39:14Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T06:45:09Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
