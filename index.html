@@ -727,6 +727,16 @@
     return y + '-' + m + '-' + d;
   }
 
+  // A full ISO timestamp's first 10 characters are the UTC calendar date, which
+  // can be a day off from the viewer's local date (e.g. anything logged before
+  // ~8am Singapore time lands on "yesterday" in UTC). Always go through this
+  // instead of isoString.slice(0, 10) when the stored value is a full
+  // timestamp (time entries, comments) rather than an already-local date-only
+  // string like startDate/deadline.
+  function localDateOf(isoString) {
+    return toDateInputValue(new Date(isoString));
+  }
+
   function addDays(date, n) {
     var d = new Date(date);
     d.setDate(d.getDate() + n);
@@ -775,16 +785,16 @@
   }
 
   function personMinutesLoggedToday(personName, excludeTaskId) {
-    var today = new Date().toISOString().slice(0, 10);
+    var today = toDateInputValue(new Date());
     var total = 0;
     tasks.forEach(function (t) {
       if (t.id === excludeTaskId) return;
       (t.timeEntries || []).forEach(function (e) {
-        if (e.author === personName && e.date && e.date.slice(0, 10) === today) total += (e.minutes || 0);
+        if (e.author === personName && e.date && localDateOf(e.date) === today) total += (e.minutes || 0);
       });
     });
     currentTimeEntries.forEach(function (e) {
-      if (e.author === personName && e.date && e.date.slice(0, 10) === today) total += (e.minutes || 0);
+      if (e.author === personName && e.date && localDateOf(e.date) === today) total += (e.minutes || 0);
     });
     return total;
   }
@@ -1247,7 +1257,7 @@
                 '<span class="text-sm font-semibold text-slate-700 dark:text-slate-200">' + formatDuration(e.minutes) + '</span>' +
                 (e.billable ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
                 (e.overtime ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
-                '<span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">' + formatShortDate(e.date.slice(0, 10)) + '</span>' +
+                '<span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
               '</div>' +
               (e.note ? '<p class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
             '</div>' +
@@ -2673,7 +2683,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T17:36:17Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T18:02:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
