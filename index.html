@@ -126,14 +126,15 @@
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700 text-xs">
+          <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700 text-sm">
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-400"></span><span id="stat-total" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">tasks</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">overdue</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span id="stat-high" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">high priority</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">done</span></div>
           </div>
 
-          <div id="user-chip" class="hidden items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mr-1">
+          <div id="user-chip" class="hidden items-center gap-[0.45rem] text-sm text-slate-500 dark:text-slate-400 mr-1">
+            <span id="user-chip-avatar" class="w-[1.2rem] h-[1.2rem] rounded-full flex items-center justify-center text-white font-bold shrink-0" style="font-size:0.54rem;"></span>
             <span id="user-chip-name" class="hidden sm:inline"></span>
             <button id="btn-sign-out" title="Sign out" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -195,7 +196,7 @@
           </select>
           <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
-        <button id="btn-clear-filters" class="text-xs font-medium text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
+        <button id="btn-clear-filters" class="text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
         </div>
       </div>
     </div>
@@ -1538,7 +1539,11 @@
     appRoot.classList.remove('hidden');
     userChip.classList.remove('hidden');
     userChip.classList.add('flex');
-    userChipName.textContent = user.displayName || user.email;
+    var displayName = user.displayName || user.email;
+    userChipName.textContent = displayName;
+    var userChipAvatar = document.getElementById('user-chip-avatar');
+    userChipAvatar.textContent = initials(displayName);
+    userChipAvatar.className = 'w-[1.2rem] h-[1.2rem] rounded-full flex items-center justify-center text-white font-bold shrink-0 ' + avatarColor(displayName);
     startTaskListener();
   });
 
