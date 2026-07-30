@@ -5,11 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MediaShock APAC — Project Manager</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff4e20">
 <script>
   (function () {
     try {
       var stored = localStorage.getItem('flowboard_theme');
-      if (stored !== 'light') document.documentElement.classList.add('dark');
+      var media = window.matchMedia('(prefers-color-scheme: dark)');
+      var wantDark = stored ? stored !== 'light' : media.matches;
+      document.documentElement.classList.toggle('dark', wantDark);
+      media.addEventListener('change', function (e) {
+        if (!localStorage.getItem('flowboard_theme')) {
+          document.documentElement.classList.toggle('dark', e.matches);
+        }
+      });
     } catch (e) {
       document.documentElement.classList.add('dark');
     }
@@ -168,6 +178,9 @@
           <button data-view-btn="people" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>People
           </button>
+          <button data-view-btn="activity" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Activity
+          </button>
         </div>
 
         <div class="ml-auto flex flex-wrap items-center gap-2">
@@ -249,6 +262,11 @@
     <!-- ============ PEOPLE VIEW ============ -->
     <section id="view-people" data-view class="flex-1">
       <div id="people-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start"></div>
+    </section>
+
+    <!-- ============ ACTIVITY VIEW ============ -->
+    <section id="view-activity" data-view class="flex-1">
+      <div id="activity-feed" class="max-w-2xl mx-auto flex flex-col gap-1.5"></div>
     </section>
 
   </main>
@@ -337,6 +355,15 @@
         </div>
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
+
+      <div id="task-comments-section" class="hidden pt-1 border-t border-slate-100 dark:border-slate-700">
+        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mt-3 mb-1.5">Comments</label>
+        <div id="task-comments-log" class="flex flex-col gap-2 max-h-40 overflow-y-auto mb-2"></div>
+        <div class="flex items-end gap-2">
+          <textarea id="task-comment-input" rows="2" placeholder="Add a comment…" class="flex-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+          <button type="button" id="task-comment-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Add</button>
+        </div>
+      </div>
     </form>
     <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
       <button id="task-delete-btn" class="hidden text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1.5">
@@ -377,7 +404,7 @@
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
-    connectFirestoreEmulator
+    query, orderBy, limit, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   /* =========================================================
@@ -412,6 +439,20 @@
 
   var tasksCol = collection(db, "tasks");
   var unsubTasks = null;
+  var activityCol = collection(db, "activity");
+  var activityQuery = query(activityCol, orderBy("at", "desc"), limit(50));
+  var unsubActivity = null;
+  var activityLog = [];
+
+  function logActivity(type, summary) {
+    var user = auth.currentUser;
+    setDoc(doc(activityCol), {
+      type: type,
+      summary: summary,
+      user: user ? (user.displayName || user.email) : "unknown",
+      at: new Date().toISOString()
+    }).catch(function (e) { console.error("Failed to log activity", e); });
+  }
 
   /* =========================================================
      CONSTANTS
@@ -457,7 +498,9 @@
     check: '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
     alertCircle: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
     info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
-    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>'
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
+    arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -747,6 +790,9 @@
     document.getElementById('task-deadline').value = task ? task.deadline : '';
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
+    document.getElementById('task-comments-section').classList.toggle('hidden', !task);
+    document.getElementById('task-comment-input').value = '';
+    if (task) renderCommentsLog(task.comments, document.getElementById('task-comments-log'));
 
     populateDatalists();
     taskModal.classList.remove('hidden');
@@ -759,6 +805,22 @@
     taskModal.classList.remove('flex');
     editingTaskId = null;
     taskForm.reset();
+  }
+
+  function renderCommentsLog(comments, logEl) {
+    var list = comments || [];
+    logEl.innerHTML = list.length
+      ? list.map(function (c, i) {
+          return '<div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2">' +
+            '<div class="flex items-center gap-1.5 mb-1">' +
+              '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
+              '<span class="text-xs text-slate-400 dark:text-slate-500">' + formatShortDate(c.date.slice(0, 10)) + '</span>' +
+              '<button type="button" class="comment-remove ml-auto text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+            '</div>' +
+            '<p class="text-sm text-slate-700 dark:text-slate-200">' + escapeHtml(c.text) + '</p>' +
+          '</div>';
+        }).join('')
+      : '<p class="text-xs text-slate-400 dark:text-slate-500">No comments yet.</p>';
   }
 
   function populateDatalists() {
@@ -825,7 +887,10 @@
       status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
       updatedAt: new Date().toISOString()
     };
-    if (!isEditing) taskData.createdAt = taskData.updatedAt;
+    if (!isEditing) {
+      taskData.createdAt = taskData.updatedAt;
+      taskData.comments = [];
+    }
 
     var saveBtn = document.getElementById('task-save-btn');
     saveBtn.disabled = true;
@@ -833,6 +898,7 @@
 
     setDoc(doc(tasksCol, id), taskData, { merge: true }).then(function () {
       showToast(isEditing ? 'Task updated' : 'Task added', 'success');
+      logActivity(isEditing ? 'task_updated' : 'task_created', (isEditing ? 'Updated' : 'Added') + ' task "' + name + '"');
       closeTaskModal();
     }).catch(function (err) {
       showToast('Could not save this task: ' + err.message, 'error');
@@ -842,9 +908,43 @@
     });
   });
 
+  document.getElementById('task-comment-add-btn').addEventListener('click', function () {
+    var input = document.getElementById('task-comment-input');
+    var text = input.value.trim();
+    if (!text || !editingTaskId) return;
+    var t = tasks.find(function (x) { return x.id === editingTaskId; });
+    var user = auth.currentUser;
+    updateDoc(doc(tasksCol, editingTaskId), {
+      comments: arrayUnion({ text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null })
+    }).then(function () {
+      input.value = '';
+      logActivity('task_comment', 'Added a comment on "' + (t ? t.name : editingTaskId) + '"');
+    }).catch(function (err) {
+      showToast('Could not add comment: ' + err.message, 'error');
+    });
+  });
+
+  document.getElementById('task-comments-log').addEventListener('click', function (e) {
+    var btn = e.target.closest('.comment-remove');
+    if (!btn || !editingTaskId) return;
+    var t = tasks.find(function (x) { return x.id === editingTaskId; });
+    if (!t) return;
+    var idx = parseInt(btn.dataset.i, 10);
+    var list = (t.comments || []).slice();
+    if (idx < 0 || idx >= list.length) return;
+    list.splice(idx, 1);
+    updateDoc(doc(tasksCol, editingTaskId), { comments: list }).then(function () {
+      logActivity('task_comment', 'Removed a comment on "' + t.name + '"');
+    }).catch(function (err) {
+      showToast('Could not remove comment: ' + err.message, 'error');
+    });
+  });
+
   function deleteTask(id) {
+    var t = tasks.find(function (x) { return x.id === id; });
     deleteDoc(doc(tasksCol, id)).then(function () {
       showToast('Task deleted', 'info');
+      logActivity('task_deleted', 'Deleted task "' + (t ? t.name : id) + '"');
     }).catch(function (err) {
       showToast('Could not delete this task: ' + err.message, 'error');
     });
@@ -853,7 +953,9 @@
   function updateTaskStatus(id, newStatus) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t || t.status === newStatus) return;
-    updateDoc(doc(tasksCol, id), { status: newStatus, updatedAt: new Date().toISOString() }).catch(function (err) {
+    updateDoc(doc(tasksCol, id), { status: newStatus, updatedAt: new Date().toISOString() }).then(function () {
+      logActivity('task_moved', 'Moved "' + t.name + '" to ' + newStatus);
+    }).catch(function (err) {
       showToast('Could not move task: ' + err.message, 'error');
     });
   }
@@ -1233,6 +1335,69 @@
   }
 
   /* =========================================================
+     RENDER: ACTIVITY FEED
+  ========================================================= */
+  var ACTIVITY_ICONS = {
+    task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash',
+    task_moved: 'arrowRight', task_comment: 'message',
+    board_imported: 'upload', board_seeded: 'download'
+  };
+  var ACTIVITY_ICON_CLASS = {
+    task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
+    task_updated: 'bg-brand-100 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400',
+    task_deleted: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
+    task_moved: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
+    task_comment: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
+    board_imported: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+    board_seeded: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+  };
+
+  function activityDateHeader(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return 'Unknown date';
+    var startOfDay = new Date(d); startOfDay.setHours(0, 0, 0, 0);
+    var today = todayMidnight();
+    var diffDays = daysBetween(startOfDay, today);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function formatTimeOnly(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function renderActivityFeed() {
+    var container = document.getElementById('activity-feed');
+    if (!activityLog.length) {
+      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">No activity yet.</p>';
+      return;
+    }
+    var html = '';
+    var lastGroup = null;
+    activityLog.forEach(function (a) {
+      var d = new Date(a.at);
+      var groupKey = isNaN(d.getTime()) ? 'unknown' : d.toDateString();
+      if (groupKey !== lastGroup) {
+        html += '<div class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mt-3 first:mt-0 mb-1">' + activityDateHeader(a.at) + '</div>';
+        lastGroup = groupKey;
+      }
+      var iconName = ACTIVITY_ICONS[a.type] || 'info';
+      var iconClass = ACTIVITY_ICON_CLASS[a.type] || 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
+      html += '<div class="flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+        '<span class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 ' + iconClass + '">' + svgIcon(iconName, 'w-3.5 h-3.5') + '</span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200">' + escapeHtml(a.summary) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">' + escapeHtml(a.user || 'unknown') + ' · ' + formatTimeOnly(a.at) + '</p>' +
+        '</div>' +
+      '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  /* =========================================================
      FILTER OPTIONS
   ========================================================= */
   function renderFilterOptions() {
@@ -1322,6 +1487,7 @@
   function renderCurrentSecondaryView() {
     if (currentView === 'gantt') renderGantt();
     if (currentView === 'people') renderPeople();
+    if (currentView === 'activity') renderActivityFeed();
   }
 
   var debouncedRender = debounce(function () { renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); }, 150);
@@ -1358,8 +1524,10 @@
     var btn = e.currentTarget;
     btn.disabled = true;
     btn.textContent = 'Loading…';
-    replaceAllTasks(seedDemoData()).then(function () {
+    var sampleTasks = seedDemoData();
+    replaceAllTasks(sampleTasks).then(function () {
       showToast('Sample tasks loaded', 'success');
+      logActivity('board_seeded', 'Loaded ' + sampleTasks.length + ' sample tasks');
     }).catch(function (err) {
       showToast('Could not load sample tasks: ' + err.message, 'error');
     }).finally(function () {
@@ -1431,6 +1599,7 @@
           function () {
             replaceAllTasks(pendingImportData).then(function () {
               showToast('Imported ' + importCount + ' tasks', 'success');
+              logActivity('board_imported', 'Imported ' + importCount + ' tasks, replacing the board');
               pendingImportData = null;
             }).catch(function (err) {
               showToast('Import failed: ' + err.message, 'error');
@@ -1491,22 +1660,34 @@
   var userChipName = document.getElementById('user-chip-name');
   document.getElementById('btn-sign-out').addEventListener('click', function () { signOut(auth); });
 
-  function stopTaskListener() {
+  function stopListeners() {
     if (unsubTasks) { unsubTasks(); unsubTasks = null; }
+    if (unsubActivity) { unsubActivity(); unsubActivity = null; }
   }
 
-  function startTaskListener() {
+  function startListeners() {
     if (unsubTasks) return;
     unsubTasks = onSnapshot(tasksCol, function (snap) {
       var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
       tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-      if (modalOpenId && !tasks.some(function (t) { return t.id === modalOpenId; })) {
-        closeTaskModal();
-        showToast('This task was deleted by another team member', 'info');
+      if (modalOpenId) {
+        var freshTask = tasks.find(function (t) { return t.id === modalOpenId; });
+        if (!freshTask) {
+          closeTaskModal();
+          showToast('This task was deleted by another team member', 'info');
+        } else {
+          renderCommentsLog(freshTask.comments, document.getElementById('task-comments-log'));
+        }
       }
       renderAll();
     }, function (err) {
       showToast('Live sync error: ' + err.message, 'error');
+    });
+    unsubActivity = onSnapshot(activityQuery, function (snap) {
+      activityLog = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      if (currentView === 'activity') renderActivityFeed();
+    }, function (err) {
+      console.error('activity listener error', err);
     });
   }
 
@@ -1517,7 +1698,7 @@
     authDenied.classList.add('hidden');
 
     if (!user) {
-      stopTaskListener();
+      stopListeners();
       appRoot.classList.add('hidden');
       authGate.classList.remove('hidden');
       userChip.classList.add('hidden');
@@ -1525,7 +1706,7 @@
       return;
     }
     if (!isAllowedEmail(user.email)) {
-      stopTaskListener();
+      stopListeners();
       appRoot.classList.add('hidden');
       authGate.classList.remove('hidden');
       userChip.classList.add('hidden');
@@ -1544,7 +1725,7 @@
     var userChipAvatar = document.getElementById('user-chip-avatar');
     userChipAvatar.textContent = initials(displayName);
     userChipAvatar.className = 'w-[1.2rem] h-[1.2rem] rounded-full flex items-center justify-center text-white font-bold shrink-0 ' + avatarColor(displayName);
-    startTaskListener();
+    startListeners();
   });
 
   /* =========================================================
@@ -1557,7 +1738,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T06:47:56Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T07:19:26Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -1587,6 +1768,12 @@
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') checkForNewVersion();
   });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
 
   /* =========================================================
      INIT
