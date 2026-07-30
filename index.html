@@ -2353,16 +2353,24 @@
       container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">No archived tasks.</p>';
       return;
     }
-    container.innerHTML = archived.map(function (t) {
-      return '<div class="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+    var html = '';
+    var lastYear = null;
+    archived.forEach(function (t) {
+      var year = localDateOf(t.archivedAt).slice(0, 4);
+      if (year !== lastYear) {
+        html += '<div class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mt-4 first:mt-0 mb-1">' + year + '</div>';
+        lastYear = year;
+      }
+      html += '<div class="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card px-3.5 py-2.5">' +
         '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(t.archivedAt.slice(0, 10)) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) + '</p>' +
         '</div>' +
         '<button type="button" data-unarchive-task="' + t.id + '" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Restore</button>' +
       '</div>';
-    }).join('');
+    });
+    container.innerHTML = html;
   }
 
   /* =========================================================
@@ -2787,7 +2795,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T18:46:45Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T18:50:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
