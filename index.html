@@ -2554,6 +2554,36 @@
     showToast('Dashboard exported as JSON', 'success');
   });
 
+  function sanitizeImportedChecklist(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (item) {
+      return { text: String((item && item.text) || '').slice(0, 300), done: !!(item && item.done), link: (item && item.link) ? String(item.link) : '' };
+    }).filter(function (item) { return item.text; });
+  }
+
+  function sanitizeImportedComments(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (c) {
+      var date = c && c.date && !isNaN(new Date(c.date).getTime()) ? c.date : new Date().toISOString();
+      return { text: String((c && c.text) || '').slice(0, 2000), date: date, author: (c && c.author) ? String(c.author) : null };
+    }).filter(function (c) { return c.text; });
+  }
+
+  function sanitizeImportedTimeEntries(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function (e) {
+      var date = e && e.date && !isNaN(new Date(e.date).getTime()) ? e.date : new Date().toISOString();
+      return {
+        minutes: Math.max(0, parseInt(e && e.minutes, 10) || 0),
+        note: String((e && e.note) || '').slice(0, 300),
+        billable: !!(e && e.billable),
+        overtime: !!(e && e.overtime),
+        date: date,
+        author: (e && e.author) ? String(e.author) : null
+      };
+    }).filter(function (e) { return e.minutes > 0; });
+  }
+
   var importInput = document.getElementById('import-file-input');
   document.getElementById('btn-import').addEventListener('click', function () { importInput.click(); });
 
@@ -2570,7 +2600,7 @@
         var cleaned = incoming.filter(function (t) { return t && typeof t === 'object' && t.name && t.deadline; })
           .map(function (t) {
             return {
-              id: uid(),
+              id: (t.id && typeof t.id === 'string') ? t.id : uid(),
               name: String(t.name).slice(0, 200),
               project: String(t.project || 'Untitled Project').slice(0, 100),
               priority: PRIORITIES.indexOf(t.priority) !== -1 ? t.priority : 'Medium',
@@ -2579,6 +2609,10 @@
               startDate: parseDate(t.startDate) ? t.startDate : toDateInputValue(todayMidnight()),
               deadline: parseDate(t.deadline) ? t.deadline : toDateInputValue(todayMidnight()),
               driveLink: t.driveLink ? normalizeUrl(t.driveLink) : '',
+              checklist: sanitizeImportedChecklist(t.checklist),
+              comments: sanitizeImportedComments(t.comments),
+              timeEntries: sanitizeImportedTimeEntries(t.timeEntries),
+              archivedAt: (t.archivedAt && !isNaN(new Date(t.archivedAt).getTime())) ? t.archivedAt : null,
               createdAt: t.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
@@ -2795,7 +2829,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T18:50:18Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T18:56:21Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
