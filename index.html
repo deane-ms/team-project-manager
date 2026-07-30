@@ -191,6 +191,9 @@
           <button data-view-btn="people" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>People
           </button>
+          <button data-view-btn="projects" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>Projects
+          </button>
           <button data-view-btn="activity" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Activity
           </button>
@@ -286,6 +289,11 @@
     <!-- ============ PEOPLE VIEW ============ -->
     <section id="view-people" data-view class="flex-1">
       <div id="people-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start"></div>
+    </section>
+
+    <!-- ============ PROJECTS VIEW (time rollup) ============ -->
+    <section id="view-projects" data-view class="flex-1">
+      <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start"></div>
     </section>
 
     <!-- ============ ACTIVITY VIEW ============ -->
@@ -401,6 +409,22 @@
         <div class="flex items-center gap-2">
           <input type="text" id="task-checklist-input" placeholder="Add a checklist item…" class="flex-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <button type="button" id="task-checklist-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Add</button>
+        </div>
+      </div>
+
+      <div id="task-time-section" class="hidden pt-1 border-t border-slate-100 dark:border-slate-700">
+        <div class="flex items-center justify-between mt-3 mb-1.5">
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Time Tracking</label>
+          <span id="task-time-total" class="text-xs font-medium text-slate-400 dark:text-slate-500"></span>
+        </div>
+        <div id="task-time-log" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto mb-2"></div>
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="number" id="task-time-hours" step="0.25" min="0" placeholder="Hours" class="w-20 shrink-0 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input type="text" id="task-time-note" maxlength="140" placeholder="What did you work on? (optional)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <label class="shrink-0 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 select-none">
+            <input type="checkbox" id="task-time-billable" checked class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500/40">Billable
+          </label>
+          <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Log</button>
         </div>
       </div>
 
@@ -649,7 +673,8 @@
     arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
     message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
     grip: '<circle cx="9" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="18" r="1"></circle>',
-    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>'
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
+    clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>'
   };
 
   function svgIcon(name, cls) {
@@ -721,6 +746,24 @@
     if (!items.length) return null;
     var done = items.filter(function (i) { return i.done; }).length;
     return Math.round((done / items.length) * 100);
+  }
+
+  function formatDuration(totalMinutes) {
+    var m = Math.round(totalMinutes || 0);
+    if (m <= 0) return '0h';
+    var h = Math.floor(m / 60);
+    var mm = m % 60;
+    if (h && mm) return h + 'h ' + mm + 'm';
+    if (h) return h + 'h';
+    return mm + 'm';
+  }
+
+  function taskTimeMinutes(task) {
+    return (task.timeEntries || []).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+  }
+
+  function taskBillableMinutes(task) {
+    return (task.timeEntries || []).filter(function (e) { return e.billable; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
   }
 
   function describeTaskChanges(oldTask, data) {
@@ -997,6 +1040,11 @@
     document.getElementById('task-comments-section').classList.toggle('hidden', !task);
     document.getElementById('task-comment-input').value = '';
     if (task) renderCommentsLog(task.comments, document.getElementById('task-comments-log'));
+    document.getElementById('task-time-section').classList.toggle('hidden', !task);
+    document.getElementById('task-time-hours').value = '';
+    document.getElementById('task-time-note').value = '';
+    document.getElementById('task-time-billable').checked = true;
+    if (task) renderTimeEntriesEditor(task.timeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
     currentChecklist = task && task.checklist ? task.checklist.slice() : [];
     renderChecklistEditor();
 
@@ -1141,6 +1189,76 @@
       : '<p class="text-xs text-slate-400 dark:text-slate-500">No comments yet.</p>';
   }
 
+  function renderTimeEntriesEditor(entries, logEl, totalEl) {
+    var list = entries || [];
+    logEl.innerHTML = list.length
+      ? list.map(function (e, i) {
+          return '<div class="flex items-start gap-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2">' +
+            '<span class="w-4 h-4 rounded-full ' + avatarColor(e.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">' + initials(e.author || '?') + '</span>' +
+            '<div class="min-w-0 flex-1">' +
+              '<div class="flex items-center gap-1.5">' +
+                '<span class="text-sm font-semibold text-slate-700 dark:text-slate-200">' + formatDuration(e.minutes) + '</span>' +
+                (e.billable ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
+                '<span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">' + formatShortDate(e.date.slice(0, 10)) + '</span>' +
+              '</div>' +
+              (e.note ? '<p class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
+            '</div>' +
+            '<button type="button" class="time-entry-remove p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-i="' + i + '" aria-label="Remove time entry">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+          '</div>';
+        }).join('')
+      : '<p class="text-xs text-slate-400 dark:text-slate-500">No time logged yet.</p>';
+    var totalMinutes = list.reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+    var billableMinutes = list.filter(function (e) { return e.billable; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+    totalEl.textContent = totalMinutes
+      ? formatDuration(totalMinutes) + ' logged' + (billableMinutes ? ' (' + formatDuration(billableMinutes) + ' billable)' : '')
+      : '';
+  }
+
+  document.getElementById('task-time-add-btn').addEventListener('click', function () {
+    var hoursEl = document.getElementById('task-time-hours');
+    var noteEl = document.getElementById('task-time-note');
+    var billableEl = document.getElementById('task-time-billable');
+    var hours = parseFloat(hoursEl.value);
+    if (!editingTaskId || !hours || hours <= 0) return;
+    var minutes = Math.round(hours * 60);
+    var user = auth.currentUser;
+    var t = tasks.find(function (x) { return x.id === editingTaskId; });
+    updateDoc(doc(tasksCol, editingTaskId), {
+      timeEntries: arrayUnion({ minutes: minutes, note: noteEl.value.trim(), billable: billableEl.checked, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null })
+    }).then(function () {
+      hoursEl.value = '';
+      noteEl.value = '';
+      billableEl.checked = true;
+      logActivity('task_time_logged', 'Logged ' + formatDuration(minutes) + ' on "' + (t ? t.name : editingTaskId) + '"');
+    }).catch(function (err) {
+      showToast('Could not log time: ' + err.message, 'error');
+    });
+  });
+
+  document.getElementById('task-time-log').addEventListener('click', function (e) {
+    var btn = e.target.closest('.time-entry-remove');
+    if (!btn || !editingTaskId) return;
+    var t = tasks.find(function (x) { return x.id === editingTaskId; });
+    if (!t) return;
+    var idx = parseInt(btn.dataset.i, 10);
+    var list = (t.timeEntries || []).slice();
+    if (idx < 0 || idx >= list.length) return;
+    openConfirm('Remove this time entry?', formatDuration(list[idx].minutes) + ' will be removed from this task\'s total. This cannot be undone.', function () {
+      removeTimeEntryAt(t, list, idx);
+    });
+  });
+
+  function removeTimeEntryAt(t, list, idx) {
+    var removedMinutes = list[idx] ? list[idx].minutes : 0;
+    list = list.slice();
+    list.splice(idx, 1);
+    updateDoc(doc(tasksCol, editingTaskId), { timeEntries: list }).then(function () {
+      logActivity('task_time_logged', 'Removed ' + formatDuration(removedMinutes) + ' logged on "' + t.name + '"');
+    }).catch(function (err) {
+      showToast('Could not remove time entry: ' + err.message, 'error');
+    });
+  }
+
   /* =========================================================
      PILL SELECT -- wraps a plain <select> of priority values with a
      custom trigger + menu showing the same colored badge used on task
@@ -1279,6 +1397,7 @@
     if (!isEditing) {
       taskData.createdAt = taskData.updatedAt;
       taskData.comments = [];
+      taskData.timeEntries = [];
     }
 
     var saveBtn = document.getElementById('task-save-btn');
@@ -1846,11 +1965,79 @@
   }
 
   /* =========================================================
+     RENDER: PROJECTS (time rollup) -- sources from the full `tasks`
+     array rather than activeTasks(), since archived tasks' logged
+     time should still count toward a project's historical total.
+  ========================================================= */
+  function projectTaskRowHtml(t) {
+    var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+    var minutes = taskTimeMinutes(t);
+    return (
+      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
+        '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(STATUS_LABELS[t.status] || t.status) + (t.archivedAt ? ' · Archived' : '') + '</p>' +
+        '</div>' +
+        '<span class="text-xs font-semibold shrink-0 text-slate-400 dark:text-slate-500">' + (minutes ? formatDuration(minutes) : '—') + '</span>' +
+      '</button>'
+    );
+  }
+
+  function renderProjects() {
+    var container = document.getElementById('projects-grid');
+    var projectNames = {};
+    tasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
+    var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); });
+
+    if (!names.length) {
+      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 col-span-full text-center py-10">No projects yet.</p>';
+      return;
+    }
+
+    var summaries = names.map(function (name) {
+      var mine = tasks.filter(function (t) { return t.project === name; });
+      var totalMinutes = mine.reduce(function (sum, t) { return sum + taskTimeMinutes(t); }, 0);
+      var billableMinutes = mine.reduce(function (sum, t) { return sum + taskBillableMinutes(t); }, 0);
+      var activeCount = mine.filter(function (t) { return !t.archivedAt; }).length;
+      var rows = mine.slice().sort(function (a, b) { return taskTimeMinutes(b) - taskTimeMinutes(a); });
+      return { name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes, activeCount: activeCount };
+    });
+
+    summaries.sort(function (a, b) { return b.totalMinutes - a.totalMinutes; });
+
+    container.innerHTML = summaries.map(function (p) {
+      var rowsHtml = p.rows.length
+        ? p.rows.map(projectTaskRowHtml).join('')
+        : '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-6">No tasks yet.</p>';
+
+      var badges = '';
+      if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
+
+      return (
+        '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card overflow-hidden">' +
+          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-slate-700">' +
+            '<div class="min-w-0 flex-1">' +
+              '<p class="text-base font-bold text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<div class="flex items-center gap-1.5 mt-0.5">' +
+                '<span class="text-xs text-slate-400 dark:text-slate-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
+                badges +
+              '</div>' +
+            '</div>' +
+            '<span class="text-lg font-bold text-slate-700 dark:text-slate-200 shrink-0">' + formatDuration(p.totalMinutes) + '</span>' +
+          '</div>' +
+          '<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-700">' + rowsHtml + '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  /* =========================================================
      RENDER: ACTIVITY FEED
   ========================================================= */
   var ACTIVITY_ICONS = {
     task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash',
-    task_moved: 'arrowRight', task_comment: 'message',
+    task_moved: 'arrowRight', task_comment: 'message', task_time_logged: 'clock',
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_unarchived: 'upload'
   };
@@ -1860,6 +2047,7 @@
     task_deleted: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
     task_moved: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
     task_comment: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
+    task_time_logged: 'bg-teal-100 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400',
     board_imported: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
     board_seeded: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
     board_archived: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
@@ -2034,6 +2222,7 @@
   function renderCurrentSecondaryView() {
     if (currentView === 'gantt') renderGantt();
     if (currentView === 'people') renderPeople();
+    if (currentView === 'projects') renderProjects();
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'archived') renderArchived();
   }
@@ -2245,6 +2434,7 @@
           showToast('This task was deleted by another team member', 'info');
         } else {
           renderCommentsLog(freshTask.comments, document.getElementById('task-comments-log'));
+          renderTimeEntriesEditor(freshTask.timeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
         }
       }
       renderAll();
@@ -2354,7 +2544,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T16:01:18Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T16:39:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
