@@ -113,14 +113,14 @@
 
   <!-- ============ HEADER ============ -->
   <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
-    <div class="app-container mx-auto px-4 sm:px-6 py-3">
+    <div class="app-container mx-auto px-4 sm:px-6 py-4">
       <div class="flex flex-wrap items-center gap-3 justify-between">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3.5">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card shrink-0">
             <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
           </div>
           <div>
-            <h1 class="text-xl font-semibold tracking-[-0.01em] text-slate-900 dark:text-white leading-none">MediaShock APAC — Project Manager</h1>
+            <h1 class="text-xl font-bold tracking-[-0.01em] text-slate-900 dark:text-white leading-none">MediaShock APAC — Project Manager</h1>
             <p class="text-[0.82rem] text-slate-500 dark:text-slate-400 leading-none mt-1">Project &amp; task prioritization dashboard</p>
           </div>
         </div>
@@ -156,7 +156,7 @@
       </div>
 
       <!-- Toolbar: view switch / search / filters -->
-      <div class="flex flex-wrap items-center gap-2 mt-3">
+      <div class="flex flex-wrap items-center gap-2 mt-5">
         <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
           <button data-view-btn="board" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>Board
@@ -937,8 +937,8 @@
       var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
       var urgencyLabel, urgencyClass;
       if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
-      else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'; }
-      else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'; }
+      else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
+      else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
       else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
 
       return (
@@ -966,7 +966,7 @@
     var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
     var overdue = days !== null && days < 0 && t.status !== 'Done';
     var dueSoon = days !== null && days >= 0 && days <= 1 && t.status !== 'Done';
-    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
+    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
     var hasDrive = !!t.driveLink;
 
     return (
@@ -1175,7 +1175,7 @@
     var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
     var overdue = days !== null && days < 0 && t.status !== 'Done';
     var dueSoon = days !== null && days >= 0 && days <= 1 && t.status !== 'Done';
-    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400' : (dueSoon ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500');
+    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400' : (dueSoon ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 dark:text-slate-500');
     var dueLabel = overdue ? Math.abs(days) + 'd overdue' : formatShortDate(t.deadline);
 
     return (
@@ -1219,7 +1219,7 @@
 
       var chips = '';
       if (p.overdue > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
-      if (p.high > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.high + ' high</span>';
+      if (p.high > 0) chips += '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">' + p.high + ' high</span>';
 
       return (
         '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card overflow-hidden">' +
