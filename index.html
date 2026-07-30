@@ -1134,6 +1134,7 @@
     document.getElementById('task-priority').value = task ? task.priority : 'Medium';
     taskPriorityPill.sync();
     document.getElementById('task-status').value = task ? task.status : 'Pipeline';
+    taskStatusPill.sync();
     document.getElementById('task-start').value = task ? task.startDate : toDateInputValue(todayMidnight());
     document.getElementById('task-deadline').value = task ? task.deadline : '';
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
@@ -1447,12 +1448,15 @@
   });
 
   /* =========================================================
-     PILL SELECT -- wraps a plain <select> of priority values with a
-     custom trigger + menu showing the same colored badge used on task
-     cards, since native <option> elements can't render arbitrary HTML.
-     The original <select> stays in the DOM (visually hidden) as the
-     real source of truth, so every existing .value read/.addEventListener
-     ('change', ...) call site keeps working untouched.
+     PILL SELECT -- wraps a plain <select> with a custom trigger + menu
+     matching the app's own design language, instead of the browser's
+     native dropdown list. Priority values render as the same colored
+     badge used on task cards; every other select's options just render
+     as plain text via the same fallback. The original <select> stays
+     in the DOM (visually hidden) as the real source of truth, so every
+     existing .value read/.addEventListener('change', ...) call site
+     keeps working untouched. Applied to every <select> in the app for
+     one consistent dropdown design throughout.
   ========================================================= */
   function pillOptionHtml(value, text) {
     var pm = PRIORITY_META[value];
@@ -1460,7 +1464,7 @@
     return '<span class="inline-flex items-center whitespace-nowrap text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + escapeHtml(text) + '</span>';
   }
 
-  function enhancePrioritySelect(selectId) {
+  function enhanceSelect(selectId) {
     var select = document.getElementById(selectId);
     var wrapper = select.parentElement;
     var chevron = wrapper.querySelector('svg');
@@ -1477,23 +1481,31 @@
     menu.className = 'absolute left-0 mt-1 z-20 hidden min-w-full w-max bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto';
     wrapper.appendChild(menu);
 
-    Array.prototype.forEach.call(select.options, function (opt) {
-      var item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/60';
-      item.innerHTML = pillOptionHtml(opt.value, opt.textContent);
-      item.addEventListener('click', function () {
-        select.value = opt.value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        sync();
-        menu.classList.add('hidden');
-      });
-      menu.appendChild(item);
-    });
-
     function sync() {
       var opt = select.options[select.selectedIndex];
       trigger.innerHTML = pillOptionHtml(select.value, opt ? opt.textContent : '');
+    }
+
+    // Rebuilds the menu's items from the real <select>'s current <option>
+    // list -- needed because filter-project/filter-assignee regenerate
+    // their options at runtime as tasks change, unlike the static option
+    // lists (priority/status/sort) that only need this once at setup.
+    function rebuild() {
+      menu.innerHTML = '';
+      Array.prototype.forEach.call(select.options, function (opt) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/60';
+        item.innerHTML = pillOptionHtml(opt.value, opt.textContent);
+        item.addEventListener('click', function () {
+          select.value = opt.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          sync();
+          menu.classList.add('hidden');
+        });
+        menu.appendChild(item);
+      });
+      sync();
     }
 
     trigger.addEventListener('click', function (e) {
@@ -1507,12 +1519,16 @@
       if (e.key === 'Escape') menu.classList.add('hidden');
     });
 
-    sync();
-    return { sync: sync };
+    rebuild();
+    return { sync: sync, rebuild: rebuild };
   }
 
-  var filterPriorityPill = enhancePrioritySelect('filter-priority');
-  var taskPriorityPill = enhancePrioritySelect('task-priority');
+  var filterPriorityPill = enhanceSelect('filter-priority');
+  var filterProjectPill = enhanceSelect('filter-project');
+  var filterAssigneePill = enhanceSelect('filter-assignee');
+  var sortByPill = enhanceSelect('sort-by');
+  var taskPriorityPill = enhanceSelect('task-priority');
+  var taskStatusPill = enhanceSelect('task-status');
 
   function populateDatalists() {
     var projectList = document.getElementById('project-suggestions');
@@ -2414,6 +2430,8 @@
 
     if (uniqueValues('project').indexOf(curProject) !== -1) projectSel.value = curProject;
     if (uniqueValues('assignee').indexOf(curAssignee) !== -1) assigneeSel.value = curAssignee;
+    filterProjectPill.rebuild();
+    filterAssigneePill.rebuild();
 
     var anyFilter = filters.search || filters.priority || filters.project || filters.assignee;
     document.getElementById('btn-clear-filters').classList.toggle('hidden', !anyFilter);
@@ -2529,11 +2547,14 @@
   document.getElementById('btn-clear-filters').addEventListener('click', function () {
     filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
     document.getElementById('sort-by').value = 'focus';
+    sortByPill.sync();
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-priority').value = '';
     filterPriorityPill.sync();
     document.getElementById('filter-project').value = '';
+    filterProjectPill.sync();
     document.getElementById('filter-assignee').value = '';
+    filterAssigneePill.sync();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
 
@@ -2869,7 +2890,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T19:19:01Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T19:23:10Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
