@@ -159,8 +159,9 @@
           <div id="user-chip" class="hidden items-center gap-[0.45rem] text-sm text-slate-500 dark:text-slate-400 mr-1">
             <span id="user-chip-avatar" class="w-[1.2rem] h-[1.2rem] rounded-full flex items-center justify-center text-white font-bold shrink-0" style="font-size:0.54rem;"></span>
             <span id="user-chip-name" class="hidden sm:inline"></span>
-            <button id="btn-sign-out" title="Sign out" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            <button id="btn-sign-out" title="Sign out" class="inline-flex items-center justify-center gap-1.5 h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              <span class="hidden sm:inline text-sm font-medium">Sign out</span>
             </button>
           </div>
           <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
@@ -713,6 +714,7 @@
     grip: '<circle cx="9" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="18" r="1"></circle>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
     clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+    archive: '<polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>',
     checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>'
   };
 
@@ -1923,9 +1925,9 @@
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<h3 class="text-base font-bold text-slate-700 dark:text-slate-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
-              (status === 'Done' ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('download', 'w-3.5 h-3.5') + '</button>' : '') +
+              '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
             '</div>' +
-            '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
+            (status === 'Done' ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
           '</div>' +
           '<div class="flex flex-col gap-2.5 px-2.5 pb-3 flex-1" data-column-body="' + status + '">' + cardsHtml + '</div>' +
         '</div>'
@@ -2839,7 +2841,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T19:03:23Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T19:08:42Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
