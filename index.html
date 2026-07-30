@@ -1871,7 +1871,8 @@
     var checklistDone = checklist.filter(function (i) { return i.done; }).length;
     var timeMinutes = taskTimeMinutes(t);
     var commentCount = (t.comments || []).length;
-    var metaChipClass = 'flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400';
+    var metaChipClass = 'flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500';
+    var commentChipClass = 'flex items-center gap-1 text-xs text-slate-900 dark:text-white';
 
     return (
       '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
@@ -1897,7 +1898,7 @@
           '<div class="flex items-center gap-1.5 shrink-0">' +
             (checklist.length ? '<span class="' + metaChipClass + '" title="' + checklistDone + ' of ' + checklist.length + ' checklist items done">' + svgIcon('checklist', 'w-3.5 h-3.5') + checklistDone + '/' + checklist.length + '</span>' : '') +
             (timeMinutes ? '<span class="' + metaChipClass + '" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3.5 h-3.5') + formatDuration(timeMinutes) + '</span>' : '') +
-            (commentCount ? '<span class="' + metaChipClass + '" title="' + commentCount + ' comment' + (commentCount === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + commentCount + '</span>' : '') +
+            (commentCount ? '<span class="' + commentChipClass + '" title="' + commentCount + ' comment' + (commentCount === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + commentCount + '</span>' : '') +
             '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700') + '">' +
               svgIcon('drive', 'w-4 h-4') +
             '</button>' +
@@ -2838,7 +2839,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T18:59:21Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T19:03:23Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
