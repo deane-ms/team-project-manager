@@ -1334,7 +1334,7 @@
       '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
-          '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">' +
+          '<div class="flex items-center gap-0.5">' +
             '<span draggable="true" data-drag-handle title="Drag to move" class="w-6 h-6 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
             '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
@@ -2004,7 +2004,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T10:02:33Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T10:06:11Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
