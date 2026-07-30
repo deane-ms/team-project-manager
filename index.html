@@ -153,9 +153,6 @@
           <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>
           </button>
-          <button id="btn-refresh-drive" title="Re-fetch project names from Google Drive" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg><span class="hidden lg:inline">Refresh Drive</span>
-          </button>
           <button id="btn-export" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span class="hidden sm:inline">Export</span>
           </button>
@@ -299,7 +296,12 @@
 
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Project <span class="text-rose-500">*</span></label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Project <span class="text-rose-500">*</span></label>
+            <button type="button" id="btn-browse-drive" title="Pick a project folder from Google Drive" class="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>Browse Drive
+            </button>
+          </div>
           <input id="task-project" list="project-suggestions" type="text" required maxlength="60" placeholder="e.g. Q3 Campaign" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="project-suggestions"></datalist>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
@@ -459,60 +461,59 @@
   }
 
   /* =========================================================
-     DRIVE PROJECT SUGGESTIONS -- pulls project-folder names from a
-     Google Drive Shared Drive (root -> one folder per client -> one
-     folder per project) into the Project field's autocomplete. Purely
-     additive: typing still works exactly as before, this only adds
-     more suggestions. Never blocks task creation if it fails.
+     DRIVE FOLDER PICKER -- lets a person pick their exact project
+     folder from Drive (rather than guessing which folders under the
+     root are "real" projects vs internal/admin folders) and fills the
+     Project name + Drive Link fields straight from that one pick.
   ========================================================= */
   var ROOT_FOLDER_ID = '0ALZ8Z0e-6Ez_Uk9PVA';
+  var PICKER_API_KEY = 'REPLACE_WITH_PICKER_API_KEY';
   var driveAccessToken = null;
-  var driveProjectNames = [];
+  var gapiPickerLoaded = false;
 
-  function driveListFolders(parentId) {
-    var names = [];
-    var ids = [];
-    function fetchPage(pageToken) {
-      var url = 'https://www.googleapis.com/drive/v3/files' +
-        '?q=' + encodeURIComponent("'" + parentId + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false") +
-        '&fields=' + encodeURIComponent('nextPageToken,files(id,name)') +
-        '&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=200' +
-        (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
-      return fetch(url, { headers: { Authorization: 'Bearer ' + driveAccessToken } })
-        .then(function (r) {
-          if (!r.ok) {
-            return r.json().catch(function () { return null; }).then(function (body) {
-              var detail = body && body.error && body.error.message ? body.error.message : ('HTTP ' + r.status);
-              throw new Error(detail);
-            });
+  function ensureGapiLoaded(cb) {
+    if (gapiPickerLoaded) return cb();
+    var script = document.createElement('script');
+    script.src = 'https://apis.google.com/js/api.js';
+    script.onload = function () {
+      gapi.load('picker', function () { gapiPickerLoaded = true; cb(); });
+    };
+    script.onerror = function () { showToast('Could not load Google Drive picker', 'error'); };
+    document.body.appendChild(script);
+  }
+
+  function openDrivePicker() {
+    ensureGapiLoaded(function () {
+      var view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setEnableDrives(true)
+        .setParent(ROOT_FOLDER_ID);
+      new google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(driveAccessToken)
+        .setDeveloperKey(PICKER_API_KEY)
+        .setCallback(function (data) {
+          if (data.action === google.picker.Action.PICKED) {
+            var picked = data.docs[0];
+            document.getElementById('task-project').value = picked.name;
+            document.getElementById('task-drive').value = 'https://drive.google.com/drive/folders/' + picked.id;
           }
-          return r.json();
         })
-        .then(function (data) {
-          (data.files || []).forEach(function (f) { names.push(f.name); ids.push(f.id); });
-          if (data.nextPageToken) return fetchPage(data.nextPageToken);
-        });
-    }
-    return fetchPage().then(function () {
-      console.log('driveListFolders(' + parentId + ') found', names.length, 'folder(s):', names);
-      return { names: names, ids: ids };
+        .build()
+        .setVisible(true);
     });
   }
 
-  function fetchDriveProjects() {
-    if (!driveAccessToken) return Promise.resolve();
-    return driveListFolders(ROOT_FOLDER_ID).then(function (clientFolders) {
-      console.log('Root folder client subfolders:', clientFolders.names);
-      return Promise.all(clientFolders.ids.map(function (id) { return driveListFolders(id); }));
-    }).then(function (results) {
-      var all = [];
-      results.forEach(function (r) { all = all.concat(r.names); });
-      driveProjectNames = Array.from(new Set(all)).sort(function (a, b) { return a.localeCompare(b); });
-      console.log('Total project folder names collected:', driveProjectNames);
-      populateDatalists();
+  function browseDriveForProject() {
+    if (driveAccessToken) { openDrivePicker(); return; }
+    signInWithPopup(auth, googleProvider).then(function (result) {
+      var credential = GoogleAuthProvider.credentialFromResult(result);
+      driveAccessToken = credential ? credential.accessToken : null;
+      if (driveAccessToken) openDrivePicker();
+      else showToast('Could not get Drive access -- try signing in again', 'error');
     }).catch(function (err) {
-      console.error('Drive fetch failed', err);
-      showToast('Could not load projects from Drive: ' + err.message, 'error');
+      showToast('Could not open Drive picker: ' + err.message, 'error');
     });
   }
 
@@ -960,12 +961,12 @@
   function populateDatalists() {
     var projectList = document.getElementById('project-suggestions');
     var assigneeList = document.getElementById('assignee-suggestions');
-    var projectNames = Array.from(new Set(uniqueValues('project').concat(driveProjectNames))).sort(function (a, b) { return a.localeCompare(b); });
-    projectList.innerHTML = projectNames.map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
+    projectList.innerHTML = uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
     assigneeList.innerHTML = uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">'; }).join('');
   }
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
+  document.getElementById('btn-browse-drive').addEventListener('click', browseDriveForProject);
   document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
   document.getElementById('task-cancel-btn').addEventListener('click', closeTaskModal);
   taskModal.addEventListener('click', function (e) { if (e.target === taskModal) closeTaskModal(); });
@@ -1671,29 +1672,6 @@
   });
 
   /* =========================================================
-     REFRESH DRIVE PROJECTS -- Drive access tokens expire in ~1hr and
-     Firebase doesn't silently refresh them, so this re-runs the Google
-     sign-in flow purely to mint a fresh token (normally just a brief
-     account-chooser flash since the scope is already granted, not a
-     full consent screen) and re-fetches project folder names.
-  ========================================================= */
-  document.getElementById('btn-refresh-drive').addEventListener('click', function (e) {
-    var btn = e.currentTarget;
-    btn.disabled = true;
-    signInWithPopup(auth, googleProvider).then(function (result) {
-      var credential = GoogleAuthProvider.credentialFromResult(result);
-      driveAccessToken = credential ? credential.accessToken : null;
-      return fetchDriveProjects();
-    }).then(function () {
-      showToast('Project list refreshed from Drive', 'success');
-    }).catch(function (err) {
-      showToast('Could not refresh from Drive: ' + err.message, 'error');
-    }).finally(function () {
-      btn.disabled = false;
-    });
-  });
-
-  /* =========================================================
      EXPORT / IMPORT
   ========================================================= */
   document.getElementById('btn-export').addEventListener('click', function () {
@@ -1809,7 +1787,6 @@
     signInWithPopup(auth, googleProvider).then(function (result) {
       var credential = GoogleAuthProvider.credentialFromResult(result);
       driveAccessToken = credential ? credential.accessToken : null;
-      fetchDriveProjects();
     }).catch(function (err) {
       authStatusEl.textContent = 'Sign-in failed: ' + err.message;
       authSignInBtn.disabled = false;
@@ -1899,7 +1876,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T08:12:36Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T08:46:13Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
