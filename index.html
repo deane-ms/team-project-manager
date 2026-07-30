@@ -153,6 +153,9 @@
           <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>
           </button>
+          <button id="btn-refresh-drive" title="Re-fetch project names from Google Drive" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg><span class="hidden lg:inline">Refresh Drive</span>
+          </button>
           <button id="btn-export" class="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span class="hidden sm:inline">Export</span>
           </button>
@@ -433,6 +436,7 @@
 
   var googleProvider = new GoogleAuthProvider();
   googleProvider.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAIN });
+  googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
   function isAllowedEmail(email) {
     return !!email && email.toLowerCase().endsWith("@" + ALLOWED_EMAIL_DOMAIN);
   }
@@ -452,6 +456,54 @@
       user: user ? (user.displayName || user.email) : "unknown",
       at: new Date().toISOString()
     }).catch(function (e) { console.error("Failed to log activity", e); });
+  }
+
+  /* =========================================================
+     DRIVE PROJECT SUGGESTIONS -- pulls project-folder names from a
+     Google Drive Shared Drive (root -> one folder per client -> one
+     folder per project) into the Project field's autocomplete. Purely
+     additive: typing still works exactly as before, this only adds
+     more suggestions. Never blocks task creation if it fails.
+  ========================================================= */
+  var ROOT_FOLDER_ID = '0ALZ8Z0e-6Ez_Uk9PVA';
+  var driveAccessToken = null;
+  var driveProjectNames = [];
+
+  function driveListFolders(parentId) {
+    var names = [];
+    var ids = [];
+    function fetchPage(pageToken) {
+      var url = 'https://www.googleapis.com/drive/v3/files' +
+        '?q=' + encodeURIComponent("'" + parentId + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false") +
+        '&fields=' + encodeURIComponent('nextPageToken,files(id,name)') +
+        '&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=200' +
+        (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+      return fetch(url, { headers: { Authorization: 'Bearer ' + driveAccessToken } })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Drive API error ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          (data.files || []).forEach(function (f) { names.push(f.name); ids.push(f.id); });
+          if (data.nextPageToken) return fetchPage(data.nextPageToken);
+        });
+    }
+    return fetchPage().then(function () { return { names: names, ids: ids }; });
+  }
+
+  function fetchDriveProjects() {
+    if (!driveAccessToken) return Promise.resolve();
+    return driveListFolders(ROOT_FOLDER_ID).then(function (clientFolders) {
+      return Promise.all(clientFolders.ids.map(function (id) { return driveListFolders(id); }));
+    }).then(function (results) {
+      var all = [];
+      results.forEach(function (r) { all = all.concat(r.names); });
+      driveProjectNames = Array.from(new Set(all)).sort(function (a, b) { return a.localeCompare(b); });
+      populateDatalists();
+    }).catch(function (err) {
+      console.error('Drive fetch failed', err);
+      showToast('Could not load projects from Drive: ' + err.message, 'error');
+    });
   }
 
   /* =========================================================
@@ -898,7 +950,8 @@
   function populateDatalists() {
     var projectList = document.getElementById('project-suggestions');
     var assigneeList = document.getElementById('assignee-suggestions');
-    projectList.innerHTML = uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
+    var projectNames = Array.from(new Set(uniqueValues('project').concat(driveProjectNames))).sort(function (a, b) { return a.localeCompare(b); });
+    projectList.innerHTML = projectNames.map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
     assigneeList.innerHTML = uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">'; }).join('');
   }
 
@@ -1608,6 +1661,29 @@
   });
 
   /* =========================================================
+     REFRESH DRIVE PROJECTS -- Drive access tokens expire in ~1hr and
+     Firebase doesn't silently refresh them, so this re-runs the Google
+     sign-in flow purely to mint a fresh token (normally just a brief
+     account-chooser flash since the scope is already granted, not a
+     full consent screen) and re-fetches project folder names.
+  ========================================================= */
+  document.getElementById('btn-refresh-drive').addEventListener('click', function (e) {
+    var btn = e.currentTarget;
+    btn.disabled = true;
+    signInWithPopup(auth, googleProvider).then(function (result) {
+      var credential = GoogleAuthProvider.credentialFromResult(result);
+      driveAccessToken = credential ? credential.accessToken : null;
+      return fetchDriveProjects();
+    }).then(function () {
+      showToast('Project list refreshed from Drive', 'success');
+    }).catch(function (err) {
+      showToast('Could not refresh from Drive: ' + err.message, 'error');
+    }).finally(function () {
+      btn.disabled = false;
+    });
+  });
+
+  /* =========================================================
      EXPORT / IMPORT
   ========================================================= */
   document.getElementById('btn-export').addEventListener('click', function () {
@@ -1720,7 +1796,11 @@
   authSignInBtn.addEventListener('click', function () {
     authSignInBtn.disabled = true;
     authStatusEl.textContent = 'Opening Google sign-in…';
-    signInWithPopup(auth, googleProvider).catch(function (err) {
+    signInWithPopup(auth, googleProvider).then(function (result) {
+      var credential = GoogleAuthProvider.credentialFromResult(result);
+      driveAccessToken = credential ? credential.accessToken : null;
+      fetchDriveProjects();
+    }).catch(function (err) {
       authStatusEl.textContent = 'Sign-in failed: ' + err.message;
       authSignInBtn.disabled = false;
     });
@@ -1809,7 +1889,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T07:44:12Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T07:52:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
