@@ -838,8 +838,7 @@
   function pillOptionHtml(value, text) {
     var pm = PRIORITY_META[value];
     if (!pm) return '<span class="text-slate-700 dark:text-slate-200">' + escapeHtml(text) + '</span>';
-    return '<span class="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' +
-      '<span class="w-1.5 h-1.5 rounded-full ' + pm.dot + '"></span>' + escapeHtml(text) + '</span>';
+    return '<span class="inline-flex items-center whitespace-nowrap text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + escapeHtml(text) + '</span>';
   }
 
   function enhancePrioritySelect(selectId) {
@@ -1812,7 +1811,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T07:27:50Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T07:30:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
