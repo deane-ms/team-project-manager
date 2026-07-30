@@ -2702,7 +2702,11 @@
 
   var userChip = document.getElementById('user-chip');
   var userChipName = document.getElementById('user-chip-name');
-  document.getElementById('btn-sign-out').addEventListener('click', function () { signOut(auth); });
+  document.getElementById('btn-sign-out').addEventListener('click', function () {
+    openConfirm('Sign out?', 'You\'ll need to sign in again with your Mediashock Google account to get back in.', function () {
+      signOut(auth);
+    }, { tone: 'question', confirmText: 'Sign out', cancelText: 'Cancel' });
+  });
 
   function stopListeners() {
     if (unsubTasks) { unsubTasks(); unsubTasks = null; }
@@ -2841,7 +2845,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T19:08:42Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T19:09:46Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
