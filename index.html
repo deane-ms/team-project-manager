@@ -464,7 +464,7 @@
 <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
   <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
     <div class="p-5">
-      <div class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
+      <div id="confirm-icon-wrap" class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
         <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
       </div>
       <h3 id="confirm-title" class="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Are you sure?</h3>
@@ -639,6 +639,7 @@
   var STATUS_LABELS = { Pipeline: 'Pipeline', 'In Progress': 'In Progress', Review: 'Review', Done: 'Completed' };
   var PRIORITIES = ['High', 'Medium', 'Low'];
   var PRIORITY_WEIGHT = { High: 3, Medium: 2, Low: 1 };
+  var OVERTIME_DAILY_MINUTES = 8 * 60;
   var GANTT_DAY_WIDTH = 36;
   var GANTT_LABEL_WIDTH = 232;
 
@@ -771,6 +772,21 @@
 
   function taskBillableMinutes(task) {
     return (task.timeEntries || []).filter(function (e) { return e.billable; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+  }
+
+  function personMinutesLoggedToday(personName, excludeTaskId) {
+    var today = new Date().toISOString().slice(0, 10);
+    var total = 0;
+    tasks.forEach(function (t) {
+      if (t.id === excludeTaskId) return;
+      (t.timeEntries || []).forEach(function (e) {
+        if (e.author === personName && e.date && e.date.slice(0, 10) === today) total += (e.minutes || 0);
+      });
+    });
+    currentTimeEntries.forEach(function (e) {
+      if (e.author === personName && e.date && e.date.slice(0, 10) === today) total += (e.minutes || 0);
+    });
+    return total;
   }
 
   function describeTaskChanges(oldTask, data) {
@@ -981,11 +997,24 @@
   ========================================================= */
   var confirmModal = document.getElementById('confirm-modal');
   var confirmCallback = null;
+  var confirmCancelCallback = null;
+  var CONFIRM_TONES = {
+    danger: { wrap: 'bg-rose-100 dark:bg-rose-500/15', icon: 'text-rose-600 dark:text-rose-400', iconName: 'alert', okBtn: 'bg-rose-600 hover:bg-rose-700' },
+    question: { wrap: 'bg-amber-100 dark:bg-amber-500/15', icon: 'text-amber-600 dark:text-amber-400', iconName: 'info', okBtn: 'bg-brand-600 hover:bg-brand-700' }
+  };
 
-  function openConfirm(title, body, onConfirm) {
+  function openConfirm(title, body, onConfirm, options) {
+    options = options || {};
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-body').textContent = body;
+    document.getElementById('confirm-ok-btn').textContent = options.confirmText || 'Confirm';
+    document.getElementById('confirm-cancel-btn').textContent = options.cancelText || 'Cancel';
+    var tone = CONFIRM_TONES[options.tone] || CONFIRM_TONES.danger;
+    document.getElementById('confirm-icon-wrap').className = 'w-10 h-10 rounded-full ' + tone.wrap + ' flex items-center justify-center mb-3';
+    document.getElementById('confirm-icon-wrap').innerHTML = svgIcon(tone.iconName, 'w-5 h-5 ' + tone.icon);
+    document.getElementById('confirm-ok-btn').className = 'text-sm font-semibold px-4 py-2 rounded-lg text-white ' + tone.okBtn;
     confirmCallback = onConfirm;
+    confirmCancelCallback = options.onCancel || null;
     confirmModal.classList.remove('hidden');
     confirmModal.classList.add('flex');
   }
@@ -994,9 +1023,14 @@
     confirmModal.classList.add('hidden');
     confirmModal.classList.remove('flex');
     confirmCallback = null;
+    confirmCancelCallback = null;
   }
 
-  document.getElementById('confirm-cancel-btn').addEventListener('click', closeConfirm);
+  document.getElementById('confirm-cancel-btn').addEventListener('click', function () {
+    var cb = confirmCancelCallback;
+    closeConfirm();
+    if (cb) cb();
+  });
   document.getElementById('confirm-ok-btn').addEventListener('click', function () {
     var cb = confirmCallback;
     closeConfirm();
@@ -1212,6 +1246,7 @@
               '<div class="flex items-center gap-1.5">' +
                 '<span class="text-sm font-semibold text-slate-700 dark:text-slate-200">' + formatDuration(e.minutes) + '</span>' +
                 (e.billable ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
+                (e.overtime ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
                 '<span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">' + formatShortDate(e.date.slice(0, 10)) + '</span>' +
               '</div>' +
               (e.note ? '<p class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
@@ -1280,6 +1315,26 @@
     setBillableToggle(document.getElementById('task-time-billable'), true);
   });
 
+  function commitTimeEntry(minutes, note, billable, overtime) {
+    var hoursEl = document.getElementById('task-time-hours');
+    var noteEl = document.getElementById('task-time-note');
+    var billableEl = document.getElementById('task-time-billable');
+    if (timeEntryEditIndex !== null) {
+      var existing = currentTimeEntries[timeEntryEditIndex];
+      existing.minutes = minutes;
+      existing.note = note;
+      existing.billable = billable;
+    } else {
+      var user = auth.currentUser;
+      currentTimeEntries.push({ minutes: minutes, note: note, billable: billable, overtime: !!overtime, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
+    }
+    hoursEl.value = '';
+    noteEl.value = '';
+    setBillableToggle(billableEl, true);
+    exitTimeEntryEditMode();
+    renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
+  }
+
   document.getElementById('task-time-add-btn').addEventListener('click', function () {
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
@@ -1289,20 +1344,31 @@
     var minutes = Math.round(hours * 60);
     var billable = billableEl.getAttribute('data-active') === 'true';
     var note = noteEl.value.trim();
+
     if (timeEntryEditIndex !== null) {
-      var existing = currentTimeEntries[timeEntryEditIndex];
-      existing.minutes = minutes;
-      existing.note = note;
-      existing.billable = billable;
-    } else {
-      var user = auth.currentUser;
-      currentTimeEntries.push({ minutes: minutes, note: note, billable: billable, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
+      commitTimeEntry(minutes, note, billable);
+      return;
     }
-    hoursEl.value = '';
-    noteEl.value = '';
-    setBillableToggle(billableEl, true);
-    exitTimeEntryEditMode();
-    renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
+
+    var user = auth.currentUser;
+    var personName = user ? (user.displayName || user.email) : null;
+    var totalAfter = (personName ? personMinutesLoggedToday(personName, editingTaskId) : 0) + minutes;
+
+    if (totalAfter > OVERTIME_DAILY_MINUTES) {
+      openConfirm(
+        'That\'s over ' + formatDuration(OVERTIME_DAILY_MINUTES) + ' logged today',
+        'This entry brings your total logged time today to ' + formatDuration(totalAfter) + '. Mark it as overtime?',
+        function () { commitTimeEntry(minutes, note, billable, true); },
+        {
+          onCancel: function () { commitTimeEntry(minutes, note, billable, false); },
+          confirmText: 'Yes, mark as overtime',
+          cancelText: 'No, just log it',
+          tone: 'question'
+        }
+      );
+    } else {
+      commitTimeEntry(minutes, note, billable, false);
+    }
   });
 
   document.getElementById('task-time-log').addEventListener('click', function (e) {
@@ -2607,7 +2673,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T17:09:41Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T17:36:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
