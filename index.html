@@ -711,7 +711,9 @@
     arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
     message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
     grip: '<circle cx="9" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="18" r="1"></circle>',
-    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>'
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
+    clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+    checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -1865,6 +1867,11 @@
     var dueSoon = days !== null && days >= 0 && days <= 1 && t.status !== 'Done';
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
     var hasDrive = !!t.driveLink;
+    var checklist = t.checklist || [];
+    var checklistDone = checklist.filter(function (i) { return i.done; }).length;
+    var timeMinutes = taskTimeMinutes(t);
+    var commentCount = (t.comments || []).length;
+    var metaChipClass = 'flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400';
 
     return (
       '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
@@ -1882,13 +1889,15 @@
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + formatShortDate(t.deadline) + '</span>' +
           (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
         '</div>' +
-        '<div class="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-700">' +
+        '<div class="flex items-center justify-between flex-wrap gap-y-1 pt-2.5 border-t border-slate-100 dark:border-slate-700">' +
           '<div class="flex items-center gap-1.5 min-w-0">' +
             '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-slate-600 dark:text-slate-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
-          '<div class="flex items-center gap-1 shrink-0">' +
-            ((t.comments || []).length ? '<span class="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500" title="' + (t.comments || []).length + ' comment' + ((t.comments || []).length === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + (t.comments || []).length + '</span>' : '') +
+          '<div class="flex items-center gap-1.5 shrink-0">' +
+            (checklist.length ? '<span class="' + metaChipClass + '" title="' + checklistDone + ' of ' + checklist.length + ' checklist items done">' + svgIcon('checklist', 'w-3.5 h-3.5') + checklistDone + '/' + checklist.length + '</span>' : '') +
+            (timeMinutes ? '<span class="' + metaChipClass + '" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3.5 h-3.5') + formatDuration(timeMinutes) + '</span>' : '') +
+            (commentCount ? '<span class="' + metaChipClass + '" title="' + commentCount + ' comment' + (commentCount === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + commentCount + '</span>' : '') +
             '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700') + '">' +
               svgIcon('drive', 'w-4 h-4') +
             '</button>' +
@@ -2829,7 +2838,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T18:56:21Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T18:59:21Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
