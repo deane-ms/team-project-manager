@@ -448,8 +448,6 @@
 <!-- ============ TOASTS ============ -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
 
-<div id="move-status-menu" class="hidden fixed z-[65] min-w-[9rem] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-pop py-1"></div>
-
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
@@ -1585,7 +1583,6 @@
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
           '<div class="flex items-center gap-0.5">' +
             '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
-            '<button data-move-task="' + t.id + '" data-current-status="' + t.status + '" title="Move to…" class="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('arrowRight', 'w-3.5 h-3.5') + '</button>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
             '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
@@ -1634,42 +1631,6 @@
     }).join('');
     attachBoardDnD();
   }
-
-  /* =========================================================
-     MOVE-TO MENU -- tap-friendly status change for touch devices,
-     since HTML5 drag-and-drop (the desktop grip handle) never fires
-     from a touch gesture on mobile browsers. Single shared floating
-     menu, repositioned per click rather than one submenu per card.
-  ========================================================= */
-  function showMoveMenu(button) {
-    var menu = document.getElementById('move-status-menu');
-    var taskId = button.getAttribute('data-move-task');
-    var currentStatus = button.getAttribute('data-current-status');
-    menu.innerHTML = STATUSES.filter(function (s) { return s !== currentStatus; }).map(function (s) {
-      return '<button type="button" class="move-status-option w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60" data-task-id="' + taskId + '" data-status="' + s + '">Move to ' + (STATUS_LABELS[s] || s) + '</button>';
-    }).join('');
-    var rect = button.getBoundingClientRect();
-    menu.style.top = (rect.bottom + 4) + 'px';
-    menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
-    menu.classList.remove('hidden');
-  }
-
-  function hideMoveMenu() {
-    document.getElementById('move-status-menu').classList.add('hidden');
-  }
-
-  document.getElementById('move-status-menu').addEventListener('click', function (e) {
-    var opt = e.target.closest('.move-status-option');
-    if (!opt) return;
-    updateTaskStatus(opt.getAttribute('data-task-id'), opt.getAttribute('data-status'));
-    hideMoveMenu();
-  });
-  document.addEventListener('click', function (e) {
-    var menu = document.getElementById('move-status-menu');
-    if (!menu.classList.contains('hidden') && !menu.contains(e.target) && !e.target.closest('[data-move-task]')) {
-      hideMoveMenu();
-    }
-  });
 
   function attachBoardDnD() {
     document.querySelectorAll('.task-card').forEach(function (card) {
@@ -2028,7 +1989,6 @@
     var driveBtn = e.target.closest('[data-drive-link]');
     var archiveBtn = e.target.closest('[data-archive-completed]');
     var unarchiveBtn = e.target.closest('[data-unarchive-task]');
-    var moveBtn = e.target.closest('[data-move-task]');
 
     if (archiveBtn) {
       handleArchiveCompletedClick(archiveBtn);
@@ -2036,11 +1996,6 @@
     }
     if (unarchiveBtn) {
       unarchiveTask(unarchiveBtn.getAttribute('data-unarchive-task'));
-      return;
-    }
-    if (moveBtn) {
-      e.stopPropagation();
-      showMoveMenu(moveBtn);
       return;
     }
     if (editBtn) {
@@ -2399,7 +2354,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T11:25:34Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T16:01:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
