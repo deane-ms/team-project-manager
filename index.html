@@ -355,8 +355,13 @@
       <div>
         <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Google Drive Link</label>
         <div class="relative">
-          <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-8 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <button type="button" id="task-drive-open" title="Open link" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-slate-400 dark:disabled:hover:text-slate-500 disabled:cursor-default" disabled>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          </button>
+          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-8 pr-9 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <button type="button" id="task-drive-copy" title="Copy link" disabled class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-slate-400 dark:disabled:hover:text-slate-500 disabled:cursor-default">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
         </div>
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
@@ -575,7 +580,9 @@
     info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
     arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
-    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>'
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
+    grip: '<circle cx="9" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="18" r="1"></circle>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -866,6 +873,7 @@
     document.getElementById('task-start').value = task ? task.startDate : toDateInputValue(todayMidnight());
     document.getElementById('task-deadline').value = task ? task.deadline : '';
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
+    syncDriveLinkButtons();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
     document.getElementById('task-comments-section').classList.toggle('hidden', !task);
     document.getElementById('task-comment-input').value = '';
@@ -885,6 +893,27 @@
     editingTaskId = null;
     taskForm.reset();
   }
+
+  function syncDriveLinkButtons() {
+    var hasLink = !!document.getElementById('task-drive').value.trim();
+    document.getElementById('task-drive-open').disabled = !hasLink;
+    document.getElementById('task-drive-copy').disabled = !hasLink;
+  }
+
+  document.getElementById('task-drive').addEventListener('input', syncDriveLinkButtons);
+  document.getElementById('task-drive-open').addEventListener('click', function () {
+    var url = document.getElementById('task-drive').value.trim();
+    if (url) window.open(normalizeUrl(url), '_blank', 'noopener,noreferrer');
+  });
+  document.getElementById('task-drive-copy').addEventListener('click', function () {
+    var url = document.getElementById('task-drive').value.trim();
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(function () {
+      showToast('Link copied', 'success');
+    }).catch(function () {
+      showToast('Could not copy link', 'error');
+    });
+  });
 
   var checklistLinkEditIndex = null;
 
@@ -1302,10 +1331,11 @@
     var hasDrive = !!t.driveLink;
 
     return (
-      '<div draggable="true" data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-grab active:cursor-grabbing group hover:shadow-pop transition">' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
           '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">' +
+            '<span draggable="true" data-drag-handle title="Drag to move" class="w-6 h-6 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
             '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
@@ -1974,7 +2004,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T09:52:39Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T10:02:33Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
