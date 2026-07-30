@@ -1464,6 +1464,8 @@
     return '<span class="inline-flex items-center whitespace-nowrap text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + escapeHtml(text) + '</span>';
   }
 
+  var allEnhancedSelectMenus = [];
+
   function enhanceSelect(selectId) {
     var select = document.getElementById(selectId);
     var wrapper = select.parentElement;
@@ -1508,9 +1510,13 @@
       sync();
     }
 
+    allEnhancedSelectMenus.push(menu);
+
     trigger.addEventListener('click', function (e) {
       e.stopPropagation();
-      menu.classList.toggle('hidden');
+      var wasHidden = menu.classList.contains('hidden');
+      allEnhancedSelectMenus.forEach(function (m) { m.classList.add('hidden'); });
+      if (wasHidden) menu.classList.remove('hidden');
     });
     document.addEventListener('click', function (e) {
       if (!wrapper.contains(e.target)) menu.classList.add('hidden');
@@ -1920,6 +1926,7 @@
         '<div class="flex items-center justify-between text-xs mb-3">' +
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + formatShortDate(t.deadline) + '</span>' +
           (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
+          (dueSoon ? '<span class="text-xs font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
         '</div>' +
         '<div class="flex items-center justify-between flex-wrap gap-y-1 pt-2.5 border-t border-slate-100 dark:border-slate-700">' +
           '<div class="flex items-center gap-1.5 min-w-0">' +
@@ -2890,7 +2897,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T19:23:10Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T19:29:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
