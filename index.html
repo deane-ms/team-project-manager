@@ -82,7 +82,32 @@
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
 
-<div id="app" class="min-h-screen flex flex-col">
+<!-- ============ AUTH GATE ============ -->
+<div id="auth-gate" class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-900">
+  <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden text-center">
+    <div class="p-6">
+      <div class="w-12 h-12 mx-auto rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card mb-4">
+        <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+      </div>
+      <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Flowboard</h2>
+      <p id="auth-status" class="text-sm text-slate-500 dark:text-slate-400 mb-4">Sign in with your Mediashock Google account to continue.</p>
+
+      <button type="button" id="auth-signin-btn" class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card transition">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81z"></path></svg>
+        Sign in with Google
+      </button>
+
+      <div id="auth-denied" class="hidden mt-1">
+        <p class="text-sm text-rose-600 dark:text-rose-400 mb-3">This tool is restricted to <strong>@mediashock.com.sg</strong> accounts.</p>
+        <button type="button" id="auth-signout-btn" class="w-full text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+          Sign out and try another account
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="min-h-screen flex flex-col hidden">
 
   <!-- ============ HEADER ============ -->
   <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
@@ -106,6 +131,12 @@
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">done</span></div>
           </div>
 
+          <div id="user-chip" class="hidden items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mr-1">
+            <span id="user-chip-name" class="hidden sm:inline"></span>
+            <button id="btn-sign-out" title="Sign out" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            </button>
+          </div>
           <button id="btn-theme-toggle" title="Toggle dark mode" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>
           </button>
@@ -175,6 +206,10 @@
 
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" data-view class="active-view flex-1">
+      <div id="empty-board-banner" class="hidden items-center justify-between gap-3 mb-4 px-4 py-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-500 dark:text-slate-400">
+        <span>Board is empty — nothing here yet.</span>
+        <button id="btn-load-sample" type="button" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Load sample tasks</button>
+      </div>
       <div id="board-columns" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start"></div>
     </section>
 
@@ -205,7 +240,7 @@
   </main>
 
   <footer class="text-center text-xs text-slate-400 dark:text-slate-600 py-4">
-    Flowboard — data is stored locally in your browser. Nothing leaves your device.
+    Flowboard — shared live with the team via Firestore. Signed in with your Mediashock Google account.
   </footer>
 </div>
 
@@ -315,14 +350,52 @@
 <!-- ============ TOASTS ============ -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
 
-<script>
-(function () {
-  'use strict';
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, connectAuthEmulator
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
+    connectFirestoreEmulator
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  /* =========================================================
+     FIREBASE SETUP
+     firebaseConfig is meant to be public in client code -- access control is
+     enforced by firestore.rules, not by hiding these values.
+  ========================================================= */
+  var firebaseConfig = {
+    apiKey: "AIzaSyB8-SuBoWnQRO9FY_5oEsJ9LDxbY11Mx70",
+    authDomain: "pscr-project-manager.firebaseapp.com",
+    projectId: "pscr-project-manager",
+    appId: "1:989526559102:web:2fe9a21bc0234d28588b2f"
+  };
+  var ALLOWED_EMAIL_DOMAIN = "mediashock.com.sg";
+  var USE_EMULATORS = ["localhost", "127.0.0.1"].indexOf(location.hostname) > -1;
+
+  var fbApp = initializeApp(USE_EMULATORS
+    ? { projectId: "demo-flowboard", apiKey: "demo-key", authDomain: "demo-flowboard.firebaseapp.com" }
+    : firebaseConfig);
+  var auth = getAuth(fbApp);
+  var db = getFirestore(fbApp);
+  if (USE_EMULATORS) {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  }
+
+  var googleProvider = new GoogleAuthProvider();
+  googleProvider.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAIN });
+  function isAllowedEmail(email) {
+    return !!email && email.toLowerCase().endsWith("@" + ALLOWED_EMAIL_DOMAIN);
+  }
+
+  var tasksCol = collection(db, "tasks");
+  var unsubTasks = null;
 
   /* =========================================================
      CONSTANTS
   ========================================================= */
-  var STORAGE_KEY = 'flowboard_tasks_v1';
   var STATUSES = ['Pipeline', 'In Progress', 'Review', 'Done'];
   var PRIORITIES = ['High', 'Medium', 'Low'];
   var PRIORITY_WEIGHT = { High: 3, Medium: 2, Low: 1 };
@@ -499,27 +572,8 @@
   document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
 
   /* =========================================================
-     PERSISTENCE
+     SAMPLE DATA (used only by the opt-in "Load sample tasks" action)
   ========================================================= */
-  function loadTasks() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) { /* ignore corrupt storage */ }
-    return null;
-  }
-
-  function persist() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    } catch (e) {
-      showToast('Could not save to local storage (' + e.message + ')', 'error');
-    }
-  }
-
   function seedDemoData() {
     var today = todayMidnight();
     var samples = [
@@ -751,42 +805,81 @@
     }
     if (hasError) return;
 
-    if (editingTaskId) {
-      var idx = tasks.findIndex(function (t) { return t.id === editingTaskId; });
-      if (idx !== -1) {
-        tasks[idx] = Object.assign({}, tasks[idx], {
-          name: name, project: project, assignee: assignee, priority: priority,
-          status: status, startDate: startDate, deadline: deadline, driveLink: driveLink
-        });
-      }
-      showToast('Task updated', 'success');
-    } else {
-      tasks.push({
-        id: uid(), name: name, project: project, assignee: assignee, priority: priority,
-        status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
-        createdAt: new Date().toISOString()
-      });
-      showToast('Task added', 'success');
-    }
+    var isEditing = !!editingTaskId;
+    var id = isEditing ? editingTaskId : uid();
+    var taskData = {
+      name: name, project: project, assignee: assignee, priority: priority,
+      status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
+      updatedAt: new Date().toISOString()
+    };
+    if (!isEditing) taskData.createdAt = taskData.updatedAt;
 
-    persist();
-    closeTaskModal();
-    renderAll();
+    var saveBtn = document.getElementById('task-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+
+    setDoc(doc(tasksCol, id), taskData, { merge: true }).then(function () {
+      showToast(isEditing ? 'Task updated' : 'Task added', 'success');
+      closeTaskModal();
+    }).catch(function (err) {
+      showToast('Could not save this task: ' + err.message, 'error');
+    }).finally(function () {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Task';
+    });
   });
 
   function deleteTask(id) {
-    tasks = tasks.filter(function (t) { return t.id !== id; });
-    persist();
-    renderAll();
-    showToast('Task deleted', 'info');
+    deleteDoc(doc(tasksCol, id)).then(function () {
+      showToast('Task deleted', 'info');
+    }).catch(function (err) {
+      showToast('Could not delete this task: ' + err.message, 'error');
+    });
   }
 
   function updateTaskStatus(id, newStatus) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t || t.status === newStatus) return;
-    t.status = newStatus;
-    persist();
-    renderAll();
+    updateDoc(doc(tasksCol, id), { status: newStatus, updatedAt: new Date().toISOString() }).catch(function (err) {
+      showToast('Could not move task: ' + err.message, 'error');
+    });
+  }
+
+  /* =========================================================
+     BULK REPLACE (import + "load sample tasks") -- deletes every task
+     currently on the shared board and writes the new set, chunked into
+     batches of <=500 ops (Firestore's per-batch limit). Sequential
+     batches are not atomic with each other, but realistic board sizes
+     fit in a single batch, so this only matters as a defensive fallback.
+  ========================================================= */
+  function replaceAllTasks(newTasks) {
+    var ops = tasks.map(function (t) { return { type: 'delete', id: t.id }; });
+    newTasks.forEach(function (t) {
+      var data = Object.assign({}, t);
+      delete data.id;
+      ops.push({ type: 'set', id: t.id, data: data });
+    });
+
+    var chunks = [];
+    for (var i = 0; i < ops.length; i += 500) chunks.push(ops.slice(i, i + 500));
+
+    var chain = Promise.resolve();
+    chunks.forEach(function (chunk) {
+      chain = chain.then(function () {
+        var batch = writeBatch(db);
+        chunk.forEach(function (op) {
+          if (op.type === 'delete') batch.delete(doc(tasksCol, op.id));
+          else batch.set(doc(tasksCol, op.id), op.data, { merge: true });
+        });
+        return batch.commit();
+      });
+    });
+    if (chunks.length > 1) {
+      chain = chain.then(function () {
+        showToast('Board updated in multiple steps — refresh if it looks incomplete', 'info');
+      });
+    }
+    return chain;
   }
 
   /* =========================================================
@@ -890,6 +983,7 @@
   }
 
   function renderBoard() {
+    document.getElementById('empty-board-banner').classList.toggle('hidden', tasks.length !== 0);
     var filtered = applyFilters(tasks);
     var container = document.getElementById('board-columns');
     container.innerHTML = STATUSES.map(function (status) {
@@ -1241,6 +1335,23 @@
   });
 
   /* =========================================================
+     LOAD SAMPLE TASKS (opt-in, only offered when the board is empty)
+  ========================================================= */
+  document.getElementById('btn-load-sample').addEventListener('click', function (e) {
+    var btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    replaceAllTasks(seedDemoData()).then(function () {
+      showToast('Sample tasks loaded', 'success');
+    }).catch(function (err) {
+      showToast('Could not load sample tasks: ' + err.message, 'error');
+    }).finally(function () {
+      btn.disabled = false;
+      btn.textContent = 'Load sample tasks';
+    });
+  });
+
+  /* =========================================================
      EXPORT / IMPORT
   ========================================================= */
   document.getElementById('btn-export').addEventListener('click', function () {
@@ -1288,22 +1399,25 @@
               startDate: parseDate(t.startDate) ? t.startDate : toDateInputValue(todayMidnight()),
               deadline: parseDate(t.deadline) ? t.deadline : toDateInputValue(todayMidnight()),
               driveLink: t.driveLink ? normalizeUrl(t.driveLink) : '',
-              createdAt: t.createdAt || new Date().toISOString()
+              createdAt: t.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
             };
           });
 
         if (cleaned.length === 0) throw new Error('No valid tasks were found in this file.');
 
         pendingImportData = cleaned;
+        var importCount = cleaned.length;
         openConfirm(
-          'Import ' + cleaned.length + ' task' + (cleaned.length === 1 ? '' : 's') + '?',
-          'This will replace your current board (' + tasks.length + ' task' + (tasks.length === 1 ? '' : 's') + ') with the contents of this file. Export your current data first if you want to keep a backup.',
+          'Import ' + importCount + ' task' + (importCount === 1 ? '' : 's') + '?',
+          'This will replace the entire shared board for the whole team (' + tasks.length + ' task' + (tasks.length === 1 ? '' : 's') + ') with the contents of this file. Anything anyone changes at the exact same moment could be lost. Export first if you want a backup.',
           function () {
-            tasks = pendingImportData;
-            pendingImportData = null;
-            persist();
-            renderAll();
-            showToast('Imported ' + tasks.length + ' tasks', 'success');
+            replaceAllTasks(pendingImportData).then(function () {
+              showToast('Imported ' + importCount + ' tasks', 'success');
+              pendingImportData = null;
+            }).catch(function (err) {
+              showToast('Import failed: ' + err.message, 'error');
+            });
           }
         );
       } catch (err) {
@@ -1337,19 +1451,91 @@
   }
 
   /* =========================================================
+     AUTH
+  ========================================================= */
+  var authGate = document.getElementById('auth-gate');
+  var appRoot = document.getElementById('app');
+  var authStatusEl = document.getElementById('auth-status');
+  var authSignInBtn = document.getElementById('auth-signin-btn');
+  var authDenied = document.getElementById('auth-denied');
+  var authSignOutBtn = document.getElementById('auth-signout-btn');
+
+  authSignInBtn.addEventListener('click', function () {
+    authSignInBtn.disabled = true;
+    authStatusEl.textContent = 'Opening Google sign-in…';
+    signInWithPopup(auth, googleProvider).catch(function (err) {
+      authStatusEl.textContent = 'Sign-in failed: ' + err.message;
+      authSignInBtn.disabled = false;
+    });
+  });
+  authSignOutBtn.addEventListener('click', function () { signOut(auth); });
+
+  var userChip = document.getElementById('user-chip');
+  var userChipName = document.getElementById('user-chip-name');
+  document.getElementById('btn-sign-out').addEventListener('click', function () { signOut(auth); });
+
+  function stopTaskListener() {
+    if (unsubTasks) { unsubTasks(); unsubTasks = null; }
+  }
+
+  function startTaskListener() {
+    if (unsubTasks) return;
+    unsubTasks = onSnapshot(tasksCol, function (snap) {
+      var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
+      tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      if (modalOpenId && !tasks.some(function (t) { return t.id === modalOpenId; })) {
+        closeTaskModal();
+        showToast('This task was deleted by another team member', 'info');
+      }
+      renderAll();
+    }, function (err) {
+      showToast('Live sync error: ' + err.message, 'error');
+    });
+  }
+
+  onAuthStateChanged(auth, function (user) {
+    authSignInBtn.disabled = false;
+    authSignInBtn.hidden = false;
+    authStatusEl.classList.remove('hidden');
+    authDenied.classList.add('hidden');
+
+    if (!user) {
+      stopTaskListener();
+      appRoot.classList.add('hidden');
+      authGate.classList.remove('hidden');
+      userChip.classList.add('hidden');
+      authStatusEl.textContent = 'Sign in with your Mediashock Google account to continue.';
+      return;
+    }
+    if (!isAllowedEmail(user.email)) {
+      stopTaskListener();
+      appRoot.classList.add('hidden');
+      authGate.classList.remove('hidden');
+      userChip.classList.add('hidden');
+      authStatusEl.classList.add('hidden');
+      authSignInBtn.hidden = true;
+      authDenied.classList.remove('hidden');
+      return;
+    }
+
+    authGate.classList.add('hidden');
+    appRoot.classList.remove('hidden');
+    userChip.classList.remove('hidden');
+    userChip.classList.add('flex');
+    userChipName.textContent = user.displayName || user.email;
+    startTaskListener();
+  });
+
+  /* =========================================================
      INIT
   ========================================================= */
   function init() {
     syncThemeToggleIcon();
-    var loaded = loadTasks();
-    tasks = loaded && loaded.length ? loaded : seedDemoData();
-    if (!loaded) persist();
     setView('board');
     renderAll();
   }
 
   init();
-})();
 </script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // request.auth.token.email is the Google-verified claim on the auth token, not
+    // anything client-supplied -- this is the actual security boundary. The client-side
+    // hd param / isAllowedEmail check in index.html is a UX nicety, not enforcement.
+    // Google OAuth email claims are effectively always lowercase in practice; this regex
+    // does not case-fold, so a non-lowercase claim (unlikely) would pass the client gate
+    // but fail every write with permission-denied.
+    function isMediashock() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('.*@mediashock[.]com[.]sg$');
+    }
+
+    match /{document=**} {
+      allow read, write: if isMediashock();
+    }
+  }
+}
