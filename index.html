@@ -181,12 +181,15 @@
           <button data-view-btn="activity" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Activity
           </button>
+          <button data-view-btn="archived" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>Archived
+          </button>
         </div>
 
         <div class="ml-auto flex flex-wrap items-center gap-2">
         <div class="relative flex-1 min-w-[240px] max-w-xs">
           <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
         <div class="relative">
           <select id="filter-priority" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
@@ -206,6 +209,14 @@
         <div class="relative">
           <select id="filter-assignee" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">Everyone</option>
+          </select>
+          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </div>
+        <div class="relative">
+          <select id="sort-by" title="Sort by" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+            <option value="focus">Sort: Focus</option>
+            <option value="priority">Sort: Priority</option>
+            <option value="deadline">Sort: Deadline</option>
           </select>
           <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
@@ -267,6 +278,11 @@
     <!-- ============ ACTIVITY VIEW ============ -->
     <section id="view-activity" data-view class="flex-1">
       <div id="activity-feed" class="max-w-2xl mx-auto flex flex-col gap-1.5"></div>
+    </section>
+
+    <!-- ============ ARCHIVED VIEW ============ -->
+    <section id="view-archived" data-view class="flex-1">
+      <div id="archived-list" class="max-w-2xl mx-auto flex flex-col gap-2"></div>
     </section>
 
   </main>
@@ -598,7 +614,7 @@
   var pendingImportData = null;
   var draggedTaskId = null;
 
-  var filters = { search: '', priority: '', project: '', assignee: '' };
+  var filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
 
   /* =========================================================
      UTILITIES
@@ -647,6 +663,13 @@
     var d = parseDate(dateStr);
     if (!d) return '—';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function checklistProgressPct(task) {
+    var items = task.checklist || [];
+    if (!items.length) return null;
+    var done = items.filter(function (i) { return i.done; }).length;
+    return Math.round((done / items.length) * 100);
   }
 
   function escapeHtml(str) {
@@ -773,9 +796,32 @@
     return list.slice().sort(function (a, b) { return focusScore(b) - focusScore(a); });
   }
 
+  function sortTasksForDisplay(list) {
+    if (filters.sortBy === 'priority') {
+      return list.slice().sort(function (a, b) {
+        var diff = (PRIORITY_WEIGHT[b.priority] || 0) - (PRIORITY_WEIGHT[a.priority] || 0);
+        return diff !== 0 ? diff : focusScore(b) - focusScore(a);
+      });
+    }
+    if (filters.sortBy === 'deadline') {
+      return list.slice().sort(function (a, b) {
+        var da = parseDate(a.deadline), db = parseDate(b.deadline);
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return da - db;
+      });
+    }
+    return sortByFocus(list);
+  }
+
+  function activeTasks() {
+    return tasks.filter(function (t) { return !t.archivedAt; });
+  }
+
   function uniqueValues(field) {
     var set = {};
-    tasks.forEach(function (t) { if (t[field]) set[t[field]] = true; });
+    activeTasks().forEach(function (t) { if (t[field]) set[t[field]] = true; });
     return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
   }
 
@@ -958,9 +1004,13 @@
   document.getElementById('task-checklist-editor').addEventListener('click', function (e) {
     var removeBtn = e.target.closest('.checklist-remove');
     if (removeBtn) {
-      currentChecklist.splice(parseInt(removeBtn.dataset.checklistI, 10), 1);
-      if (checklistLinkEditIndex !== null) checklistLinkEditIndex = null;
-      renderChecklistEditor();
+      var removeIdx = parseInt(removeBtn.dataset.checklistI, 10);
+      var removeItem = currentChecklist[removeIdx];
+      openConfirm('Remove this checklist item?', '"' + (removeItem ? removeItem.text : 'This item') + '" will be removed once you save this task.', function () {
+        currentChecklist.splice(removeIdx, 1);
+        if (checklistLinkEditIndex !== null) checklistLinkEditIndex = null;
+        renderChecklistEditor();
+      });
       return;
     }
     var linkToggle = e.target.closest('.checklist-link-toggle');
@@ -1197,13 +1247,20 @@
     var idx = parseInt(btn.dataset.i, 10);
     var list = (t.comments || []).slice();
     if (idx < 0 || idx >= list.length) return;
+    openConfirm('Remove this comment?', 'This removes it for everyone on the team. This cannot be undone.', function () {
+      removeCommentAt(t, list, idx);
+    });
+  });
+
+  function removeCommentAt(t, list, idx) {
+    list = list.slice();
     list.splice(idx, 1);
     updateDoc(doc(tasksCol, editingTaskId), { comments: list }).then(function () {
       logActivity('task_comment', 'Removed a comment on "' + t.name + '"');
     }).catch(function (err) {
       showToast('Could not remove comment: ' + err.message, 'error');
     });
-  });
+  }
 
   function deleteTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
@@ -1263,17 +1320,76 @@
   }
 
   /* =========================================================
+     ARCHIVE -- completed tasks pile up in the Completed column
+     forever otherwise. This is a manual, explicit action (not an
+     automatic time-based sweep) since silently removing shared team
+     data on a timer is the kind of thing that's easy to regret.
+     Archived tasks are never deleted -- they get an archivedAt stamp,
+     are excluded from every active view via activeTasks(), and stay
+     visible (and restorable) in the Archived view.
+  ========================================================= */
+  function archiveCompletedTasks() {
+    var toArchive = activeTasks().filter(function (t) { return t.status === 'Done'; });
+    if (!toArchive.length) return Promise.resolve(0);
+    var now = new Date().toISOString();
+    var chunks = [];
+    for (var i = 0; i < toArchive.length; i += 500) chunks.push(toArchive.slice(i, i + 500));
+    var chain = Promise.resolve();
+    chunks.forEach(function (chunk) {
+      chain = chain.then(function () {
+        var batch = writeBatch(db);
+        chunk.forEach(function (t) { batch.update(doc(tasksCol, t.id), { archivedAt: now }); });
+        return batch.commit();
+      });
+    });
+    return chain.then(function () {
+      logActivity('board_archived', 'Archived ' + toArchive.length + ' completed task' + (toArchive.length === 1 ? '' : 's'));
+      return toArchive.length;
+    });
+  }
+
+  function unarchiveTask(id) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    updateDoc(doc(tasksCol, id), { archivedAt: null }).then(function () {
+      showToast('Task restored', 'success');
+      logActivity('task_unarchived', 'Restored "' + (t ? t.name : id) + '" from the archive');
+    }).catch(function (err) {
+      showToast('Could not restore task: ' + err.message, 'error');
+    });
+  }
+
+  function handleArchiveCompletedClick(btn) {
+    var count = activeTasks().filter(function (t) { return t.status === 'Done'; }).length;
+    if (!count) { showToast('No completed tasks to archive', 'info'); return; }
+    openConfirm(
+      'Archive ' + count + ' completed task' + (count === 1 ? '' : 's') + '?',
+      'They\'ll be moved out of the board into the Archived view, where you can restore them any time. Nothing is deleted.',
+      function () {
+        btn.disabled = true;
+        archiveCompletedTasks().then(function (n) {
+          showToast('Archived ' + n + ' task' + (n === 1 ? '' : 's'), 'success');
+        }).catch(function (err) {
+          showToast('Could not archive tasks: ' + err.message, 'error');
+        }).finally(function () {
+          btn.disabled = false;
+        });
+      }
+    );
+  }
+
+  /* =========================================================
      RENDER: STATS
   ========================================================= */
   function renderStats() {
+    var active = activeTasks();
     var overdue = 0, high = 0, done = 0;
-    tasks.forEach(function (t) {
+    active.forEach(function (t) {
       var d = daysUntil(t.deadline);
       if (d !== null && d < 0 && t.status !== 'Done') overdue++;
       if (t.priority === 'High' && t.status !== 'Done') high++;
       if (t.status === 'Done') done++;
     });
-    document.getElementById('stat-total').textContent = tasks.length;
+    document.getElementById('stat-total').textContent = active.length;
     document.getElementById('stat-overdue').textContent = overdue;
     document.getElementById('stat-high').textContent = high;
     document.getElementById('stat-done').textContent = done;
@@ -1284,7 +1400,7 @@
   ========================================================= */
   function renderFocus() {
     var container = document.getElementById('focus-list');
-    var candidates = tasks.filter(function (t) { return t.status !== 'Done'; });
+    var candidates = activeTasks().filter(function (t) { return t.status !== 'Done'; });
     var top = sortByFocus(candidates).slice(0, 6);
 
     if (top.length === 0) {
@@ -1360,11 +1476,11 @@
   }
 
   function renderBoard() {
-    document.getElementById('empty-board-banner').classList.toggle('hidden', tasks.length !== 0);
-    var filtered = applyFilters(tasks);
+    document.getElementById('empty-board-banner').classList.toggle('hidden', activeTasks().length !== 0);
+    var filtered = applyFilters(activeTasks());
     var container = document.getElementById('board-columns');
     container.innerHTML = STATUSES.map(function (status) {
-      var items = sortByFocus(filtered.filter(function (t) { return t.status === status; }));
+      var items = sortTasksForDisplay(filtered.filter(function (t) { return t.status === status; }));
       var cardsHtml = items.length
         ? items.map(taskCardHtml).join('')
         : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">No tasks here</div>';
@@ -1374,6 +1490,7 @@
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<h3 class="text-base font-bold text-slate-700 dark:text-slate-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
+              (status === 'Done' ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('download', 'w-3.5 h-3.5') + '</button>' : '') +
             '</div>' +
             '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
           '</div>' +
@@ -1418,7 +1535,7 @@
   ========================================================= */
   function renderGantt() {
     var wrap = document.getElementById('gantt-wrap');
-    var list = applyFilters(tasks).filter(function (t) { return t.startDate && t.deadline; });
+    var list = applyFilters(activeTasks()).filter(function (t) { return t.startDate && t.deadline; });
 
     if (list.length === 0) {
       wrap.innerHTML = '<div class="text-sm text-slate-400 dark:text-slate-600 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">' +
@@ -1501,7 +1618,8 @@
 
       var barLeft = daysBetween(rangeStart, parseDate(t.startDate)) * dayWidth;
       var barWidth = (daysBetween(parseDate(t.startDate), parseDate(t.deadline)) + 1) * dayWidth - 6;
-      var fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
+      var fillPct = checklistProgressPct(t);
+      if (fillPct === null) fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
 
       html += '<div class="relative border-b border-slate-100 dark:border-slate-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
       html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
@@ -1547,7 +1665,7 @@
   }
 
   function renderPeople() {
-    var filtered = applyFilters(tasks);
+    var filtered = applyFilters(activeTasks());
     var container = document.getElementById('people-grid');
     var people = uniqueValues('assignee').filter(function (name) {
       return filtered.some(function (t) { return t.assignee === name; });
@@ -1563,7 +1681,7 @@
       var active = mine.filter(function (t) { return t.status !== 'Done'; });
       var overdue = active.filter(function (t) { return daysUntil(t.deadline) !== null && daysUntil(t.deadline) < 0; }).length;
       var high = active.filter(function (t) { return t.priority === 'High'; }).length;
-      return { name: name, mine: mine, active: sortByFocus(active), overdue: overdue, high: high };
+      return { name: name, mine: mine, active: sortTasksForDisplay(active), overdue: overdue, high: high };
     });
 
     summaries.sort(function (a, b) { return (b.overdue - a.overdue) || (b.active.length - a.active.length) || (b.high - a.high); });
@@ -1602,7 +1720,8 @@
   var ACTIVITY_ICONS = {
     task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash',
     task_moved: 'arrowRight', task_comment: 'message',
-    board_imported: 'upload', board_seeded: 'download'
+    board_imported: 'upload', board_seeded: 'download',
+    board_archived: 'download', task_unarchived: 'upload'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -1611,7 +1730,9 @@
     task_moved: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
     task_comment: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
     board_imported: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-    board_seeded: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+    board_seeded: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+    board_archived: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+    task_unarchived: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
   };
 
   function activityDateHeader(iso) {
@@ -1657,6 +1778,29 @@
       '</div>';
     });
     container.innerHTML = html;
+  }
+
+  /* =========================================================
+     RENDER: ARCHIVED
+  ========================================================= */
+  function renderArchived() {
+    var container = document.getElementById('archived-list');
+    var archived = tasks.filter(function (t) { return t.archivedAt; })
+      .sort(function (a, b) { return new Date(b.archivedAt) - new Date(a.archivedAt); });
+    if (!archived.length) {
+      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">No archived tasks.</p>';
+      return;
+    }
+    container.innerHTML = archived.map(function (t) {
+      return '<div class="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+        '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(t.archivedAt.slice(0, 10)) + '</p>' +
+        '</div>' +
+        '<button type="button" data-unarchive-task="' + t.id + '" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Restore</button>' +
+      '</div>';
+    }).join('');
   }
 
   /* =========================================================
@@ -1712,7 +1856,17 @@
     var editBtn = e.target.closest('[data-edit-task]');
     var delBtn = e.target.closest('[data-delete-task]');
     var driveBtn = e.target.closest('[data-drive-link]');
+    var archiveBtn = e.target.closest('[data-archive-completed]');
+    var unarchiveBtn = e.target.closest('[data-unarchive-task]');
 
+    if (archiveBtn) {
+      handleArchiveCompletedClick(archiveBtn);
+      return;
+    }
+    if (unarchiveBtn) {
+      unarchiveTask(unarchiveBtn.getAttribute('data-unarchive-task'));
+      return;
+    }
     if (editBtn) {
       var t1 = tasks.find(function (x) { return x.id === editBtn.getAttribute('data-edit-task'); });
       if (t1) openTaskModal(t1);
@@ -1750,6 +1904,7 @@
     if (currentView === 'gantt') renderGantt();
     if (currentView === 'people') renderPeople();
     if (currentView === 'activity') renderActivityFeed();
+    if (currentView === 'archived') renderArchived();
   }
 
   var debouncedRender = debounce(function () { renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); }, 150);
@@ -1770,8 +1925,13 @@
     filters.assignee = e.target.value;
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
+  document.getElementById('sort-by').addEventListener('change', function (e) {
+    filters.sortBy = e.target.value;
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
+  });
   document.getElementById('btn-clear-filters').addEventListener('click', function () {
-    filters = { search: '', priority: '', project: '', assignee: '' };
+    filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
+    document.getElementById('sort-by').value = 'focus';
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-priority').value = '';
     filterPriorityPill.sync();
@@ -2004,7 +2164,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T10:06:11Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T10:25:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
