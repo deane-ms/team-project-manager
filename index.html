@@ -148,7 +148,7 @@
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
               <span id="notification-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
             </button>
-            <div id="notification-panel" class="hidden absolute right-0 mt-1 z-30 w-80 max-h-96 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-pop">
+            <div id="notification-panel" class="hidden absolute right-0 mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-pop">
               <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700">
                 <span class="text-sm font-bold text-slate-800 dark:text-slate-100">Notifications</span>
                 <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
@@ -181,31 +181,31 @@
 
       <!-- Toolbar: view switch / search / filters -->
       <div class="flex flex-wrap items-center gap-2 mt-[1.5rem]">
-        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
-          <button data-view-btn="board" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1 overflow-x-auto min-w-0 max-w-full">
+          <button data-view-btn="board" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>Board
           </button>
-          <button data-view-btn="gantt" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+          <button data-view-btn="gantt" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>Timeline
           </button>
-          <button data-view-btn="people" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+          <button data-view-btn="people" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>People
           </button>
-          <button data-view-btn="activity" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+          <button data-view-btn="activity" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Activity
           </button>
-          <button data-view-btn="archived" class="view-toggle-btn text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+          <button data-view-btn="archived" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>Archived
           </button>
         </div>
 
-        <div class="ml-auto flex flex-wrap items-center gap-2">
-        <div class="relative flex-1 min-w-[240px] max-w-xs">
+        <div class="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+        <div class="relative w-full sm:flex-1 sm:min-w-[240px] sm:max-w-xs">
           <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
-        <div class="relative">
-          <select id="filter-priority" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+        <div class="relative w-full sm:w-auto">
+          <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">All priorities</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
@@ -213,20 +213,20 @@
           </select>
           <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
-        <div class="relative">
-          <select id="filter-project" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+        <div class="relative w-full sm:w-auto">
+          <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">All projects</option>
           </select>
           <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
-        <div class="relative">
-          <select id="filter-assignee" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+        <div class="relative w-full sm:w-auto">
+          <select id="filter-assignee" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">Everyone</option>
           </select>
           <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
-        <div class="relative">
-          <select id="sort-by" title="Sort by" class="appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+        <div class="relative w-full sm:w-auto">
+          <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="focus">Sort: Focus</option>
             <option value="priority">Sort: Priority</option>
             <option value="deadline">Sort: Deadline</option>
@@ -261,7 +261,7 @@
         <span>Board is empty — nothing here yet.</span>
         <button id="btn-load-sample" type="button" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Load sample tasks</button>
       </div>
-      <div id="board-columns" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start"></div>
+      <div id="board-columns" class="flex overflow-x-auto snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start"></div>
     </section>
 
     <!-- ============ GANTT VIEW ============ -->
@@ -306,15 +306,15 @@
 </div>
 
 <!-- ============ TASK MODAL ============ -->
-<div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+<div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop">
   <div class="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
-    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+    <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-700">
       <h3 id="task-modal-title" class="text-base font-bold text-slate-900 dark:text-slate-100">Add Task</h3>
       <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500">
         <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
-    <form id="task-form" class="px-5 py-4 space-y-4 overflow-y-auto">
+    <form id="task-form" class="px-4 sm:px-5 py-4 space-y-4 overflow-y-auto">
       <input type="hidden" id="task-id">
 
       <div>
@@ -323,7 +323,7 @@
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Project <span class="text-rose-500">*</span></label>
@@ -343,7 +343,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Priority</label>
           <div class="relative">
@@ -369,7 +369,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Start Date</label>
           <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
@@ -447,6 +447,8 @@
 
 <!-- ============ TOASTS ============ -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
+
+<div id="move-status-menu" class="hidden fixed z-[65] min-w-[9rem] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-pop py-1"></div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -1048,8 +1050,8 @@
                 '<span class="block text-sm ' + (item.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200') + '">' + escapeHtml(item.text) + '</span>' +
                 (item.link && !editingLink ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-brand-600 dark:text-brand-400 truncate hover:underline">' + escapeHtml(item.link) + '</a>' : '') +
               '</div>' +
-              '<button type="button" class="checklist-link-toggle shrink-0 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
-              '<button type="button" class="checklist-remove text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
+              '<button type="button" class="checklist-remove p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
             (editingLink
               ? '<div class="pl-8 pr-2 pb-1.5"><input type="text" class="checklist-link-input w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '"></div>'
@@ -1133,7 +1135,7 @@
             '<div class="flex items-center gap-1.5 mb-1">' +
               '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
               '<span class="text-xs text-slate-400 dark:text-slate-500">' + formatShortDate(c.date.slice(0, 10)) + '</span>' +
-              '<button type="button" class="comment-remove ml-auto text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="comment-remove ml-auto p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
             '<p class="text-sm text-slate-700 dark:text-slate-200">' + escapeHtml(c.text) + '</p>' +
           '</div>';
@@ -1582,7 +1584,8 @@
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
           '<div class="flex items-center gap-0.5">' +
-            '<span draggable="true" data-drag-handle title="Drag to move" class="w-6 h-6 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+            '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+            '<button data-move-task="' + t.id + '" data-current-status="' + t.status + '" title="Move to…" class="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('arrowRight', 'w-3.5 h-3.5') + '</button>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
             '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
@@ -1617,7 +1620,7 @@
         : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">No tasks here</div>';
 
       return (
-        '<div class="flex flex-col rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700 min-h-[200px]" data-column="' + status + '">' +
+        '<div class="flex flex-col rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700 min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<h3 class="text-base font-bold text-slate-700 dark:text-slate-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
@@ -1631,6 +1634,42 @@
     }).join('');
     attachBoardDnD();
   }
+
+  /* =========================================================
+     MOVE-TO MENU -- tap-friendly status change for touch devices,
+     since HTML5 drag-and-drop (the desktop grip handle) never fires
+     from a touch gesture on mobile browsers. Single shared floating
+     menu, repositioned per click rather than one submenu per card.
+  ========================================================= */
+  function showMoveMenu(button) {
+    var menu = document.getElementById('move-status-menu');
+    var taskId = button.getAttribute('data-move-task');
+    var currentStatus = button.getAttribute('data-current-status');
+    menu.innerHTML = STATUSES.filter(function (s) { return s !== currentStatus; }).map(function (s) {
+      return '<button type="button" class="move-status-option w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60" data-task-id="' + taskId + '" data-status="' + s + '">Move to ' + (STATUS_LABELS[s] || s) + '</button>';
+    }).join('');
+    var rect = button.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
+    menu.classList.remove('hidden');
+  }
+
+  function hideMoveMenu() {
+    document.getElementById('move-status-menu').classList.add('hidden');
+  }
+
+  document.getElementById('move-status-menu').addEventListener('click', function (e) {
+    var opt = e.target.closest('.move-status-option');
+    if (!opt) return;
+    updateTaskStatus(opt.getAttribute('data-task-id'), opt.getAttribute('data-status'));
+    hideMoveMenu();
+  });
+  document.addEventListener('click', function (e) {
+    var menu = document.getElementById('move-status-menu');
+    if (!menu.classList.contains('hidden') && !menu.contains(e.target) && !e.target.closest('[data-move-task]')) {
+      hideMoveMenu();
+    }
+  });
 
   function attachBoardDnD() {
     document.querySelectorAll('.task-card').forEach(function (card) {
@@ -1989,6 +2028,7 @@
     var driveBtn = e.target.closest('[data-drive-link]');
     var archiveBtn = e.target.closest('[data-archive-completed]');
     var unarchiveBtn = e.target.closest('[data-unarchive-task]');
+    var moveBtn = e.target.closest('[data-move-task]');
 
     if (archiveBtn) {
       handleArchiveCompletedClick(archiveBtn);
@@ -1996,6 +2036,11 @@
     }
     if (unarchiveBtn) {
       unarchiveTask(unarchiveBtn.getAttribute('data-unarchive-task'));
+      return;
+    }
+    if (moveBtn) {
+      e.stopPropagation();
+      showMoveMenu(moveBtn);
       return;
     }
     if (editBtn) {
@@ -2354,7 +2399,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-30T10:48:03Z";
+  var CURRENT_BUILD_VERSION = "2026-07-30T11:25:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
