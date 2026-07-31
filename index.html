@@ -347,7 +347,7 @@
 
 <!-- ============ TASK MODAL ============ -->
 <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
-  <div class="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
+  <div class="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
     <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-700">
       <h3 id="task-modal-title" class="text-base font-bold text-slate-900 dark:text-slate-100">Add Task</h3>
       <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500">
@@ -415,8 +415,14 @@
           <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Deadline <span class="text-rose-500">*</span></label>
-          <input id="task-deadline" type="date" required class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Deadline</label>
+            <label class="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 cursor-pointer">
+              <input type="checkbox" id="task-deadline-tbd" class="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500/40">
+              TBD
+            </label>
+          </div>
+          <input id="task-deadline" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark] disabled:opacity-50 disabled:cursor-not-allowed">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
       </div>
@@ -1204,7 +1210,10 @@
     document.getElementById('task-status').value = task ? task.status : 'Pipeline';
     taskStatusPill.sync();
     document.getElementById('task-start').value = task ? task.startDate : toDateInputValue(todayMidnight());
-    document.getElementById('task-deadline').value = task ? task.deadline : '';
+    var hasDeadline = !task || !!task.deadline;
+    document.getElementById('task-deadline').value = task ? (task.deadline || '') : '';
+    document.getElementById('task-deadline').disabled = !hasDeadline;
+    document.getElementById('task-deadline-tbd').checked = !hasDeadline;
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
     syncDriveLinkButtons();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
@@ -1743,6 +1752,11 @@
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
   document.getElementById('btn-browse-drive').addEventListener('click', browseDriveForProject);
+  document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
+    var deadlineEl = document.getElementById('task-deadline');
+    deadlineEl.disabled = e.target.checked;
+    if (e.target.checked) deadlineEl.value = '';
+  });
   document.getElementById('task-modal-close').addEventListener('click', requestCloseTaskModal);
   document.getElementById('task-cancel-btn').addEventListener('click', requestCloseTaskModal);
   taskModal.addEventListener('click', function (e) { if (e.target === taskModal) requestCloseTaskModal(); });
@@ -1782,7 +1796,6 @@
     if (!name) { setFieldError(nameEl, 'Task name is required.'); hasError = true; }
     if (!project) { setFieldError(projectEl, 'Project is required.'); hasError = true; }
     if (!assignee) { setFieldError(assigneeEl, 'Assignee is required.'); hasError = true; }
-    if (!deadline) { setFieldError(deadlineEl, 'Deadline is required.'); hasError = true; }
     if (deadline && startDate && parseDate(startDate) > parseDate(deadline)) {
       setFieldError(deadlineEl, 'Deadline must be on or after the start date.');
       hasError = true;
@@ -2092,7 +2105,7 @@
       var days = dueUrgency(t).days;
       var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
       var urgencyLabel, urgencyClass;
-      if (days === null) { urgencyLabel = 'No deadline'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
+      if (days === null) { urgencyLabel = 'TBD'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
       else if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
       else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
       else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
@@ -2143,7 +2156,7 @@
         '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
         '<p class="text-xs text-slate-400 dark:text-slate-500 mb-3 line-clamp-1">' + escapeHtml(t.project) + '</p>' +
         '<div class="flex items-center justify-between text-xs mb-3">' +
-          '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + formatShortDate(t.deadline) + '</span>' +
+          '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
           (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
           (dueSoon ? '<span class="text-xs font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
         '</div>' +
@@ -2409,7 +2422,7 @@
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400' : (dueSoon ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 dark:text-slate-500');
-    var dueLabel = overdue ? Math.abs(days) + 'd overdue' : formatShortDate(t.deadline);
+    var dueLabel = overdue ? Math.abs(days) + 'd overdue' : (t.deadline ? formatShortDate(t.deadline) : 'TBD');
 
     return (
       '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
@@ -2867,7 +2880,7 @@
         var incoming = Array.isArray(data) ? data : data.tasks;
         if (!Array.isArray(incoming)) throw new Error('File does not contain a valid task list.');
 
-        var cleaned = incoming.filter(function (t) { return t && typeof t === 'object' && t.name && t.deadline; })
+        var cleaned = incoming.filter(function (t) { return t && typeof t === 'object' && t.name; })
           .map(function (t) {
             return {
               id: (t.id && typeof t.id === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(t.id)) ? t.id : uid(),
@@ -2877,7 +2890,7 @@
               status: STATUSES.indexOf(t.status) !== -1 ? t.status : 'Pipeline',
               assignee: String(t.assignee || 'Unassigned').slice(0, 100),
               startDate: parseDate(t.startDate) ? t.startDate : toDateInputValue(todayMidnight()),
-              deadline: parseDate(t.deadline) ? t.deadline : toDateInputValue(todayMidnight()),
+              deadline: t.deadline ? (parseDate(t.deadline) ? t.deadline : toDateInputValue(todayMidnight())) : '',
               driveLink: t.driveLink ? normalizeUrl(t.driveLink) : '',
               checklist: sanitizeImportedChecklist(t.checklist),
               comments: sanitizeImportedComments(t.comments),
