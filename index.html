@@ -1231,10 +1231,8 @@
     setBillableToggle(document.getElementById('task-time-billable'), true);
     exitTimeEntryEditMode();
     currentTimeEntries = task && task.timeEntries ? task.timeEntries.slice() : [];
-    timeEntriesBaseline = JSON.stringify(currentTimeEntries);
     renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
     currentChecklist = task && task.checklist ? task.checklist.slice() : [];
-    checklistBaseline = JSON.stringify(currentChecklist);
     renderChecklistEditor();
 
     populateDatalists();
