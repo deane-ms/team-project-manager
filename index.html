@@ -1140,6 +1140,37 @@
   // silently discards anyone else's concurrent edits.
   var checklistBaseline = '[]';
   var timeEntriesBaseline = '[]';
+  // Snapshot of the whole form as of modal-open time, used to detect unsaved edits so an
+  // accidental backdrop click / Escape / Cancel doesn't silently discard in-progress work.
+  var formBaseline = '{}';
+
+  function taskFormSnapshot() {
+    return JSON.stringify({
+      name: document.getElementById('task-name').value,
+      project: document.getElementById('task-project').value,
+      assignee: document.getElementById('task-assignee').value,
+      priority: document.getElementById('task-priority').value,
+      status: document.getElementById('task-status').value,
+      startDate: document.getElementById('task-start').value,
+      deadline: document.getElementById('task-deadline').value,
+      driveLink: document.getElementById('task-drive').value,
+      checklist: currentChecklist,
+      timeEntries: currentTimeEntries
+    });
+  }
+
+  function taskModalHasUnsavedChanges() {
+    return !taskModal.classList.contains('hidden') && taskFormSnapshot() !== formBaseline;
+  }
+
+  // Backdrop click / X / Cancel / Escape all route through here instead of calling
+  // closeTaskModal() directly, so an in-progress edit needs an explicit "Discard" instead
+  // of vanishing on a stray click.
+  function requestCloseTaskModal() {
+    if (!taskModalHasUnsavedChanges()) { closeTaskModal(); return; }
+    openConfirm('Discard changes?', 'Anything you changed on this task since opening it will be lost.', closeTaskModal,
+      { tone: 'question', confirmText: 'Discard', cancelText: 'Keep editing' });
+  }
 
   function clearFieldErrors() {
     taskForm.querySelectorAll('.field-error').forEach(function (el) {
@@ -1194,6 +1225,7 @@
     populateDatalists();
     taskModal.classList.remove('hidden');
     taskModal.classList.add('flex');
+    formBaseline = taskFormSnapshot();
     setTimeout(function () { document.getElementById('task-project').focus(); }, 30);
   }
 
@@ -1660,9 +1692,9 @@
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
   document.getElementById('btn-browse-drive').addEventListener('click', browseDriveForProject);
-  document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
-  document.getElementById('task-cancel-btn').addEventListener('click', closeTaskModal);
-  taskModal.addEventListener('click', function (e) { if (e.target === taskModal) closeTaskModal(); });
+  document.getElementById('task-modal-close').addEventListener('click', requestCloseTaskModal);
+  document.getElementById('task-cancel-btn').addEventListener('click', requestCloseTaskModal);
+  taskModal.addEventListener('click', function (e) { if (e.target === taskModal) requestCloseTaskModal(); });
   taskModal.addEventListener('keydown', trapFocus(taskModal));
 
   document.getElementById('task-delete-btn').addEventListener('click', function () {
@@ -2837,7 +2869,7 @@
   ========================================================= */
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      if (!taskModal.classList.contains('hidden')) closeTaskModal();
+      if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
       if (!confirmModal.classList.contains('hidden')) closeConfirm();
     }
   });
