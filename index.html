@@ -602,12 +602,34 @@
 
   // Picks up the result of a signInWithRedirect that just completed (the page reloaded to
   // get here) so the Drive access token gets captured the same way the popup flow does.
+  // The sessionStorage flag lets us tell "fresh page load, no redirect was pending" (result
+  // is null here on basically every normal load -- not an error) apart from "we definitely
+  // just came back from Google and still got nothing," which usually means the browser
+  // blocked the third-party storage/cookies Firebase's auth handler needs to relay the
+  // result back cross-origin (a known failure mode when authDomain != the hosting domain).
+  var wasPendingRedirect = sessionStorage.getItem('flowboard_pending_redirect') === '1';
+  sessionStorage.removeItem('flowboard_pending_redirect');
   getRedirectResult(auth).then(function (result) {
-    if (!result) return;
-    var credential = GoogleAuthProvider.credentialFromResult(result);
-    driveAccessToken = credential ? credential.accessToken : null;
+    if (result) {
+      var credential = GoogleAuthProvider.credentialFromResult(result);
+      driveAccessToken = credential ? credential.accessToken : null;
+      return;
+    }
+    if (wasPendingRedirect) {
+      // Delayed so this wins the race against onAuthStateChanged's null-user branch, which
+      // would otherwise immediately overwrite this with its generic "please sign in" text.
+      setTimeout(function () {
+        document.getElementById('auth-status').textContent =
+          'Signed out of Google\'s page with no result. This usually means your browser is blocking third-party cookies/storage for accounts.google.com -- try allowing them for this site, or a different browser.';
+      }, 400);
+    }
   }).catch(function (err) {
     console.error('getRedirectResult failed', err);
+    if (wasPendingRedirect) {
+      setTimeout(function () {
+        document.getElementById('auth-status').textContent = 'Sign-in failed: ' + err.message;
+      }, 400);
+    }
   });
 
   var tasksCol = collection(db, "tasks");
@@ -718,7 +740,9 @@
       // Redirects the whole page -- driveAccessToken gets picked up by the
       // getRedirectResult() handler on reload, so the user just needs to tap
       // "Browse Drive" once more after coming back.
+      sessionStorage.setItem('flowboard_pending_redirect', '1');
       signInWithRedirect(auth, googleProvider).catch(function (err) {
+        sessionStorage.removeItem('flowboard_pending_redirect');
         showToast('Could not open Drive picker: ' + err.message, 'error');
       });
       return;
@@ -3055,7 +3079,9 @@
     authSignInBtn.disabled = true;
     authStatusEl.textContent = 'Opening Google sign-in…';
     if (isMobileDevice()) {
+      sessionStorage.setItem('flowboard_pending_redirect', '1');
       signInWithRedirect(auth, googleProvider).catch(function (err) {
+        sessionStorage.removeItem('flowboard_pending_redirect');
         authStatusEl.textContent = 'Sign-in failed: ' + err.message;
         authSignInBtn.disabled = false;
       });
