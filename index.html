@@ -7,21 +7,31 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="favicon.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#ff4e20">
+<meta name="theme-color" id="meta-theme-color" content="#ffffff">
 <script>
   (function () {
+    // Kept in sync with the actual applied theme (not just OS preference) from here and
+    // from toggleTheme() below, so the browser/PWA status bar always matches what's on
+    // screen instead of showing the brand orange regardless of light/dark mode.
+    function setThemeColorMeta(dark) {
+      var meta = document.getElementById('meta-theme-color');
+      if (meta) meta.setAttribute('content', dark ? '#27272a' : '#ffffff');
+    }
     try {
       var stored = localStorage.getItem('flowboard_theme');
       var media = window.matchMedia('(prefers-color-scheme: dark)');
       var wantDark = stored ? stored !== 'light' : media.matches;
       document.documentElement.classList.toggle('dark', wantDark);
+      setThemeColorMeta(wantDark);
       media.addEventListener('change', function (e) {
         if (!localStorage.getItem('flowboard_theme')) {
           document.documentElement.classList.toggle('dark', e.matches);
+          setThemeColorMeta(e.matches);
         }
       });
     } catch (e) {
       document.documentElement.classList.add('dark');
+      setThemeColorMeta(true);
     }
   })();
 </script>
@@ -42,8 +52,8 @@
           }
         },
         boxShadow: {
-          card: '0 1px 2px 0 rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.08)',
-          pop: '0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08)'
+          card: '0 1px 2px 0 rgba(24, 24, 27,0.06), 0 1px 3px 0 rgba(24, 24, 27,0.08)',
+          pop: '0 10px 25px -5px rgba(24, 24, 27,0.15), 0 8px 10px -6px rgba(24, 24, 27,0.08)'
         }
       }
     }
@@ -52,14 +62,14 @@
 <style>
   html, body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif; }
   body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-  * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+  * { scrollbar-width: thin; scrollbar-color: #d4d4d8 transparent; }
   *::-webkit-scrollbar { height: 8px; width: 8px; }
   *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 9999px; }
-  *::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
-  .dark * { scrollbar-color: #3f4a5f transparent; }
-  .dark *::-webkit-scrollbar-thumb { background-color: #3f4a5f; }
-  .dark *::-webkit-scrollbar-thumb:hover { background-color: #566179; }
+  *::-webkit-scrollbar-thumb { background-color: #d4d4d8; border-radius: 9999px; }
+  *::-webkit-scrollbar-thumb:hover { background-color: #a1a1aa; }
+  .dark * { scrollbar-color: #3f3f46 transparent; }
+  .dark *::-webkit-scrollbar-thumb { background-color: #3f3f46; }
+  .dark *::-webkit-scrollbar-thumb:hover { background-color: #52525b; }
 
   body, header, .task-card, #task-modal > div, #confirm-modal > div {
     transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -75,8 +85,8 @@
   .col-drop-target { background-color: rgba(99, 102, 241, 0.06); outline: 2px dashed #a5b4fc; outline-offset: -4px; }
   .dark .col-drop-target { background-color: rgba(99, 102, 241, 0.1); outline-color: #4f46e5; }
 
-  .modal-backdrop { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
-  .dark .modal-backdrop { background: rgba(2, 6, 23, 0.75); }
+  .modal-backdrop { background: rgba(24, 24, 27,0.55); backdrop-filter: blur(2px); }
+  .dark .modal-backdrop { background: rgba(9, 9, 11, 0.75); }
 
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
   .toast-anim { animation: toast-in 0.18s ease-out; }
@@ -90,7 +100,7 @@
      checked state renders in the browser's default blue instead of the app's brand orange.
      Scoped to this class (not a global reset) so no other input types are affected. */
   .brand-checkbox { appearance: none; -webkit-appearance: none; background-color: #fff; background-repeat: no-repeat; background-position: center; background-size: 65% 65%; }
-  .dark .brand-checkbox { background-color: #334155; }
+  .dark .brand-checkbox { background-color: #3f3f46; }
   .brand-checkbox:checked {
     background-color: #ff4e20; border-color: #ff4e20;
     background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
@@ -102,17 +112,17 @@
   @media (min-width: 1600px) { .app-container { max-width: min(92vw, 150rem); } }
 </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
+<body class="bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 min-h-screen">
 
 <!-- ============ AUTH GATE ============ -->
-<div id="auth-gate" class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-900">
-  <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden text-center">
+<div id="auth-gate" class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-zinc-50 dark:bg-zinc-900">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden text-center">
     <div class="p-6">
       <div class="w-12 h-12 mx-auto rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card mb-4">
         <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
       </div>
-      <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">MediaShock APAC — Project Manager</h2>
-      <p id="auth-status" class="text-sm text-slate-500 dark:text-slate-400 mb-4">Sign in with your Mediashock Google account to continue.</p>
+      <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100 mb-1">MediaShock APAC — Project Manager</h2>
+      <p id="auth-status" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Sign in with your Mediashock Google account to continue.</p>
 
       <button type="button" id="auth-signin-btn" class="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card transition">
         <svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81z"></path></svg>
@@ -121,7 +131,7 @@
 
       <div id="auth-denied" class="hidden mt-1">
         <p class="text-sm text-rose-600 dark:text-rose-400 mb-3">This tool is restricted to <strong>@mediashock.com.sg</strong> accounts.</p>
-        <button type="button" id="auth-signout-btn" class="w-full text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+        <button type="button" id="auth-signout-btn" class="w-full text-sm font-medium px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
           Sign out and try another account
         </button>
       </div>
@@ -132,7 +142,7 @@
 <div id="app" class="min-h-screen flex flex-col hidden">
 
   <!-- ============ HEADER ============ -->
-  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-800/90 backdrop-blur border-b border-slate-200 dark:border-slate-700">
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-zinc-800/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-700">
     <div class="app-container mx-auto px-4 sm:px-6 pt-[1.75rem] pb-4">
       <div class="flex flex-wrap items-center gap-3 justify-between">
         <div class="flex items-center gap-3.5">
@@ -140,54 +150,54 @@
             <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
           </div>
           <div>
-            <h1 class="text-xl font-bold tracking-[-0.01em] text-slate-900 dark:text-white leading-none">MediaShock APAC — Project Manager</h1>
-            <p class="text-[0.82rem] text-slate-500 dark:text-slate-400 leading-none mt-1">Project &amp; task prioritization dashboard</p>
+            <h1 class="text-xl font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none">MediaShock APAC — Project Manager</h1>
+            <p class="text-[0.82rem] text-zinc-500 dark:text-zinc-400 leading-none mt-1">Project &amp; task prioritization dashboard</p>
           </div>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-slate-200 dark:border-slate-700 text-sm">
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-400"></span><span id="stat-total" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">tasks</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">overdue</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span id="stat-high" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">high priority</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-slate-700 dark:text-slate-200">0</span><span class="text-slate-500 dark:text-slate-500">completed</span></div>
+          <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-zinc-200 dark:border-zinc-700 text-sm">
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-400"></span><span id="stat-total" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">tasks</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">overdue</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span id="stat-high" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">high priority</span></div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">completed</span></div>
           </div>
 
           <div id="notification-bell-wrap" class="relative hidden">
-            <button id="btn-notifications" title="Notifications" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+            <button id="btn-notifications" title="Notifications" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
               <span id="notification-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
             </button>
-            <div id="notification-panel" class="hidden absolute right-0 mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-pop">
-              <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-700">
-                <span class="text-sm font-bold text-slate-800 dark:text-slate-100">Notifications</span>
+            <div id="notification-panel" class="hidden absolute right-0 mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop">
+              <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
+                <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
                 <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
               </div>
-              <div id="notification-list" class="flex flex-col divide-y divide-slate-100 dark:divide-slate-700"></div>
+              <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
             </div>
           </div>
           <div id="user-chip" class="hidden relative items-center mr-1">
-            <button id="user-menu-trigger" class="inline-flex items-center gap-1.5 h-9 pl-1.5 pr-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+            <button id="user-menu-trigger" class="inline-flex items-center gap-1.5 h-9 pl-1.5 pr-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
               <span id="user-chip-avatar" class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"></span>
               <span id="user-chip-name" class="hidden sm:inline"></span>
-              <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+              <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
             </button>
-            <div id="user-menu-panel" class="hidden absolute right-0 mt-1 z-30 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-pop py-1 text-sm">
-              <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+            <div id="user-menu-panel" class="hidden absolute right-0 mt-1 z-30 w-56 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm">
+              <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
                 <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
                 <span id="theme-toggle-label">Switch to dark mode</span>
               </button>
-              <div class="border-t border-slate-100 dark:border-slate-700 my-1"></div>
-              <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
+              <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
+              <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
                 <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                 <span>Sign out</span>
               </button>
             </div>
           </div>
-          <button id="btn-export" title="Export" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+          <button id="btn-export" title="Export" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           </button>
-          <button id="btn-import" title="Import" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+          <button id="btn-import" title="Import" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
           </button>
           <input type="file" id="import-file-input" accept="application/json" class="hidden">
@@ -200,14 +210,14 @@
       <!-- Toolbar: view switch / search / filters -->
       <div class="flex flex-wrap items-center gap-2 mt-[1.5rem]">
         <div class="w-full sm:w-auto sm:contents">
-        <button type="button" id="mobile-view-trigger" class="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-semibold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+        <button type="button" id="mobile-view-trigger" class="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-semibold px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200">
           <span class="flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             <span id="mobile-view-trigger-label">Board</span>
           </span>
-          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
-        <div id="view-tab-row" class="hidden sm:flex flex-col sm:flex-row items-stretch sm:items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1 mt-1 sm:mt-0 sm:overflow-x-auto min-w-0 max-w-full">
+        <div id="view-tab-row" class="hidden sm:flex flex-col sm:flex-row items-stretch sm:items-center gap-1 bg-zinc-100 dark:bg-zinc-700 rounded-lg p-1 mt-1 sm:mt-0 sm:overflow-x-auto min-w-0 max-w-full">
           <button data-view-btn="board" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>Board
           </button>
@@ -234,50 +244,50 @@
 
         <div class="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
         <div class="relative w-full sm:flex-1 sm:min-w-[240px] sm:max-w-xs">
-          <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
 
-        <button type="button" id="mobile-filters-trigger" class="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">
+        <button type="button" id="mobile-filters-trigger" class="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300">
           <span class="flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
             Filters
             <span id="mobile-filters-badge" class="hidden text-[10px] font-bold min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-600 text-white items-center justify-center">0</span>
           </span>
-          <svg id="mobile-filters-chevron" class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg id="mobile-filters-chevron" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
 
         <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents">
         <div class="relative w-full sm:w-auto">
-          <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">All priorities</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
             <option value="Low">Low</option>
           </select>
-          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
         <div class="relative w-full sm:w-auto">
-          <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">All projects</option>
           </select>
-          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
         <div class="relative w-full sm:w-auto">
-          <select id="filter-assignee" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <select id="filter-assignee" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">Everyone</option>
           </select>
-          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
         <div class="relative w-full sm:w-auto">
-          <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="focus">Sort: Focus</option>
             <option value="priority">Sort: Priority</option>
             <option value="deadline">Sort: Deadline</option>
           </select>
-          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
-        <button id="btn-clear-filters" class="text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
+        <button id="btn-clear-filters" class="text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
         </div>
         </div>
       </div>
@@ -293,8 +303,8 @@
           <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center">
             <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
           </div>
-          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">Focus of the Day</h2>
-          <span class="text-xs text-slate-400 dark:text-slate-500">— highest priority &amp; most urgent, auto-sorted</span>
+          <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Focus of the Day</h2>
+          <span class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
         </div>
       </div>
       <div id="focus-list" class="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1"></div>
@@ -302,22 +312,22 @@
 
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" data-view class="active-view flex-1">
-      <div id="empty-board-banner" class="hidden items-center justify-between gap-3 mb-4 px-4 py-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-500 dark:text-slate-400">
+      <div id="empty-board-banner" class="hidden items-center justify-between gap-3 mb-4 px-4 py-3 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-zinc-500 dark:text-zinc-400">
         <span>Board is empty — nothing here yet.</span>
-        <button id="btn-load-sample" type="button" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Load sample tasks</button>
+        <button id="btn-load-sample" type="button" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">Load sample tasks</button>
       </div>
       <div id="board-columns" class="flex overflow-x-auto snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start"></div>
     </section>
 
     <!-- ============ GANTT VIEW ============ -->
     <section id="view-gantt" data-view class="flex-1">
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card p-4">
+      <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>
-            <h2 class="text-base font-bold text-slate-900 dark:text-slate-100">Workload Timeline</h2>
+            <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>
+            <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Workload Timeline</h2>
           </div>
-          <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <div class="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span>High</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>Medium</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
@@ -330,15 +340,15 @@
 
     <!-- ============ CALENDAR VIEW ============ -->
     <section id="view-calendar" data-view class="flex-1">
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card p-4">
+      <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3">
-          <h2 id="calendar-label" class="text-base font-bold text-slate-900 dark:text-slate-100">Calendar</h2>
+          <h2 id="calendar-label" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Calendar</h2>
           <div class="flex items-center gap-1">
-            <button type="button" id="calendar-prev-btn" title="Previous month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400">
+            <button type="button" id="calendar-prev-btn" title="Previous month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
-            <button type="button" id="calendar-today-btn" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Today</button>
-            <button type="button" id="calendar-next-btn" title="Next month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400">
+            <button type="button" id="calendar-today-btn" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Today</button>
+            <button type="button" id="calendar-next-btn" title="Next month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </button>
           </div>
@@ -371,17 +381,17 @@
 
   </main>
 
-  <footer class="text-center text-xs text-slate-400 dark:text-slate-600 py-4">
+  <footer class="text-center text-xs text-zinc-400 dark:text-zinc-600 py-4">
     MediaShock APAC — Project Manager — shared live with the team via Firestore. Signed in with your Mediashock Google account.
   </footer>
 </div>
 
 <!-- ============ TASK MODAL ============ -->
 <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
-  <div class="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
-    <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-700">
-      <h3 id="task-modal-title" class="text-base font-bold text-slate-900 dark:text-slate-100">Add Task</h3>
-      <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
+    <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+      <h3 id="task-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Add Task</h3>
+      <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
         <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
@@ -391,140 +401,140 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Project <span class="text-rose-500">*</span></label>
+            <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400">Project <span class="text-rose-500">*</span></label>
             <button type="button" id="btn-browse-drive" title="Pick a project folder from Google Drive" class="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
               <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>Browse Drive
             </button>
           </div>
-          <input id="task-project" type="text" readonly maxlength="60" placeholder="Select via Browse Drive above" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/60 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="task-project" type="text" readonly maxlength="60" placeholder="Select via Browse Drive above" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
-          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="e.g. Priya Nair" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
+          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="e.g. Priya Nair" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="assignee-suggestions"></datalist>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
       </div>
 
       <div>
-        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Task Name <span class="text-rose-500">*</span></label>
-        <input id="task-name" type="text" required maxlength="120" placeholder="e.g. Cut social teaser v2" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Task Name <span class="text-rose-500">*</span></label>
+        <input id="task-name" type="text" required maxlength="120" placeholder="e.g. Cut social teaser v2" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Priority</label>
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Priority</label>
           <div class="relative">
-            <select id="task-priority" class="w-full appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <select id="task-priority" class="w-full appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
               <option value="High">High</option>
               <option value="Medium" selected>Medium</option>
               <option value="Low">Low</option>
             </select>
-            <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
           </div>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Status</label>
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Status</label>
           <div class="relative">
-            <select id="task-status" class="w-full appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <select id="task-status" class="w-full appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
               <option value="Pipeline" selected>Pipeline</option>
               <option value="In Progress">In Progress</option>
               <option value="Review">Review</option>
               <option value="Done">Completed</option>
             </select>
-            <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
           </div>
         </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Start Date</label>
-          <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Start Date</label>
+          <input id="task-start" type="date" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]">
         </div>
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Deadline</label>
-            <label class="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 cursor-pointer">
-              <input type="checkbox" id="task-deadline-tbd" class="brand-checkbox w-3.5 h-3.5 rounded border border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer">
+            <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400">Deadline</label>
+            <label class="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer">
+              <input type="checkbox" id="task-deadline-tbd" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer">
               TBD
             </label>
           </div>
-          <input id="task-deadline" type="date" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark] disabled:opacity-50 disabled:cursor-not-allowed">
+          <input id="task-deadline" type="date" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark] disabled:opacity-50 disabled:cursor-not-allowed">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
       </div>
 
       <div>
-        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Google Drive Link</label>
+        <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Google Drive Link</label>
         <div class="relative">
-          <button type="button" id="task-drive-open" title="Open link" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-slate-400 dark:disabled:hover:text-slate-500 disabled:cursor-default" disabled>
+          <button type="button" id="task-drive-open" title="Open link" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-zinc-400 dark:disabled:hover:text-zinc-500 disabled:cursor-default" disabled>
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
           </button>
-          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 pl-8 pr-9 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-          <button type="button" id="task-drive-copy" title="Copy link" disabled class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-slate-400 dark:disabled:hover:text-slate-500 disabled:cursor-default">
+          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-8 pr-9 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <button type="button" id="task-drive-copy" title="Copy link" disabled class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-zinc-400 dark:disabled:hover:text-zinc-500 disabled:cursor-default">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           </button>
         </div>
         <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
 
-      <div class="pt-1 border-t border-slate-100 dark:border-slate-700">
-        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mt-3 mb-1.5">Checklist</label>
+      <div class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
+        <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">Checklist</label>
         <div id="task-checklist-editor" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto mb-2"></div>
         <div class="flex items-center gap-2">
-          <input type="text" id="task-checklist-input" placeholder="Add a checklist item…" class="flex-1 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-          <button type="button" id="task-checklist-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Add</button>
+          <input type="text" id="task-checklist-input" placeholder="Add a checklist item…" class="flex-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <button type="button" id="task-checklist-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
       </div>
 
-      <div id="task-time-section" class="pt-1 border-t border-slate-100 dark:border-slate-700">
+      <div id="task-time-section" class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
         <div class="flex items-center justify-between mt-3 mb-1.5">
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">Time Tracking</label>
-          <span id="task-time-total" class="text-xs font-medium text-slate-400 dark:text-slate-500"></span>
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400">Time Tracking</label>
+          <span id="task-time-total" class="text-xs font-medium text-zinc-400 dark:text-zinc-500"></span>
         </div>
         <div id="task-time-log" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto mb-2"></div>
         <div class="flex flex-wrap items-center gap-2">
-          <div class="flex items-center shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 overflow-hidden">
-            <button type="button" id="task-time-hours-dec" title="Decrease hours" aria-label="Decrease hours" class="w-7 h-9 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 hover:text-slate-600 dark:hover:text-slate-300">
+          <div class="flex items-center shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 overflow-hidden">
+            <button type="button" id="task-time-hours-dec" title="Decrease hours" aria-label="Decrease hours" class="w-7 h-9 flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
               <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
-            <input type="number" id="task-time-hours" step="0.25" min="0" placeholder="0" class="w-12 text-sm text-center bg-transparent text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 py-2 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]">
-            <button type="button" id="task-time-hours-inc" title="Increase hours" aria-label="Increase hours" class="w-7 h-9 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600 hover:text-slate-600 dark:hover:text-slate-300">
+            <input type="number" id="task-time-hours" step="0.25" min="0" placeholder="0" class="w-12 text-sm text-center bg-transparent text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 py-2 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]">
+            <button type="button" id="task-time-hours-inc" title="Increase hours" aria-label="Increase hours" class="w-7 h-9 flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
               <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
           </div>
-          <span class="text-xs text-slate-400 dark:text-slate-500 shrink-0">hrs</span>
-          <input type="text" id="task-time-note" maxlength="140" placeholder="What did you work on? (optional)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <span class="text-xs text-zinc-400 dark:text-zinc-500 shrink-0">hrs</span>
+          <input type="text" id="task-time-note" maxlength="140" placeholder="What did you work on? (optional)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <button type="button" id="task-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Billable</button>
-          <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Cancel</button>
-          <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Log</button>
+          <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>
+          <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Log</button>
         </div>
       </div>
 
-      <div id="task-comments-section" class="hidden pt-1 border-t border-slate-100 dark:border-slate-700">
-        <label class="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mt-3 mb-1.5">
+      <div id="task-comments-section" class="hidden pt-1 border-t border-zinc-100 dark:border-zinc-700">
+        <label class="flex items-center justify-between text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">
           <span>Comments</span>
-          <span class="font-normal text-slate-400 dark:text-slate-500">Posted immediately — Cancel won't undo them</span>
+          <span class="font-normal text-zinc-400 dark:text-zinc-500">Posted immediately — Cancel won't undo them</span>
         </label>
         <div id="task-comments-log" class="flex flex-col gap-2 max-h-40 overflow-y-auto mb-2"></div>
         <div class="flex items-end gap-2">
           <div class="relative flex-1">
-            <textarea id="task-comment-input" rows="2" placeholder="Add a comment… (type @ to mention someone)" class="w-full text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
-            <div id="mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-pop py-1"></div>
+            <textarea id="task-comment-input" rows="2" placeholder="Add a comment… (type @ to mention someone)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+            <div id="mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1"></div>
           </div>
-          <button type="button" id="task-comment-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Add</button>
+          <button type="button" id="task-comment-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
       </div>
     </form>
-    <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+    <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/50">
       <button id="task-delete-btn" class="hidden text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1.5">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>Delete
       </button>
       <div class="flex items-center gap-2 ml-auto">
-        <button id="task-cancel-btn" type="button" class="text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700">Cancel</button>
+        <button id="task-cancel-btn" type="button" class="text-sm font-medium px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700">Cancel</button>
         <button id="task-save-btn" form="task-form" type="submit" class="text-sm font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card">Save Task</button>
       </div>
     </div>
@@ -533,16 +543,16 @@
 
 <!-- ============ CONFIRM MODAL ============ -->
 <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
-  <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
     <div class="p-5">
       <div id="confirm-icon-wrap" class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
         <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
       </div>
-      <h3 id="confirm-title" class="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Are you sure?</h3>
-      <p id="confirm-body" class="text-sm text-slate-500 dark:text-slate-400"></p>
+      <h3 id="confirm-title" class="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-1">Are you sure?</h3>
+      <p id="confirm-body" class="text-sm text-zinc-500 dark:text-zinc-400"></p>
     </div>
-    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
-      <button id="confirm-cancel-btn" class="text-sm font-medium px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700">Cancel</button>
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/50">
+      <button id="confirm-cancel-btn" class="text-sm font-medium px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700">Cancel</button>
       <button id="confirm-ok-btn" class="text-sm font-semibold px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700">Confirm</button>
     </div>
   </div>
@@ -980,6 +990,8 @@
     var next = !isDarkMode();
     document.documentElement.classList.toggle('dark', next);
     try { localStorage.setItem(THEME_KEY, next ? 'dark' : 'light'); } catch (e) { /* ignore */ }
+    var metaThemeColor = document.getElementById('meta-theme-color');
+    if (metaThemeColor) metaThemeColor.setAttribute('content', next ? '#27272a' : '#ffffff');
     syncThemeToggleIcon();
   }
 
@@ -1090,7 +1102,7 @@
     var colorMap = {
       success: 'bg-emerald-600',
       error: 'bg-rose-600',
-      info: 'bg-slate-800'
+      info: 'bg-zinc-800'
     };
     var container = document.getElementById('toast-container');
     var el = document.createElement('div');
@@ -1305,25 +1317,25 @@
       ? currentChecklist.map(function (item, i) {
           var editingLink = checklistLinkEditIndex === i;
           var editingText = checklistTextEditIndex === i;
-          return '<div class="rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50">' +
+          return '<div class="rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
             '<div class="flex items-center gap-2 px-2 py-1.5">' +
-              '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="brand-checkbox checklist-toggle w-4 h-4 rounded border border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 shrink-0 cursor-pointer">' +
+              '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="brand-checkbox checklist-toggle w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 shrink-0 cursor-pointer">' +
               '<div class="flex-1 min-w-0">' +
                 (editingText
-                  ? '<input type="text" class="checklist-text-input w-full text-sm rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" maxlength="300" value="' + escapeHtml(item.text) + '">'
-                  : '<span class="block text-sm ' + (item.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200') + '">' + escapeHtml(item.text) + '</span>') +
+                  ? '<input type="text" class="checklist-text-input w-full text-sm rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" maxlength="300" value="' + escapeHtml(item.text) + '">'
+                  : '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>') +
                 (item.link && !editingLink ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-brand-600 dark:text-brand-400 truncate hover:underline">' + escapeHtml(item.link) + '</a>' : '') +
               '</div>' +
-              '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400" data-checklist-i="' + i + '" title="Rename item" aria-label="Rename item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
-              '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
-              '<button type="button" class="checklist-remove p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Rename item" aria-label="Rename item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+              '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
+              '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
             (editingLink
-              ? '<div class="pl-8 pr-2 pb-1.5"><input type="text" class="checklist-link-input w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '"></div>'
+              ? '<div class="pl-8 pr-2 pb-1.5"><input type="text" class="checklist-link-input w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '"></div>'
               : '') +
           '</div>';
         }).join('')
-      : '<p class="text-xs text-slate-400 dark:text-slate-500">No checklist items yet.</p>';
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No checklist items yet.</p>';
     if (checklistTextEditIndex !== null) {
       var textInput = el.querySelector('.checklist-text-input');
       if (textInput) { textInput.focus(); textInput.select(); }
@@ -1442,40 +1454,40 @@
     var list = comments || [];
     logEl.innerHTML = list.length
       ? list.map(function (c, i) {
-          return '<div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2">' +
+          return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
             '<div class="flex items-center gap-1.5 mb-1">' +
               '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
-              '<span class="text-xs text-slate-400 dark:text-slate-500">' + formatShortDate(localDateOf(c.date)) + '</span>' +
-              '<button type="button" class="comment-remove ml-auto p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(c.date)) + '</span>' +
+              '<button type="button" class="comment-remove ml-auto p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
-            '<p class="text-sm text-slate-700 dark:text-slate-200">' + escapeHtml(c.text) + '</p>' +
+            '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(c.text) + '</p>' +
           '</div>';
         }).join('')
-      : '<p class="text-xs text-slate-400 dark:text-slate-500">No comments yet.</p>';
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet.</p>';
   }
 
   function renderTimeEntriesEditor(entries, logEl, totalEl) {
     var list = entries || [];
     logEl.innerHTML = list.length
       ? list.map(function (e, i) {
-          return '<div class="flex items-start gap-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 py-2">' +
+          return '<div class="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
             '<span class="w-4 h-4 rounded-full ' + avatarColor(e.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">' + initials(e.author || '?') + '</span>' +
             '<div class="min-w-0 flex-1">' +
               '<div class="flex items-center gap-1.5">' +
-                '<span class="text-sm font-semibold text-slate-700 dark:text-slate-200">' + formatDuration(e.minutes) + '</span>' +
+                '<span class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
                 (e.billable ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
                 (e.overtime ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
-                '<span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
+                '<span class="text-xs text-zinc-400 dark:text-zinc-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
               '</div>' +
-              (e.note ? '<p class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
+              (e.note ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
-              '<button type="button" class="time-entry-edit p-1 text-slate-300 dark:text-slate-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Edit time entry">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
-              '<button type="button" class="time-entry-remove p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove time entry">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="time-entry-edit p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Edit time entry">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="time-entry-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove time entry">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
           '</div>';
         }).join('')
-      : '<p class="text-xs text-slate-400 dark:text-slate-500">No time logged yet.</p>';
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No time logged yet.</p>';
     var totalMinutes = list.reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
     var billableMinutes = list.filter(function (e) { return e.billable; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
     totalEl.textContent = totalMinutes
@@ -1499,10 +1511,10 @@
     btn.classList.toggle('dark:bg-emerald-500/15', active);
     btn.classList.toggle('text-emerald-700', active);
     btn.classList.toggle('dark:text-emerald-400', active);
-    btn.classList.toggle('border-slate-200', !active);
-    btn.classList.toggle('dark:border-slate-700', !active);
-    btn.classList.toggle('text-slate-400', !active);
-    btn.classList.toggle('dark:text-slate-500', !active);
+    btn.classList.toggle('border-zinc-200', !active);
+    btn.classList.toggle('dark:border-zinc-700', !active);
+    btn.classList.toggle('text-zinc-400', !active);
+    btn.classList.toggle('dark:text-zinc-500', !active);
   }
   document.getElementById('task-time-billable').addEventListener('click', function () {
     setBillableToggle(this, this.getAttribute('data-active') !== 'true');
@@ -1646,7 +1658,7 @@
   ========================================================= */
   function pillOptionHtml(value, text) {
     var pm = PRIORITY_META[value];
-    if (!pm) return '<span class="block truncate text-slate-700 dark:text-slate-200">' + escapeHtml(text) + '</span>';
+    if (!pm) return '<span class="block truncate text-zinc-700 dark:text-zinc-200">' + escapeHtml(text) + '</span>';
     return '<span class="inline-flex items-center whitespace-nowrap text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + escapeHtml(text) + '</span>';
   }
 
@@ -1698,7 +1710,7 @@
 
     var trigger = document.createElement('button');
     trigger.type = 'button';
-    trigger.className = triggerClass + ' flex items-center text-left cursor-pointer bg-white dark:bg-slate-700';
+    trigger.className = triggerClass + ' flex items-center text-left cursor-pointer bg-white dark:bg-zinc-700';
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
     trigger.setAttribute('aria-controls', menuId);
@@ -1707,7 +1719,7 @@
     var menu = document.createElement('div');
     menu.id = menuId;
     menu.setAttribute('role', 'listbox');
-    menu.className = 'absolute left-0 mt-1 z-20 hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto';
+    menu.className = 'absolute left-0 mt-1 z-20 hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto';
     wrapper.appendChild(menu);
 
     var entry = { wrapper: wrapper, menu: menu, trigger: trigger };
@@ -1749,7 +1761,7 @@
         item.setAttribute('role', 'option');
         item.setAttribute('aria-selected', opt.value === select.value ? 'true' : 'false');
         item.tabIndex = -1;
-        item.className = 'w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/60 focus:bg-slate-50 dark:focus:bg-slate-700/60 focus:outline-none';
+        item.className = 'w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 focus:bg-zinc-50 dark:focus:bg-zinc-700/60 focus:outline-none';
         item.innerHTML = pillOptionHtml(opt.value, opt.textContent);
         item.addEventListener('click', function () {
           select.value = opt.value;
@@ -1922,9 +1934,9 @@
     var matches = uniqueValues('assignee').filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; }).slice(0, 5);
     if (!matches.length) { mentionMenu.classList.add('hidden'); return; }
     mentionMenu.innerHTML = matches.map(function (n) {
-      return '<button type="button" class="mention-option w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/60 flex items-center gap-2" data-name="' + escapeHtml(n) + '">' +
+      return '<button type="button" class="mention-option w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/60 flex items-center gap-2" data-name="' + escapeHtml(n) + '">' +
         '<span class="w-4 h-4 rounded-full ' + avatarColor(n) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(n) + '</span>' +
-        '<span class="text-slate-700 dark:text-slate-200">' + escapeHtml(n) + '</span>' +
+        '<span class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(n) + '</span>' +
       '</button>';
     }).join('');
     mentionMenu.classList.remove('hidden');
@@ -2141,7 +2153,7 @@
     var top = sortByFocus(candidates).slice(0, 6);
 
     if (top.length === 0) {
-      container.innerHTML = '<div class="flex items-center gap-2 text-sm text-slate-400 dark:text-slate-500 py-4 px-1">' +
+      container.innerHTML = '<div class="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500 py-4 px-1">' +
         svgIcon('check', 'w-4 h-4') + 'Nothing urgent right now — nice work staying ahead.</div>';
       return;
     }
@@ -2150,23 +2162,23 @@
       var days = dueUrgency(t).days;
       var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
       var urgencyLabel, urgencyClass;
-      if (days === null) { urgencyLabel = 'TBD'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
+      if (days === null) { urgencyLabel = 'TBD'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
       else if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
       else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
       else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
-      else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-slate-500 bg-slate-100 dark:text-slate-400 dark:bg-slate-700'; }
+      else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
 
       return (
-        '<button data-open-task="' + t.id + '" class="flex flex-col text-left group shrink-0 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
+        '<button data-open-task="' + t.id + '" class="flex flex-col text-left group shrink-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
           '<div class="flex items-center justify-between mb-1.5">' +
             '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
             '<span class="text-xs font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
           '</div>' +
-          '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 mb-2">' + escapeHtml(t.project) + '</p>' +
+          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-2">' + escapeHtml(t.project) + '</p>' +
           '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
             '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[10px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
-            '<span class="text-xs text-slate-500 dark:text-slate-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
+            '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
         '</button>'
       );
@@ -2181,41 +2193,41 @@
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
-    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
+    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400');
     var hasDrive = !!t.driveLink;
     var checklist = t.checklist || [];
     var checklistDone = checklist.filter(function (i) { return i.done; }).length;
     var timeMinutes = taskTimeMinutes(t);
     var commentCount = (t.comments || []).length;
-    var chipClass = 'flex items-center gap-1 text-xs text-slate-900 dark:text-white';
+    var chipClass = 'flex items-center gap-1 text-xs text-zinc-900 dark:text-white';
 
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
           '<div class="flex items-center gap-0.5">' +
-            '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
-            '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
-            '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
+            '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+            '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+            '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
-        '<p class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-        '<p class="text-xs text-slate-400 dark:text-slate-500 mb-3 line-clamp-1">' + escapeHtml(t.project) + '</p>' +
+        '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+        '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-3 line-clamp-1">' + escapeHtml(t.project) + '</p>' +
         '<div class="flex items-center justify-between text-xs mb-3">' +
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
           (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
           (dueSoon ? '<span class="text-xs font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
         '</div>' +
-        '<div class="flex items-center justify-between flex-wrap gap-y-1 pt-2.5 border-t border-slate-100 dark:border-slate-700">' +
+        '<div class="flex items-center justify-between flex-wrap gap-y-1 pt-2.5 border-t border-zinc-100 dark:border-zinc-700">' +
           '<div class="flex items-center gap-1.5 min-w-0">' +
             '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
-            '<span class="text-xs text-slate-600 dark:text-slate-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
+            '<span class="text-xs text-zinc-600 dark:text-zinc-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
           '<div class="flex items-center gap-1.5 shrink-0">' +
             (checklist.length ? '<span class="' + chipClass + '" title="' + checklistDone + ' of ' + checklist.length + ' checklist items done">' + svgIcon('checklist', 'w-3.5 h-3.5') + checklistDone + '/' + checklist.length + '</span>' : '') +
             (timeMinutes ? '<span class="' + chipClass + '" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3.5 h-3.5') + formatDuration(timeMinutes) + '</span>' : '') +
             (commentCount ? '<span class="' + chipClass + '" title="' + commentCount + ' comment' + (commentCount === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + commentCount + '</span>' : '') +
-            '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-slate-300 dark:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700') + '">' +
+            '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700') + '">' +
               svgIcon('drive', 'w-4 h-4') +
             '</button>' +
           '</div>' +
@@ -2232,16 +2244,16 @@
       var items = sortTasksForDisplay(filtered.filter(function (t) { return t.status === status; }));
       var cardsHtml = items.length
         ? items.map(taskCardHtml).join('')
-        : '<div class="text-xs text-slate-400 dark:text-slate-600 text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">No tasks here</div>';
+        : '<div class="text-xs text-zinc-400 dark:text-zinc-600 text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks here</div>';
 
       return (
-        '<div class="flex flex-col rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700 min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
+        '<div class="flex flex-col rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700 min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
-              '<h3 class="text-base font-bold text-slate-700 dark:text-slate-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
-              '<span class="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-white/70 dark:bg-slate-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
+              '<h3 class="text-base font-bold text-zinc-700 dark:text-zinc-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
+              '<span class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 bg-white/70 dark:bg-zinc-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
             '</div>' +
-            (status === 'Done' ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
+            (status === 'Done' ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
           '</div>' +
           '<div class="flex flex-col gap-2.5 px-2.5 pb-3 flex-1" data-column-body="' + status + '">' + cardsHtml + '</div>' +
         '</div>'
@@ -2287,7 +2299,7 @@
     var list = applyFilters(activeTasks()).filter(function (t) { return t.startDate && t.deadline; });
 
     if (list.length === 0) {
-      wrap.innerHTML = '<div class="text-sm text-slate-400 dark:text-slate-600 text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">' +
+      wrap.innerHTML = '<div class="text-sm text-zinc-400 dark:text-zinc-600 text-center py-16 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">' +
         'No tasks match the current filters yet.</div>';
       return;
     }
@@ -2330,12 +2342,12 @@
     html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
 
     // corner cells
-    html += '<div class="sticky top-0 left-0 z-40 bg-white dark:bg-slate-800 border-b border-r border-slate-200 dark:border-slate-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-slate-500 dark:text-slate-400">Task</span></div>';
+    html += '<div class="sticky top-0 left-0 z-40 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
 
     // month header row
     var colCursor = 2;
     monthSpans.forEach(function (m) {
-      html += '<div class="sticky top-0 z-30 bg-slate-50 dark:bg-slate-700/80 border-b border-slate-200 dark:border-slate-700 flex items-center px-2 text-xs font-semibold text-slate-500 dark:text-slate-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      html += '<div class="sticky top-0 z-30 bg-zinc-50 dark:bg-zinc-700/80 border-b border-zinc-200 dark:border-zinc-700 flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -2343,8 +2355,8 @@
     days.forEach(function (d, i) {
       var isWeekend = d.getDay() === 0 || d.getDay() === 6;
       var isToday = i === todayIndex;
-      html += '<div class="sticky top-8 z-30 border-b border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-xs leading-tight ' +
-        (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-slate-100/70 dark:bg-slate-700/40 text-slate-400 dark:text-slate-500' : 'bg-slate-50 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400')) +
+      html += '<div class="sticky top-8 z-30 border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
+        (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100/70 dark:bg-zinc-700/40 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700/80 text-zinc-500 dark:text-zinc-400')) +
         '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
@@ -2356,11 +2368,11 @@
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
 
-      html += '<div class="sticky left-0 z-20 bg-white dark:bg-slate-800 border-b border-r border-slate-200 dark:border-slate-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+      html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
-          '<p class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.project) + '</p>' +
+          '<p class="text-sm font-semibold text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.project) + '</p>' +
         '</div>' +
       '</div>';
 
@@ -2369,14 +2381,14 @@
       var fillPct = checklistProgressPct(t);
       if (fillPct === null) fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
 
-      html += '<div class="relative border-b border-slate-100 dark:border-slate-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
+      html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
       html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
         'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
         'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
           '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
           '</div>' +
-          '<span class="absolute inset-0 flex items-center px-2 text-xs font-medium text-slate-700 dark:text-slate-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
-          (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-800"></span>' : '') +
+          '<span class="absolute inset-0 flex items-center px-2 text-xs font-medium text-zinc-700 dark:text-zinc-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
+          (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
       '</button>';
       html += '</div>';
     });
@@ -2386,7 +2398,7 @@
 
     html += '</div>';
 
-    wrap.innerHTML = '<div class="overflow-auto border border-slate-200 dark:border-slate-700 rounded-lg" style="max-height:600px;">' + html + '</div>';
+    wrap.innerHTML = '<div class="overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg" style="max-height:600px;">' + html + '</div>';
   }
 
   /* =========================================================
@@ -2414,7 +2426,7 @@
     var todayStr = toDateInputValue(todayMidnight());
 
     var weekdayHtml = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(function (d) {
-      return '<div class="text-xs font-semibold text-slate-400 dark:text-slate-500 text-center py-1.5">' + d + '</div>';
+      return '<div class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 text-center py-1.5">' + d + '</div>';
     }).join('');
 
     var cellsHtml = '';
@@ -2429,16 +2441,16 @@
 
       var chipsHtml = shown.map(function (t) {
         var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
-        return '<button type="button" data-open-task="' + t.id + '" class="w-full flex items-center gap-1 text-left text-[11px] px-1 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 truncate">' +
+        return '<button type="button" data-open-task="' + t.id + '" class="w-full flex items-center gap-1 text-left text-[11px] px-1 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 truncate">' +
           '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
-          '<span class="truncate text-slate-600 dark:text-slate-300">' + escapeHtml(t.name) + '</span>' +
+          '<span class="truncate text-zinc-600 dark:text-zinc-300">' + escapeHtml(t.name) + '</span>' +
         '</button>';
       }).join('');
-      if (overflow > 0) chipsHtml += '<div class="text-[11px] text-slate-400 dark:text-slate-500 px-1">+' + overflow + ' more</div>';
+      if (overflow > 0) chipsHtml += '<div class="text-[11px] text-zinc-400 dark:text-zinc-500 px-1">+' + overflow + ' more</div>';
 
-      cellsHtml += '<div class="border border-slate-100 dark:border-slate-700/60 min-h-[88px] p-1 ' + (inMonth ? '' : 'bg-slate-50/60 dark:bg-slate-900/30') + '">' +
+      cellsHtml += '<div class="border border-zinc-100 dark:border-zinc-700/60 min-h-[88px] p-1 ' + (inMonth ? '' : 'bg-zinc-50/60 dark:bg-zinc-900/30') + '">' +
         '<span class="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full ' +
-          (isToday ? 'bg-brand-600 text-white' : (inMonth ? 'text-slate-600 dark:text-slate-300' : 'text-slate-300 dark:text-slate-600')) +
+          (isToday ? 'bg-brand-600 text-white' : (inMonth ? 'text-zinc-600 dark:text-zinc-300' : 'text-zinc-300 dark:text-zinc-600')) +
         '">' + cellDate.getDate() + '</span>' +
         '<div class="mt-0.5 flex flex-col gap-0.5">' + chipsHtml + '</div>' +
       '</div>';
@@ -2467,15 +2479,15 @@
     var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
-    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400' : (dueSoon ? 'text-violet-600 dark:text-violet-400' : 'text-slate-400 dark:text-slate-500');
+    var dateClass = overdue ? 'text-rose-600 dark:text-rose-400' : (dueSoon ? 'text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-500');
     var dueLabel = overdue ? Math.abs(days) + 'd overdue' : (t.deadline ? formatShortDate(t.deadline) : 'TBD');
 
     return (
-      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
+      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition w-full">' +
         '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · ' + escapeHtml(STATUS_LABELS[t.status] || t.status) + '</p>' +
+          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.project) + ' · ' + escapeHtml(STATUS_LABELS[t.status] || t.status) + '</p>' +
         '</div>' +
         '<span class="text-xs font-semibold shrink-0 ' + dateClass + '">' + dueLabel + '</span>' +
       '</button>'
@@ -2490,7 +2502,7 @@
     });
 
     if (people.length === 0) {
-      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 col-span-full text-center py-10">No one matches the current filters.</p>';
+      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 col-span-full text-center py-10">No one matches the current filters.</p>';
       return;
     }
 
@@ -2507,26 +2519,26 @@
     container.innerHTML = summaries.map(function (p) {
       var rowsHtml = p.active.length
         ? p.active.map(personTaskRowHtml).join('')
-        : '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-6">All caught up — no active tasks.</p>';
+        : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">All caught up — no active tasks.</p>';
 
       var chips = '';
       if (p.overdue > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
-      if (p.high > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">' + p.high + ' high</span>';
+      if (p.high > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">' + p.high + ' high</span>';
 
       return (
-        '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
-          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-slate-700">' +
+        '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
+          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
             '<span class="w-8 h-8 rounded-full ' + avatarColor(p.name) + ' text-white text-sm font-bold flex items-center justify-center shrink-0">' + initials(p.name) + '</span>' +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-base font-bold text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
               '<div class="flex items-center gap-1.5 mt-0.5">' +
-                '<span class="text-xs text-slate-400 dark:text-slate-500">' + p.active.length + ' active</span>' +
+                '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.active.length + ' active</span>' +
                 chips +
               '</div>' +
             '</div>' +
-            '<span class="text-xl font-bold text-slate-200 dark:text-slate-600 shrink-0">' + p.active.length + '</span>' +
+            '<span class="text-xl font-bold text-zinc-200 dark:text-zinc-600 shrink-0">' + p.active.length + '</span>' +
           '</div>' +
-          '<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-700 flex-1">' + rowsHtml + '</div>' +
+          '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
         '</div>'
       );
     }).join('');
@@ -2541,13 +2553,13 @@
     var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var minutes = taskTimeMinutes(t);
     return (
-      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
+      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition w-full">' +
         '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(STATUS_LABELS[t.status] || t.status) + (t.archivedAt ? ' · Archived' : '') + '</p>' +
+          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(STATUS_LABELS[t.status] || t.status) + (t.archivedAt ? ' · Archived' : '') + '</p>' +
         '</div>' +
-        '<span class="text-xs font-semibold shrink-0 text-slate-400 dark:text-slate-500">' + (minutes ? formatDuration(minutes) : '—') + '</span>' +
+        '<span class="text-xs font-semibold shrink-0 text-zinc-400 dark:text-zinc-500">' + (minutes ? formatDuration(minutes) : '—') + '</span>' +
       '</button>'
     );
   }
@@ -2559,7 +2571,7 @@
     var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); });
 
     if (!names.length) {
-      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 col-span-full text-center py-10">No projects yet.</p>';
+      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 col-span-full text-center py-10">No projects yet.</p>';
       return;
     }
 
@@ -2577,24 +2589,24 @@
     container.innerHTML = summaries.map(function (p) {
       var rowsHtml = p.rows.length
         ? p.rows.map(projectTaskRowHtml).join('')
-        : '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-6">No tasks yet.</p>';
+        : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No tasks yet.</p>';
 
       var badges = '';
       if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
       return (
-        '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
-          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-slate-700">' +
+        '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
+          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-base font-bold text-slate-800 dark:text-slate-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
               '<div class="flex items-center gap-1.5 mt-0.5">' +
-                '<span class="text-xs text-slate-400 dark:text-slate-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
+                '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
                 badges +
               '</div>' +
             '</div>' +
-            '<span class="text-lg font-bold text-slate-700 dark:text-slate-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
+            '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
           '</div>' +
-          '<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-700 flex-1">' + rowsHtml + '</div>' +
+          '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
         '</div>'
       );
     }).join('');
@@ -2615,9 +2627,9 @@
     task_deleted: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
     task_moved: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
     task_comment: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
-    board_imported: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-    board_seeded: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-    board_archived: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+    board_imported: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
+    board_seeded: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
+    board_archived: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     task_unarchived: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
   };
 
@@ -2641,7 +2653,7 @@
   function renderActivityFeed() {
     var container = document.getElementById('activity-feed');
     if (!activityLog.length) {
-      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">No activity yet.</p>';
+      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No activity yet.</p>';
       return;
     }
     var html = '';
@@ -2650,16 +2662,16 @@
       var d = new Date(a.at);
       var groupKey = isNaN(d.getTime()) ? 'unknown' : d.toDateString();
       if (groupKey !== lastGroup) {
-        html += '<div class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mt-3 first:mt-0 mb-1">' + activityDateHeader(a.at) + '</div>';
+        html += '<div class="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mt-3 first:mt-0 mb-1">' + activityDateHeader(a.at) + '</div>';
         lastGroup = groupKey;
       }
       var iconName = ACTIVITY_ICONS[a.type] || 'info';
-      var iconClass = ACTIVITY_ICON_CLASS[a.type] || 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
-      html += '<div class="flex items-start gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+      var iconClass = ACTIVITY_ICON_CLASS[a.type] || 'bg-zinc-200 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400';
+      html += '<div class="flex items-start gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
         '<span class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 ' + iconClass + '">' + svgIcon(iconName, 'w-3.5 h-3.5') + '</span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200">' + escapeHtml(a.summary) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">' + escapeHtml(a.user || 'unknown') + ' · ' + formatTimeOnly(a.at) + '</p>' +
+          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200">' + escapeHtml(a.summary) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">' + escapeHtml(a.user || 'unknown') + ' · ' + formatTimeOnly(a.at) + '</p>' +
         '</div>' +
       '</div>';
     });
@@ -2674,7 +2686,7 @@
     var archived = tasks.filter(function (t) { return t.archivedAt; })
       .sort(function (a, b) { return new Date(b.archivedAt) - new Date(a.archivedAt); });
     if (!archived.length) {
-      container.innerHTML = '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-10">No archived tasks.</p>';
+      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No archived tasks.</p>';
       return;
     }
     var html = '';
@@ -2682,16 +2694,16 @@
     archived.forEach(function (t) {
       var year = localDateOf(t.archivedAt).slice(0, 4);
       if (year !== lastYear) {
-        html += '<div class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mt-4 first:mt-0 mb-1">' + year + '</div>';
+        html += '<div class="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mt-4 first:mt-0 mb-1">' + year + '</div>';
         lastYear = year;
       }
-      html += '<div class="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+      html += '<div class="flex items-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
         '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-slate-400 dark:text-slate-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) + '</p>' +
+          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) + '</p>' +
         '</div>' +
-        '<button type="button" data-unarchive-task="' + t.id + '" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Restore</button>' +
+        '<button type="button" data-unarchive-task="' + t.id + '" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Restore</button>' +
       '</div>';
     });
     container.innerHTML = html;
@@ -2736,12 +2748,12 @@
     document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
       var active = btn.getAttribute('data-view-btn') === view;
       btn.classList.toggle('bg-white', active);
-      btn.classList.toggle('dark:bg-slate-600', active);
+      btn.classList.toggle('dark:bg-zinc-600', active);
       btn.classList.toggle('shadow-card', active);
       btn.classList.toggle('text-brand-700', active);
       btn.classList.toggle('dark:text-brand-400', active);
-      btn.classList.toggle('text-slate-500', !active);
-      btn.classList.toggle('dark:text-slate-400', !active);
+      btn.classList.toggle('text-zinc-500', !active);
+      btn.classList.toggle('dark:text-zinc-400', !active);
     });
     document.getElementById('mobile-view-trigger-label').textContent = VIEW_LABELS[view] || view;
     // Picking a view closes the mobile nav menu -- it stays open on desktop since there
@@ -3109,12 +3121,12 @@
     var list = document.getElementById('notification-list');
     list.innerHTML = myNotifications.length
       ? myNotifications.map(function (n) {
-          return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 ' + (n.read ? '' : 'bg-brand-50/50 dark:bg-brand-500/5') + '">' +
-            '<p class="text-xs text-slate-700 dark:text-slate-200"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
-            '<p class="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
+          return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 ' + (n.read ? '' : 'bg-brand-50/50 dark:bg-brand-500/5') + '">' +
+            '<p class="text-xs text-zinc-700 dark:text-zinc-200"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
+            '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
           '</button>';
         }).join('')
-      : '<p class="text-sm text-slate-400 dark:text-slate-500 text-center py-8">No notifications yet.</p>';
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">No notifications yet.</p>';
   }
 
   var notificationPanel = document.getElementById('notification-panel');
@@ -3181,7 +3193,7 @@
     userChipName.textContent = displayName;
     var userChipAvatar = document.getElementById('user-chip-avatar');
     userChipAvatar.innerHTML = svgIcon('user', 'w-3.5 h-3.5');
-    userChipAvatar.className = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300';
+    userChipAvatar.className = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-300';
     startListeners();
   });
 
