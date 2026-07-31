@@ -13,8 +13,32 @@ service cloud.firestore {
         && request.auth.token.email.matches('.*@mediashock[.]com[.]sg$');
     }
 
-    match /{document=**} {
+    // Notifications are addressed to a `recipient` string that the client sets to the
+    // sender's Google displayName (see notifyOnComment in index.html) -- token.name is the
+    // Google-verified equivalent on the auth token, so it's the right field to check here
+    // even though it's a display name rather than a stable id.
+    function isNotificationRecipient(notifData) {
+      return notifData.recipient == request.auth.token.name
+        || notifData.recipient == request.auth.token.email;
+    }
+
+    // The board is a single shared document set: every signed-in teammate can read/write
+    // every task and every activity-log entry by design (see README: "the whole team edits
+    // one live board together"). Notifications are the one collection that carries
+    // per-person data (who a comment mentioned/addressed), so they get their own narrower
+    // rule below instead of falling under a blanket match -- otherwise anyone could read,
+    // mark-read, or delete anyone else's notifications.
+    match /tasks/{taskId} {
       allow read, write: if isMediashock();
+    }
+
+    match /activity/{activityId} {
+      allow read, write: if isMediashock();
+    }
+
+    match /notifications/{notifId} {
+      allow create: if isMediashock();
+      allow read, update, delete: if isMediashock() && isNotificationRecipient(resource.data);
     }
   }
 }
