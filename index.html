@@ -554,7 +554,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, connectAuthEmulator
+    getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, connectAuthEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
@@ -591,6 +591,24 @@
   function isAllowedEmail(email) {
     return !!email && email.toLowerCase().endsWith("@" + ALLOWED_EMAIL_DOMAIN);
   }
+
+  // Mobile browsers routinely kill the signInWithPopup window before the OAuth flow
+  // completes (surfacing as "auth/popup-closed-by-user" even though the user never closed
+  // anything), so mobile uses a full-page redirect instead -- the standard Firebase-
+  // recommended workaround for this class of device.
+  function isMobileDevice() {
+    return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+  }
+
+  // Picks up the result of a signInWithRedirect that just completed (the page reloaded to
+  // get here) so the Drive access token gets captured the same way the popup flow does.
+  getRedirectResult(auth).then(function (result) {
+    if (!result) return;
+    var credential = GoogleAuthProvider.credentialFromResult(result);
+    driveAccessToken = credential ? credential.accessToken : null;
+  }).catch(function (err) {
+    console.error('getRedirectResult failed', err);
+  });
 
   var tasksCol = collection(db, "tasks");
   var unsubTasks = null;
@@ -696,6 +714,15 @@
 
   function browseDriveForProject() {
     if (driveAccessToken) { openDrivePicker(); return; }
+    if (isMobileDevice()) {
+      // Redirects the whole page -- driveAccessToken gets picked up by the
+      // getRedirectResult() handler on reload, so the user just needs to tap
+      // "Browse Drive" once more after coming back.
+      signInWithRedirect(auth, googleProvider).catch(function (err) {
+        showToast('Could not open Drive picker: ' + err.message, 'error');
+      });
+      return;
+    }
     signInWithPopup(auth, googleProvider).then(function (result) {
       var credential = GoogleAuthProvider.credentialFromResult(result);
       driveAccessToken = credential ? credential.accessToken : null;
@@ -3027,6 +3054,13 @@
   authSignInBtn.addEventListener('click', function () {
     authSignInBtn.disabled = true;
     authStatusEl.textContent = 'Opening Google sign-in…';
+    if (isMobileDevice()) {
+      signInWithRedirect(auth, googleProvider).catch(function (err) {
+        authStatusEl.textContent = 'Sign-in failed: ' + err.message;
+        authSignInBtn.disabled = false;
+      });
+      return;
+    }
     signInWithPopup(auth, googleProvider).then(function (result) {
       var credential = GoogleAuthProvider.credentialFromResult(result);
       driveAccessToken = credential ? credential.accessToken : null;
