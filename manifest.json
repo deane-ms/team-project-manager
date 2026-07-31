@@ -1,6 +1,6 @@
 {
   "name": "MediaShock APAC — Project Manager",
-  "short_name": "Flowboard",
+  "short_name": "MS Project Manager",
   "description": "MediaShock APAC's shared project & task prioritization dashboard",
   "start_url": "./index.html",
   "scope": "./",
