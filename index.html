@@ -155,7 +155,7 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap justify-end ml-auto relative">
           <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-zinc-200 dark:border-zinc-700 text-sm">
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-400"></span><span id="stat-total" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">tasks</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">overdue</span></div>
@@ -163,36 +163,44 @@
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">completed</span></div>
           </div>
 
-          <div id="notification-bell-wrap" class="relative hidden">
-            <button id="btn-notifications" title="Notifications" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
+          <div id="notification-bell-wrap" class="hidden">
+            <button id="btn-notifications" title="Notifications" class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
               <span id="notification-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
             </button>
-            <div id="notification-panel" class="hidden absolute right-0 mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop">
-              <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
-                <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
-                <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
-              </div>
-              <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
-            </div>
           </div>
-          <div id="user-chip" class="hidden relative items-center mr-1">
+          <!-- Positioned relative to the whole icons row (not notification-bell-wrap) so it
+               can't render off-screen when the row wraps and the bell isn't at the true
+               right edge -- see the same reasoning on #user-menu-panel below. -->
+          <div id="notification-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop">
+            <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
+              <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
+              <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
+            </div>
+            <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
+          </div>
+          <div id="user-chip" class="hidden items-center mr-1">
             <button id="user-menu-trigger" class="inline-flex items-center gap-1.5 h-9 pl-1.5 pr-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
               <span id="user-chip-avatar" class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"></span>
               <span id="user-chip-name" class="hidden sm:inline"></span>
               <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
             </button>
-            <div id="user-menu-panel" class="hidden absolute right-0 mt-1 z-30 w-56 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm">
-              <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
-                <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
-                <span id="theme-toggle-label">Switch to dark mode</span>
-              </button>
-              <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
-              <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
-                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                <span>Sign out</span>
-              </button>
-            </div>
+          </div>
+          <!-- Positioned relative to the whole icons row, not #user-chip: on mobile the row
+               wraps and the chip isn't always the rightmost element, so a panel anchored to
+               the chip's own (narrow, off-right) box could render partly off-screen to the
+               left. Anchoring to the full row -- which is itself right-aligned via
+               justify-end/ml-auto above -- keeps it on-screen regardless of chip position. -->
+          <div id="user-menu-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm">
+            <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+              <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
+              <span id="theme-toggle-label">Switch to dark mode</span>
+            </button>
+            <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
+            <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              <span>Sign out</span>
+            </button>
           </div>
           <button id="btn-export" title="Export" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -3051,12 +3059,16 @@
   var userChip = document.getElementById('user-chip');
   var userChipName = document.getElementById('user-chip-name');
   var userMenuPanel = document.getElementById('user-menu-panel');
-  document.getElementById('user-menu-trigger').addEventListener('click', function (e) {
+  var userMenuTrigger = document.getElementById('user-menu-trigger');
+  userMenuTrigger.addEventListener('click', function (e) {
     e.stopPropagation();
     userMenuPanel.classList.toggle('hidden');
   });
   document.addEventListener('click', function (e) {
-    if (!userMenuPanel.classList.contains('hidden') && !userChip.contains(e.target)) {
+    // The panel is a sibling of #user-chip (not nested inside it) so it can be positioned
+    // relative to the whole icons row -- checked against the trigger and the panel itself
+    // instead of a shared wrapper.
+    if (!userMenuPanel.classList.contains('hidden') && !userMenuTrigger.contains(e.target) && !userMenuPanel.contains(e.target)) {
       userMenuPanel.classList.add('hidden');
     }
   });
@@ -3127,12 +3139,16 @@
   }
 
   var notificationPanel = document.getElementById('notification-panel');
-  document.getElementById('btn-notifications').addEventListener('click', function (e) {
+  var btnNotifications = document.getElementById('btn-notifications');
+  btnNotifications.addEventListener('click', function (e) {
     e.stopPropagation();
     notificationPanel.classList.toggle('hidden');
   });
   document.addEventListener('click', function (e) {
-    if (!notificationPanel.classList.contains('hidden') && !document.getElementById('notification-bell-wrap').contains(e.target)) {
+    // The panel is a sibling of #notification-bell-wrap (not nested inside it) so it can be
+    // positioned relative to the whole icons row -- checked against the bell button and the
+    // panel itself instead of a shared wrapper.
+    if (!notificationPanel.classList.contains('hidden') && !btnNotifications.contains(e.target) && !notificationPanel.contains(e.target)) {
       notificationPanel.classList.add('hidden');
     }
   });
