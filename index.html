@@ -704,6 +704,11 @@
     Low:    { badge: 'bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25', dot: 'bg-sky-500', bar: 'bg-sky-400', barLight: 'bg-sky-100 dark:bg-sky-500/10', border: 'border-l-sky-500' }
   };
 
+  // Same shape as PRIORITY_META, used in place of it once a task is Done -- priority no
+  // longer matters once complete, so its color coding (Gantt bar/dot, card badge) switches
+  // to this shared "done" green instead of staying tied to whatever priority it last had.
+  var DONE_META = { badge: 'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25', dot: 'bg-emerald-500', bar: 'bg-emerald-400', barLight: 'bg-emerald-100 dark:bg-emerald-500/10', border: 'border-l-emerald-500' };
+
   var AVATAR_PALETTE = ['bg-brand-500', 'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-teal-500'];
 
   /* =========================================================
@@ -2151,8 +2156,8 @@
      RENDER: BOARD
   ========================================================= */
   function taskCardHtml(t) {
-    var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
     var isDone = t.status === 'Done';
+    var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
@@ -2166,9 +2171,7 @@
     return (
       '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
-          (isDone
-            ? '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">Completed</span>'
-            : '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>') +
+          '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
           '<div class="flex items-center gap-0.5">' +
             '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
@@ -2328,7 +2331,7 @@
 
     // task rows
     list.forEach(function (t, r) {
-      var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+      var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
 
@@ -2404,7 +2407,7 @@
       var overflow = dayTasks.length - shown.length;
 
       var chipsHtml = shown.map(function (t) {
-        var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+        var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
         return '<button type="button" data-open-task="' + t.id + '" class="w-full flex items-center gap-1 text-left text-[11px] px-1 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 truncate">' +
           '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
           '<span class="truncate text-slate-600 dark:text-slate-300">' + escapeHtml(t.name) + '</span>' +
@@ -2514,7 +2517,7 @@
      time should still count toward a project's historical total.
   ========================================================= */
   function projectTaskRowHtml(t) {
-    var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+    var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var minutes = taskTimeMinutes(t);
     return (
       '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/40 transition w-full">' +
