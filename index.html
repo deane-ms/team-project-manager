@@ -199,7 +199,15 @@
 
       <!-- Toolbar: view switch / search / filters -->
       <div class="flex flex-wrap items-center gap-2 mt-[1.5rem]">
-        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1 overflow-x-auto min-w-0 max-w-full">
+        <div class="w-full sm:w-auto sm:contents">
+        <button type="button" id="mobile-view-trigger" class="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-semibold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+          <span class="flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            <span id="mobile-view-trigger-label">Board</span>
+          </span>
+          <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        <div id="view-tab-row" class="hidden sm:flex flex-col sm:flex-row items-stretch sm:items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1 mt-1 sm:mt-0 sm:overflow-x-auto min-w-0 max-w-full">
           <button data-view-btn="board" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>Board
           </button>
@@ -222,12 +230,24 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>Archived
           </button>
         </div>
+        </div>
 
         <div class="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
         <div class="relative w-full sm:flex-1 sm:min-w-[240px] sm:max-w-xs">
           <svg class="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input id="filter-search" type="text" placeholder="Search tasks, projects, people…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
+
+        <button type="button" id="mobile-filters-trigger" class="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300">
+          <span class="flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
+            Filters
+            <span id="mobile-filters-badge" class="hidden text-[10px] font-bold min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-600 text-white items-center justify-center">0</span>
+          </span>
+          <svg id="mobile-filters-chevron" class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+
+        <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents">
         <div class="relative w-full sm:w-auto">
           <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:bg-white dark:focus:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">All priorities</option>
@@ -258,6 +278,7 @@
           <svg class="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
         <button id="btn-clear-filters" class="text-sm font-medium text-slate-400 dark:text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
+        </div>
         </div>
       </div>
     </div>
@@ -2695,13 +2716,19 @@
     filterProjectPill.rebuild();
     filterAssigneePill.rebuild();
 
-    var anyFilter = filters.search || filters.priority || filters.project || filters.assignee;
-    document.getElementById('btn-clear-filters').classList.toggle('hidden', !anyFilter);
+    var activeCount = [filters.search, filters.priority, filters.project, filters.assignee].filter(Boolean).length;
+    document.getElementById('btn-clear-filters').classList.toggle('hidden', !activeCount);
+    var mobileBadge = document.getElementById('mobile-filters-badge');
+    mobileBadge.textContent = activeCount;
+    mobileBadge.classList.toggle('hidden', !activeCount);
+    mobileBadge.classList.toggle('flex', !!activeCount);
   }
 
   /* =========================================================
      VIEW SWITCH
   ========================================================= */
+  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', activity: 'Activity', archived: 'Archived' };
+
   function setView(view) {
     currentView = view;
     document.querySelectorAll('[data-view]').forEach(function (el) { el.classList.remove('active-view'); });
@@ -2716,11 +2743,25 @@
       btn.classList.toggle('text-slate-500', !active);
       btn.classList.toggle('dark:text-slate-400', !active);
     });
+    document.getElementById('mobile-view-trigger-label').textContent = VIEW_LABELS[view] || view;
+    // Picking a view closes the mobile nav menu -- it stays open on desktop since there
+    // `view-tab-row` is always visible regardless of this class (sm:flex overrides it).
+    document.getElementById('view-tab-row').classList.add('hidden');
     renderCurrentSecondaryView();
   }
 
   document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
     btn.addEventListener('click', function () { setView(btn.getAttribute('data-view-btn')); });
+  });
+
+  document.getElementById('mobile-view-trigger').addEventListener('click', function (e) {
+    e.stopPropagation();
+    document.getElementById('view-tab-row').classList.toggle('hidden');
+  });
+  document.getElementById('mobile-filters-trigger').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var nowHidden = document.getElementById('filters-panel').classList.toggle('hidden');
+    document.getElementById('mobile-filters-chevron').classList.toggle('rotate-180', !nowHidden);
   });
 
   /* =========================================================
