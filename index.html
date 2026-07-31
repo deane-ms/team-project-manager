@@ -681,7 +681,7 @@
   var PRIORITY_WEIGHT = { High: 3, Medium: 2, Low: 1 };
   var OVERTIME_DAILY_MINUTES = 8 * 60;
   var GANTT_DAY_WIDTH = 36;
-  var GANTT_LABEL_WIDTH = 232;
+  var GANTT_LABEL_WIDTH = 300;
 
   var PRIORITY_META = {
     High:   { badge: 'bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25', dot: 'bg-rose-500', bar: 'bg-rose-400', barLight: 'bg-rose-100 dark:bg-rose-500/10', border: 'border-l-rose-500' },
@@ -1258,19 +1258,24 @@
   });
 
   var checklistLinkEditIndex = null;
+  var checklistTextEditIndex = null;
 
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
     el.innerHTML = currentChecklist.length
       ? currentChecklist.map(function (item, i) {
           var editingLink = checklistLinkEditIndex === i;
+          var editingText = checklistTextEditIndex === i;
           return '<div class="rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50">' +
             '<div class="flex items-center gap-2 px-2 py-1.5">' +
               '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="checklist-toggle w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500/40 shrink-0">' +
               '<div class="flex-1 min-w-0">' +
-                '<span class="block text-sm ' + (item.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200') + '">' + escapeHtml(item.text) + '</span>' +
+                (editingText
+                  ? '<input type="text" class="checklist-text-input w-full text-sm rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" maxlength="300" value="' + escapeHtml(item.text) + '">'
+                  : '<span class="block text-sm ' + (item.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200') + '">' + escapeHtml(item.text) + '</span>') +
                 (item.link && !editingLink ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-brand-600 dark:text-brand-400 truncate hover:underline">' + escapeHtml(item.link) + '</a>' : '') +
               '</div>' +
+              '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400" data-checklist-i="' + i + '" title="Rename item" aria-label="Rename item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-remove p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
@@ -1280,7 +1285,10 @@
           '</div>';
         }).join('')
       : '<p class="text-xs text-slate-400 dark:text-slate-500">No checklist items yet.</p>';
-    if (checklistLinkEditIndex !== null) {
+    if (checklistTextEditIndex !== null) {
+      var textInput = el.querySelector('.checklist-text-input');
+      if (textInput) { textInput.focus(); textInput.select(); }
+    } else if (checklistLinkEditIndex !== null) {
       var linkInput = el.querySelector('.checklist-link-input');
       if (linkInput) { linkInput.focus(); linkInput.select(); }
     }
@@ -1288,12 +1296,28 @@
 
   function commitChecklistLink(inputEl) {
     var i = parseInt(inputEl.dataset.checklistI, 10);
+    // Re-rendering below removes this (still-focused) input from the DOM, which makes the
+    // browser fire a synchronous blur/focusout on it -- without this guard, that reentrant
+    // event calls back into this same function on an already-detached input.
+    if (checklistLinkEditIndex !== i) return;
     var item = currentChecklist[i];
     if (item) {
       var value = inputEl.value.trim();
       item.link = value ? normalizeUrl(value) : '';
     }
     checklistLinkEditIndex = null;
+    renderChecklistEditor();
+  }
+
+  function commitChecklistText(inputEl) {
+    var i = parseInt(inputEl.dataset.checklistI, 10);
+    if (checklistTextEditIndex !== i) return;
+    var item = currentChecklist[i];
+    if (item) {
+      var value = inputEl.value.trim();
+      if (value) item.text = value;
+    }
+    checklistTextEditIndex = null;
     renderChecklistEditor();
   }
 
@@ -1309,8 +1333,16 @@
       });
       return;
     }
+    var editToggle = e.target.closest('.checklist-edit-toggle');
+    if (editToggle) {
+      checklistLinkEditIndex = null;
+      checklistTextEditIndex = parseInt(editToggle.dataset.checklistI, 10);
+      renderChecklistEditor();
+      return;
+    }
     var linkToggle = e.target.closest('.checklist-link-toggle');
     if (linkToggle) {
+      checklistTextEditIndex = null;
       checklistLinkEditIndex = parseInt(linkToggle.dataset.checklistI, 10);
       renderChecklistEditor();
       return;
@@ -1328,9 +1360,28 @@
       e.preventDefault();
       commitChecklistLink(e.target);
     }
+    if (e.key === 'Enter' && e.target.classList.contains('checklist-text-input')) {
+      e.preventDefault();
+      commitChecklistText(e.target);
+    }
+    if (e.key === 'Escape' && e.target.classList.contains('checklist-text-input')) {
+      // Without stopping this, Escape also bubbles to the modal's own Escape handler and
+      // closes the whole task modal instead of just cancelling the rename.
+      e.preventDefault();
+      e.stopPropagation();
+      checklistTextEditIndex = null;
+      renderChecklistEditor();
+    }
+    if (e.key === 'Escape' && e.target.classList.contains('checklist-link-input')) {
+      e.preventDefault();
+      e.stopPropagation();
+      checklistLinkEditIndex = null;
+      renderChecklistEditor();
+    }
   });
   document.getElementById('task-checklist-editor').addEventListener('focusout', function (e) {
     if (e.target.classList.contains('checklist-link-input')) commitChecklistLink(e.target);
+    if (e.target.classList.contains('checklist-text-input')) commitChecklistText(e.target);
   });
 
   function addChecklistItem() {
