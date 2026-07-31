@@ -537,7 +537,7 @@
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
     getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
-    query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator, runTransaction
+    query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   /* =========================================================
@@ -1152,12 +1152,6 @@
   var currentChecklist = [];
   var currentTimeEntries = [];
   var timeEntryEditIndex = null;
-  // Snapshots of checklist/timeEntries as of the moment the modal was opened, used to
-  // detect whether another team member changed either field in Firestore while this
-  // modal was open -- without this, saving always overwrites both arrays wholesale and
-  // silently discards anyone else's concurrent edits.
-  var checklistBaseline = '[]';
-  var timeEntriesBaseline = '[]';
   // Snapshot of the whole form as of modal-open time, used to detect unsaved edits so an
   // accidental backdrop click / Escape / Cancel doesn't silently discard in-progress work.
   var formBaseline = '{}';
@@ -1867,20 +1861,10 @@
     saveBtn.textContent = 'Saving…';
 
     var ref = doc(tasksCol, id);
-    var savePromise = isEditing
-      ? runTransaction(db, function (transaction) {
-          return transaction.get(ref).then(function (snap) {
-            var server = snap.exists() ? snap.data() : null;
-            if (server && JSON.stringify(server.checklist || []) !== checklistBaseline) {
-              throw new Error('CONFLICT: checklist');
-            }
-            if (server && JSON.stringify(server.timeEntries || []) !== timeEntriesBaseline) {
-              throw new Error('CONFLICT: time log');
-            }
-            transaction.set(ref, taskData, { merge: true });
-          });
-        })
-      : setDoc(ref, taskData, { merge: true });
+    // Last write wins: the whole board is meant to be edited live by anyone on the team, so
+    // a save here simply overwrites whatever is on the server, including checklist/time
+    // entries -- this trades away conflict protection for never blocking a save.
+    var savePromise = setDoc(ref, taskData, { merge: true });
 
     savePromise.then(function () {
       showToast(isEditing ? 'Task updated' : 'Task added', 'success');
@@ -1893,11 +1877,7 @@
       }
       closeTaskModal();
     }).catch(function (err) {
-      if (err.message && err.message.indexOf('CONFLICT:') === 0) {
-        showToast('Someone else updated the ' + err.message.slice(10) + ' while you had this open — reopen the task to see their changes, then re-apply yours.', 'error');
-      } else {
-        showToast('Could not save this task: ' + err.message, 'error');
-      }
+      showToast('Could not save this task: ' + err.message, 'error');
     }).finally(function () {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Task';
@@ -2174,6 +2154,7 @@
   ========================================================= */
   function taskCardHtml(t) {
     var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+    var isDone = t.status === 'Done';
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-slate-500 dark:text-slate-400');
@@ -2187,7 +2168,9 @@
     return (
       '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
-          '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
+          (isDone
+            ? '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25">Completed</span>'
+            : '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>') +
           '<div class="flex items-center gap-0.5">' +
             '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
