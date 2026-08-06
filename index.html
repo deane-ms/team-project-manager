@@ -396,7 +396,7 @@
 
     <!-- ============ PROJECTS VIEW (time rollup) ============ -->
     <section id="view-projects" data-view class="flex-1">
-      <div id="projects-grid" class="flex flex-col gap-3 max-w-3xl mx-auto"></div>
+      <div id="projects-grid"></div>
     </section>
 
     <!-- ============ ACTIVITY VIEW ============ -->
@@ -2849,10 +2849,18 @@
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No completed projects yet.</p>') +
     '</details>';
 
+    // Side by side rather than stacked -- Completed only ever grows (finished projects never
+    // come back), and with the two in one column that growth used to push Ongoing further
+    // down the page over time. As separate columns, each one's height is independent, so
+    // Ongoing -- the list people actually check day-to-day -- always starts at the same spot.
     container.innerHTML =
-      '<h3 class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">Ongoing (' + ongoing.length + ')</h3>' +
-      ongoingHtml +
-      completedHtml;
+      '<div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">' +
+        '<div>' +
+          '<h3 class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">Ongoing (' + ongoing.length + ')</h3>' +
+          ongoingHtml +
+        '</div>' +
+        '<div>' + completedHtml + '</div>' +
+      '</div>';
   }
 
   /* =========================================================
