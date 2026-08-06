@@ -535,10 +535,7 @@
       </div>
 
       <div id="task-comments-section" class="hidden pt-1 border-t border-zinc-100 dark:border-zinc-700">
-        <label class="flex items-center justify-between text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">
-          <span>Comments</span>
-          <span class="font-normal text-zinc-400 dark:text-zinc-500">Posted immediately — Cancel won't undo them</span>
-        </label>
+        <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">Comments</label>
         <div id="task-comments-log" class="flex flex-col gap-2 max-h-40 overflow-y-auto mb-2"></div>
         <div class="flex items-end gap-2">
           <div class="relative flex-1">
@@ -715,7 +712,7 @@
         .addView(view)
         .setOAuthToken(driveAccessToken)
         .setDeveloperKey(PICKER_API_KEY)
-        .setSize(Math.min(1200, window.innerWidth - 80), Math.min(800, window.innerHeight - 120))
+        .setSize(Math.min(1600, window.innerWidth - 40), Math.min(1000, window.innerHeight - 60))
         .setCallback(function (data) {
           if (data.action === google.picker.Action.PICKED) {
             var picked = data.docs[0];
@@ -805,7 +802,8 @@
     user: '<circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>',
     clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
     archive: '<polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>',
-    checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>'
+    checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>',
+    reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -1537,7 +1535,10 @@
             '<div class="flex items-center gap-1.5 mb-1">' +
               '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
               '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(c.date)) + '</span>' +
-              '<button type="button" class="comment-remove ml-auto p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<div class="ml-auto flex items-center gap-0.5">' +
+                '<button type="button" class="comment-reply p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Reply">' + svgIcon('reply', 'w-3 h-3') + '</button>' +
+                '<button type="button" class="comment-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '</div>' +
             '</div>' +
             '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(c.text) + '</p>' +
           '</div>';
@@ -2075,6 +2076,22 @@
   });
 
   document.getElementById('task-comments-log').addEventListener('click', function (e) {
+    var replyBtn = e.target.closest('.comment-reply');
+    if (replyBtn && editingTaskId) {
+      var replyTask = tasks.find(function (x) { return x.id === editingTaskId; });
+      var replyIdx = parseInt(replyBtn.dataset.i, 10);
+      var replyComment = replyTask && (replyTask.comments || [])[replyIdx];
+      var commentInput = document.getElementById('task-comment-input');
+      if (replyComment && replyComment.author) {
+        var mentionPrefix = '@' + replyComment.author + ' ';
+        // Reusing an already-typed mention rather than stacking another copy of it,
+        // in case Reply gets clicked more than once before the comment is sent.
+        if (commentInput.value.indexOf(mentionPrefix) !== 0) commentInput.value = mentionPrefix + commentInput.value;
+      }
+      commentInput.focus();
+      commentInput.setSelectionRange(commentInput.value.length, commentInput.value.length);
+      return;
+    }
     var btn = e.target.closest('.comment-remove');
     if (!btn || !editingTaskId) return;
     var t = tasks.find(function (x) { return x.id === editingTaskId; });
@@ -2433,9 +2450,13 @@
 
     // Stretch day columns to fill the card's full width when there's room (rather than
     // leaving dead space after the last day), while still allowing horizontal scroll below
-    // GANTT_DAY_WIDTH once there are too many days to fit.
+    // GANTT_DAY_WIDTH once there are too many days to fit. Capped at the top end too --
+    // uncapped, a short date range (e.g. a handful of near-term tasks) stretched every day
+    // column to fill the whole card, so a 1-day task's bar could balloon out to hundreds of
+    // pixels wide and look like an oversized solid block rather than a normal task bar.
+    var GANTT_MAX_DAY_WIDTH = 120;
     var availableWidth = wrap.parentElement.clientWidth - GANTT_LABEL_WIDTH;
-    var dayWidth = Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays));
+    var dayWidth = Math.min(GANTT_MAX_DAY_WIDTH, Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays)));
 
     var html = '';
     html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
