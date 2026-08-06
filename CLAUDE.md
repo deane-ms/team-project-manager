@@ -50,7 +50,10 @@ to bottom:
 
 1. **Firebase setup** — `firebaseConfig`/emulator switch, `isAllowedEmail` domain gate.
 2. **Notifications** — `parseMentions`/`notifyOnComment`: comments create `notifications` docs for
-   the assignee and any `@Name`-mentioned teammates.
+   the assignee and any `@Name`-mentioned teammates. The notification bell shows read/unread state
+   visually (dot + bold vs. muted text). The `suggestions` tab (comment/reply on a
+   feature-request board, not tied to a task) follows the same embedded-array reply model as task
+   comments — see Firestore data model below.
 3. **Drive picker integration** — lazy-loads the Google Picker API (`ensureGapiLoaded`) so users
    can attach a Drive folder to a task/project without guessing folder names.
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
@@ -61,10 +64,22 @@ to bottom:
    what `onSnapshot` naturally re-renders.
 7. **View renderers** — one function per view: `renderBoard` (kanban + drag-and-drop), `renderGantt`,
    `renderCalendar`, `renderPeople`, `renderProjects`, `renderActivityFeed`, `renderArchived`,
-   `renderFocus` ("Focus of the Day"). `setView`/`renderCurrentSecondaryView` switch between them;
-   `renderAll` re-runs the relevant renderer(s) after any data change.
-8. **Live listeners** — `startListeners`/`stopListeners` wire up three `onSnapshot` subscriptions
-   (`tasks`, `activity`, and a per-user `notifications` query), gated by `onAuthStateChanged`.
+   `renderFocus` ("Focus of the Day"), `renderSuggestions`. `setView`/`renderCurrentSecondaryView`
+   switch between them; `renderAll` re-runs the relevant renderer(s) after any data change.
+   - `renderGantt`: day-column width is capped (`GANTT_MAX_DAY_WIDTH`) so a short date range doesn't
+     stretch into oversized solid-color bars; the sticky Task label column needs a higher `z-index`
+     than the today-line and day-grid content or bars paint over it (they're normal-flow siblings
+     with no explicit z-index, so DOM order wins by default); the "scroll to keep today in view"
+     math has to subtract the label column's width from the viewport before positioning, or it
+     lands the target under the sticky column on narrow cards.
+   - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
+     (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
+     each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
+     billable time.
+   - Checklist items support drag-to-reorder (native HTML5 DnD) in `renderChecklistEditor`.
+8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
+   (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
+   `onAuthStateChanged`.
 9. **Version-poll auto-reload** — see Deploying above.
 
 ### State model
@@ -87,6 +102,18 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 - **`notifications`** — per-recipient; unlike the other two collections this one *does* restrict
   read/update/delete to the addressed recipient (matched against `request.auth.token.name` or
   `.email`, since `recipient` is stored as a display name — see comments in `firestore.rules`).
+  Queried with `where("recipient", "==", ...)` only, sorted client-side — deliberately no
+  `orderBy` alongside the `where`, to avoid needing a composite index for a query this simple.
+- **`suggestions`** — one doc per suggestion, with replies as an embedded array
+  (`{text, author, date}` objects, updated via full-array-rewrite on `updateDoc`) rather than a
+  subcollection. Shared read/write like `tasks`.
+
+Any *new* top-level collection needs both a `firestore.rules` block and, if it's ever queried with
+`where` + `orderBy` together, an entry in `firestore.indexes.json` — and neither deploys with the
+site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes require a separate
+`firebase deploy` (or pasting the rules into the Firebase Console) as a one-time manual step per
+change, or every read/write against the new collection fails with "Missing or insufficient
+permissions" even though the code and the deployed page are otherwise correct.
 
 ### Auth
 
