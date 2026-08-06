@@ -744,6 +744,37 @@
     });
   }
 
+  var COMMENT_URL_RE = /(https?:\/\/[^\s<>"']+)/gi;
+
+  // Escapes comment text, wraps any "@Name" it contains in a brand-colored highlight, and turns
+  // any http(s) URL into a clickable link -- so tags read as tags and links read as links
+  // instead of both sitting there as plain text. Splits on URLs first and only mention-
+  // highlights the non-URL segments, rather than running both passes over the whole string one
+  // after another, so a URL that happens to contain "@Name"-shaped text (a query string, a path
+  // segment) can't get a stray <span> spliced into its href.
+  function enrichCommentText(text) {
+    var names = uniqueValues('assignee').slice().sort(function (a, b) { return b.length - a.length; });
+    var mentionRe = names.length
+      ? new RegExp('@(?:' + names.map(function (name) { return escapeHtml(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')', 'gi')
+      : null;
+    return String(text || '').split(COMMENT_URL_RE).map(function (segment, i) {
+      if (i % 2 === 1) {
+        // Odd indices are the captured URLs (String.split keeps capture groups in the result).
+        // Trailing sentence punctuation ("check this out: https://x.com.") shouldn't become
+        // part of the link.
+        var trailingMatch = segment.match(/[)\]"'.,;:!?]+$/);
+        var trailing = trailingMatch ? trailingMatch[0] : '';
+        var url = trailing ? segment.slice(0, -trailing.length) : segment;
+        var safeUrl = escapeHtml(url);
+        return '<a class="text-brand-600 dark:text-brand-400 underline break-words" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + safeUrl + '</a>' + escapeHtml(trailing);
+      }
+      var escaped = escapeHtml(segment);
+      return mentionRe ? escaped.replace(mentionRe, function (match) {
+        return '<span class="text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-500/10 rounded px-1 font-semibold">' + match + '</span>';
+      }) : escaped;
+    }).join('');
+  }
+
   // Notifies a task's new assignee on creation or reassignment -- separate from
   // notifyOnComment since assigning a task doesn't necessarily come with a comment.
   function notifyAssignment(task, assigneeName) {
@@ -1710,7 +1741,7 @@
                 '<button type="button" class="comment-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
               '</div>' +
             '</div>' +
-            '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(c.text) + '</p>' +
+            '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + enrichCommentText(c.text) + '</p>' +
           '</div>';
         }).join('')
       : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet.</p>';
@@ -3822,7 +3853,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-06T09:29:10Z";
+  var CURRENT_BUILD_VERSION = "2026-08-06T09:44:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
