@@ -2493,7 +2493,15 @@
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
 
-      html += '<div class="sticky left-0 z-0 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+      // z-10 (not the z-0 this used to be) -- the day-area bars are unpositioned-for-z-index
+      // siblings that come later in the DOM, so at equal stacking level they paint *on top*
+      // of this sticky column, not behind it. Whenever a task's bar happened to land near
+      // wherever the grid was scrolled to (including the "keep today in view" auto-scroll),
+      // that bar rendered over this column's task-name text instead of being hidden behind
+      // its opaque background the way a frozen column is supposed to behave. z-10 matches the
+      // month/day header tier -- safe since this column and those headers never spatially
+      // overlap except at the corner cell, which already wins at z-20.
+      html += '<div class="sticky left-0 z-10 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
           '<p class="text-sm font-semibold text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
@@ -3313,9 +3321,17 @@
     var list = document.getElementById('notification-list');
     list.innerHTML = myNotifications.length
       ? myNotifications.map(function (n) {
-          return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 ' + (n.read ? '' : 'bg-brand-50/50 dark:bg-brand-500/5') + '">' +
-            '<p class="text-xs text-zinc-700 dark:text-zinc-200"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
-            '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
+          var isUnread = !n.read;
+          // Unread got a background tint before, which is too subtle to read as "this one
+          // needs attention" at a glance -- add an explicit dot (a transparent one on read
+          // items, to keep every row's text aligned to the same left edge) plus bolder,
+          // brighter text for unread vs muted grey for read.
+          return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
+            '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
+            '<div class="min-w-0 flex-1">' +
+              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
+              '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
+            '</div>' +
           '</button>';
         }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">No notifications yet.</p>';
