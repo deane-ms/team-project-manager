@@ -84,6 +84,9 @@
   .task-card.dragging { opacity: 0.4; }
   .col-drop-target { background-color: rgba(99, 102, 241, 0.06); outline: 2px dashed #a5b4fc; outline-offset: -4px; }
   .dark .col-drop-target { background-color: rgba(99, 102, 241, 0.1); outline-color: #4f46e5; }
+  .checklist-item-row.dragging { opacity: 0.4; }
+  .checklist-item-row.drag-over { outline: 2px dashed #a5b4fc; outline-offset: -2px; }
+  .dark .checklist-item-row.drag-over { outline-color: #4f46e5; }
 
   .modal-backdrop { background: rgba(24, 24, 27,0.55); backdrop-filter: blur(2px); }
   .dark .modal-backdrop { background: rgba(9, 9, 11, 0.75); }
@@ -347,6 +350,10 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>Medium</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
+            <button type="button" id="gantt-progress-toggle" title="Show/hide checklist progress on the bars" class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
+              <span>Progress</span>
+            </button>
           </div>
         </div>
         <div id="gantt-wrap"></div>
@@ -381,7 +388,7 @@
 
     <!-- ============ PROJECTS VIEW (time rollup) ============ -->
     <section id="view-projects" data-view class="flex-1">
-      <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      <div id="projects-grid" class="flex flex-col gap-3 max-w-3xl mx-auto"></div>
     </section>
 
     <!-- ============ ACTIVITY VIEW ============ -->
@@ -701,10 +708,14 @@
         .setSelectFolderEnabled(true)
         .setEnableDrives(true)
         .setParent(ROOT_FOLDER_ID);
+      // Default picker dialog is a fairly small fixed size -- size it off the viewport
+      // instead (capped so it doesn't blow out on an ultra-wide monitor) so there's more
+      // room to see folder names when browsing a deep Drive tree.
       new google.picker.PickerBuilder()
         .addView(view)
         .setOAuthToken(driveAccessToken)
         .setDeveloperKey(PICKER_API_KEY)
+        .setSize(Math.min(1200, window.innerWidth - 80), Math.min(800, window.innerHeight - 120))
         .setCallback(function (data) {
           if (data.action === google.picker.Action.PICKED) {
             var picked = data.docs[0];
@@ -741,6 +752,10 @@
   var OVERTIME_DAILY_MINUTES = 8 * 60;
   var GANTT_DAY_WIDTH = 36;
   var GANTT_LABEL_WIDTH = 300;
+  var GANTT_PROGRESS_KEY = 'flowboard_gantt_progress';
+  var ganttShowProgress = (function () {
+    try { return localStorage.getItem(GANTT_PROGRESS_KEY) !== 'off'; } catch (e) { return true; }
+  })();
 
   var PRIORITY_META = {
     High:   { badge: 'bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25', dot: 'bg-rose-500', bar: 'bg-rose-400', barLight: 'bg-rose-100 dark:bg-rose-500/10', border: 'border-l-rose-500' },
@@ -901,6 +916,10 @@
 
   function taskBillableMinutes(task) {
     return (task.timeEntries || []).filter(function (e) { return e.billable; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+  }
+
+  function taskOvertimeMinutes(task) {
+    return (task.timeEntries || []).filter(function (e) { return e.overtime; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
   }
 
   function personMinutesLoggedOnDate(personName, dateStr, excludeTaskId) {
@@ -1323,6 +1342,7 @@
 
   var checklistLinkEditIndex = null;
   var checklistTextEditIndex = null;
+  var draggedChecklistIndex = null;
 
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
@@ -1330,8 +1350,9 @@
       ? currentChecklist.map(function (item, i) {
           var editingLink = checklistLinkEditIndex === i;
           var editingText = checklistTextEditIndex === i;
-          return '<div class="rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
+          return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50" data-checklist-i="' + i + '">' +
             '<div class="flex items-center gap-2 px-2 py-1.5">' +
+              '<span draggable="true" data-checklist-drag-handle data-checklist-i="' + i + '" title="Drag to reorder" aria-label="Drag to reorder" class="hidden sm:flex shrink-0 w-4 h-4 items-center justify-center text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
               '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="brand-checkbox checklist-toggle w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 shrink-0 cursor-pointer">' +
               '<div class="flex-1 min-w-0">' +
                 (editingText
@@ -1448,6 +1469,51 @@
     if (e.target.classList.contains('checklist-text-input')) commitChecklistText(e.target);
   });
 
+  // Reordering: only the grip handle is draggable (not the whole row), so grabbing text or
+  // clicking a button never starts a drag. dragstart records which item is being dragged;
+  // dragover/drop are read off whichever row the pointer is currently over.
+  document.getElementById('task-checklist-editor').addEventListener('dragstart', function (e) {
+    var handle = e.target.closest('[data-checklist-drag-handle]');
+    if (!handle) { e.preventDefault(); return; }
+    draggedChecklistIndex = parseInt(handle.dataset.checklistI, 10);
+    var row = handle.closest('.checklist-item-row');
+    if (row) row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  document.getElementById('task-checklist-editor').addEventListener('dragend', function (e) {
+    var row = e.target.closest('.checklist-item-row');
+    if (row) row.classList.remove('dragging');
+    document.querySelectorAll('#task-checklist-editor .checklist-item-row.drag-over').forEach(function (r) { r.classList.remove('drag-over'); });
+    draggedChecklistIndex = null;
+  });
+  document.getElementById('task-checklist-editor').addEventListener('dragover', function (e) {
+    if (draggedChecklistIndex === null) return;
+    var row = e.target.closest('.checklist-item-row');
+    if (!row) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('#task-checklist-editor .checklist-item-row.drag-over').forEach(function (r) { if (r !== row) r.classList.remove('drag-over'); });
+    row.classList.add('drag-over');
+  });
+  document.getElementById('task-checklist-editor').addEventListener('drop', function (e) {
+    if (draggedChecklistIndex === null) return;
+    var row = e.target.closest('.checklist-item-row');
+    if (!row) return;
+    e.preventDefault();
+    var targetIndex = parseInt(row.dataset.checklistI, 10);
+    var fromIndex = draggedChecklistIndex;
+    draggedChecklistIndex = null;
+    if (targetIndex === fromIndex) { row.classList.remove('drag-over'); return; }
+    var moved = currentChecklist.splice(fromIndex, 1)[0];
+    currentChecklist.splice(targetIndex, 0, moved);
+    // Editing-state indices point at array positions that just shifted -- rather than
+    // remapping them, close any open rename/link editor so the reorder can't leave it
+    // pointed at the wrong item.
+    checklistTextEditIndex = null;
+    checklistLinkEditIndex = null;
+    renderChecklistEditor();
+  });
+
   function addChecklistItem() {
     var input = document.getElementById('task-checklist-input');
     var text = input.value.trim();
@@ -1503,9 +1569,19 @@
       : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No time logged yet.</p>';
     var totalMinutes = list.reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
     var billableMinutes = list.filter(function (e) { return e.billable; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
-    totalEl.textContent = totalMinutes
-      ? formatDuration(totalMinutes) + ' logged' + (billableMinutes ? ' (' + formatDuration(billableMinutes) + ' billable)' : '')
-      : '';
+    var overtimeMinutes = list.filter(function (e) { return e.overtime; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+    if (!totalMinutes) {
+      totalEl.innerHTML = '';
+    } else {
+      // Separate badges (matching the per-entry Overtime/Billable badges above) rather than
+      // folding overtime into the same parenthetical as billable -- they're independent
+      // classifications of the same minutes, and burying overtime inside billable made it
+      // easy to miss when scanning the total.
+      var badges = '';
+      if (overtimeMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">' + formatDuration(overtimeMinutes) + ' overtime</span>';
+      if (billableMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">' + formatDuration(billableMinutes) + ' billable</span>';
+      totalEl.innerHTML = formatDuration(totalMinutes) + ' logged' + badges;
+    }
   }
 
   function adjustTimeHours(delta) {
@@ -2109,6 +2185,16 @@
     });
   }
 
+  function archiveTask(id) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    updateDoc(doc(tasksCol, id), { archivedAt: new Date().toISOString() }).then(function () {
+      showToast('Task archived', 'success');
+      logActivity('task_archived', 'Archived "' + (t ? t.name : id) + '"');
+    }).catch(function (err) {
+      showToast('Could not archive task: ' + err.message, 'error');
+    });
+  }
+
   function unarchiveTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
     updateDoc(doc(tasksCol, id), { archivedAt: null }).then(function () {
@@ -2220,6 +2306,7 @@
           '<div class="flex items-center gap-0.5">' +
             '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+            (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
             '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
@@ -2395,16 +2482,23 @@
 
       var barLeft = daysBetween(rangeStart, parseDate(t.startDate)) * dayWidth;
       var barWidth = (daysBetween(parseDate(t.startDate), parseDate(t.deadline)) + 1) * dayWidth - 6;
-      var fillPct = checklistProgressPct(t);
-      if (fillPct === null) fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
+      var checklistPct = checklistProgressPct(t);
+      var showChecklistProgress = ganttShowProgress && checklistPct !== null;
+      var fillPct = showChecklistProgress ? checklistPct : { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
+      var checklistDoneCount = showChecklistProgress ? (t.checklist || []).filter(function (i) { return i.done; }).length : 0;
 
       html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
-      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
+      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (showChecklistProgress ? ' · ' + checklistDoneCount + '/' + t.checklist.length + ' checklist items' : '')) + '" ' +
         'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
         'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
           '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
           '</div>' +
           '<span class="absolute inset-0 flex items-center px-2 text-xs font-medium text-zinc-700 dark:text-zinc-100 truncate pointer-events-none">' + escapeHtml(t.name) + '</span>' +
+          // Checklist-derived fill (above) already reflects progress as the bar's fill width,
+          // but that's subtle at a glance -- the count makes it legible without hovering.
+          // Only shown for tasks that actually have a checklist, and only while the
+          // "Progress" toggle (#gantt-progress-toggle, below) is expanded.
+          (showChecklistProgress ? '<span class="absolute bottom-0 right-1 text-[9px] font-bold text-zinc-600/80 dark:text-zinc-100/80 pointer-events-none">' + checklistDoneCount + '/' + t.checklist.length + '</span>' : '') +
           (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
       '</button>';
       html += '</div>';
@@ -2416,7 +2510,34 @@
     html += '</div>';
 
     wrap.innerHTML = '<div class="overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg" style="max-height:600px;">' + html + '</div>';
+
+    // Rebuilding innerHTML always resets scrollLeft to 0 (the range start), which can leave
+    // "today" scrolled out of view on any range that extends more than a screen-width of
+    // days into the future. Re-center it every render instead of leaving that to chance.
+    var scrollWrap = wrap.firstElementChild;
+    if (scrollWrap) {
+      var target = GANTT_LABEL_WIDTH + todayIndex * dayWidth - scrollWrap.clientWidth * 0.3;
+      scrollWrap.scrollLeft = Math.max(0, target);
+    }
   }
+
+  function syncGanttProgressToggle() {
+    var btn = document.getElementById('gantt-progress-toggle');
+    if (!btn) return;
+    btn.classList.toggle('bg-brand-50', ganttShowProgress);
+    btn.classList.toggle('dark:bg-brand-500/10', ganttShowProgress);
+    btn.classList.toggle('border-brand-200', ganttShowProgress);
+    btn.classList.toggle('dark:border-brand-500/30', ganttShowProgress);
+    btn.classList.toggle('text-brand-700', ganttShowProgress);
+    btn.classList.toggle('dark:text-brand-400', ganttShowProgress);
+  }
+
+  document.getElementById('gantt-progress-toggle').addEventListener('click', function () {
+    ganttShowProgress = !ganttShowProgress;
+    try { localStorage.setItem(GANTT_PROGRESS_KEY, ganttShowProgress ? 'on' : 'off'); } catch (e) { /* ignore */ }
+    syncGanttProgressToggle();
+    if (currentView === 'gantt') renderGantt();
+  });
 
   /* =========================================================
      RENDER: CALENDAR -- a plain read-only month grid of deadlines.
@@ -2596,9 +2717,10 @@
       var mine = tasks.filter(function (t) { return t.project === name; });
       var totalMinutes = mine.reduce(function (sum, t) { return sum + taskTimeMinutes(t); }, 0);
       var billableMinutes = mine.reduce(function (sum, t) { return sum + taskBillableMinutes(t); }, 0);
+      var overtimeMinutes = mine.reduce(function (sum, t) { return sum + taskOvertimeMinutes(t); }, 0);
       var activeCount = mine.filter(function (t) { return !t.archivedAt; }).length;
       var rows = mine.slice().sort(function (a, b) { return taskTimeMinutes(b) - taskTimeMinutes(a); });
-      return { name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes, activeCount: activeCount };
+      return { name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes, overtimeMinutes: overtimeMinutes, activeCount: activeCount };
     });
 
     summaries.sort(function (a, b) { return b.totalMinutes - a.totalMinutes; });
@@ -2609,6 +2731,7 @@
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No tasks yet.</p>';
 
       var badges = '';
+      if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
       if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
       return (
@@ -2636,7 +2759,7 @@
     task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash',
     task_moved: 'arrowRight', task_comment: 'message',
     board_imported: 'upload', board_seeded: 'download',
-    board_archived: 'download', task_unarchived: 'upload'
+    board_archived: 'download', task_archived: 'download', task_unarchived: 'upload'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -2647,6 +2770,7 @@
     board_imported: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     board_seeded: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     board_archived: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
+    task_archived: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     task_unarchived: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400'
   };
 
@@ -2802,10 +2926,22 @@
     var delBtn = e.target.closest('[data-delete-task]');
     var driveBtn = e.target.closest('[data-drive-link]');
     var archiveBtn = e.target.closest('[data-archive-completed]');
+    var archiveTaskBtn = e.target.closest('[data-archive-task]');
     var unarchiveBtn = e.target.closest('[data-unarchive-task]');
 
     if (archiveBtn) {
       handleArchiveCompletedClick(archiveBtn);
+      return;
+    }
+    if (archiveTaskBtn) {
+      var idAT = archiveTaskBtn.getAttribute('data-archive-task');
+      var tAT = tasks.find(function (x) { return x.id === idAT; });
+      openConfirm(
+        'Archive this task?',
+        '"' + (tAT ? tAT.name : 'This task') + '" will move to the Archived view, where you can restore it any time. Nothing is deleted.',
+        function () { archiveTask(idAT); },
+        { tone: 'question', confirmText: 'Archive', cancelText: 'Cancel' }
+      );
       return;
     }
     if (unarchiveBtn) {
@@ -3106,7 +3242,12 @@
         myNotifications = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
         renderNotificationBell();
       }, function (err) {
+        // A failed-precondition here almost always means the composite index this query
+        // needs (recipient asc, at desc -- see firestore.indexes.json) hasn't been deployed
+        // yet. Previously this only logged to the console, so notifications silently never
+        // loaded with no visible signal that anything was wrong.
         console.error('notifications listener error', err);
+        showToast('Notifications aren\'t loading: ' + err.message, 'error');
       });
     }
     unsubTasks = onSnapshot(tasksCol, function (snap) {
@@ -3274,6 +3415,7 @@
   ========================================================= */
   function init() {
     syncThemeToggleIcon();
+    syncGanttProgressToggle();
     setView('board');
     renderAll();
   }
