@@ -685,7 +685,11 @@
     var n = new Notification(title, {
       body: (notif.taskName ? notif.taskName + ': ' : '') + (notif.snippet || ''),
       icon: 'favicon.png',
-      tag: notif.id
+      tag: notif.id,
+      // Stays on screen until clicked (n.onclick below calls n.close()) instead of
+      // auto-dismissing after a few seconds -- Chrome/Edge honor this; Firefox/Safari
+      // silently ignore it and fall back to their own default timing.
+      requireInteraction: true
     });
     n.onclick = function () {
       window.focus();
@@ -3777,7 +3781,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-06T08:24:44Z";
+  var CURRENT_BUILD_VERSION = "2026-08-06T08:29:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
