@@ -2493,15 +2493,15 @@
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
 
-      // z-10 (not the z-0 this used to be) -- the day-area bars are unpositioned-for-z-index
-      // siblings that come later in the DOM, so at equal stacking level they paint *on top*
-      // of this sticky column, not behind it. Whenever a task's bar happened to land near
-      // wherever the grid was scrolled to (including the "keep today in view" auto-scroll),
-      // that bar rendered over this column's task-name text instead of being hidden behind
-      // its opaque background the way a frozen column is supposed to behave. z-10 matches the
-      // month/day header tier -- safe since this column and those headers never spatially
-      // overlap except at the corner cell, which already wins at z-20.
-      html += '<div class="sticky left-0 z-10 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+      // z-20, matching the corner cell -- this column and the corner cell are the same
+      // frozen pane conceptually, so they should share its topmost tier rather than sitting
+      // one rung below it. z-10 (tried first) beat the day-area bars but not the "today"
+      // vertical line, which is deliberately drawn at z-15 so it stays visible on top of
+      // every bar -- that same z-15 let it paint over this column too whenever it scrolled
+      // near the frozen edge. z-20 is unambiguously above both the line (15) and the
+      // unpositioned bars (auto/0), and still can't collide with the month/day headers
+      // (z-10), which occupy the header rows only and never overlap this per-task-row cell.
+      html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
           '<p class="text-sm font-semibold text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
