@@ -271,6 +271,9 @@
           <button data-view-btn="activity" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Activity
           </button>
+          <button data-view-btn="suggestions" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Suggestions
+          </button>
           <button data-view-btn="archived" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>Archived
           </button>
@@ -402,6 +405,20 @@
     <!-- ============ ACTIVITY VIEW ============ -->
     <section id="view-activity" data-view class="flex-1">
       <div id="activity-feed" class="max-w-2xl mx-auto flex flex-col gap-1.5"></div>
+    </section>
+
+    <!-- ============ SUGGESTIONS VIEW ============ -->
+    <section id="view-suggestions" data-view class="flex-1">
+      <div class="max-w-2xl mx-auto flex flex-col gap-4">
+        <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1.5">Suggest a change</label>
+          <div class="flex items-end gap-2">
+            <textarea id="suggestion-input" rows="2" maxlength="1000" placeholder="What would you like to see changed or added?" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+            <button type="button" id="suggestion-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Post</button>
+          </div>
+        </div>
+        <div id="suggestions-list" class="flex flex-col gap-3"></div>
+      </div>
     </section>
 
     <!-- ============ ARCHIVED VIEW ============ -->
@@ -652,6 +669,17 @@
   var notificationsCol = collection(db, "notifications");
   var unsubNotifications = null;
   var myNotifications = [];
+
+  /* =========================================================
+     SUGGESTIONS -- a lightweight team feedback board, separate from
+     tasks: post an idea, anyone can reply. Replies are stored as an
+     embedded array on the suggestion doc (same shape as task comments)
+     rather than a subcollection, so adding one is a single arrayUnion
+     write instead of a second collection + listener per suggestion.
+  ========================================================= */
+  var suggestionsCol = collection(db, "suggestions");
+  var unsubSuggestions = null;
+  var suggestions = [];
 
   function parseMentions(text) {
     var mentioned = [];
@@ -2931,6 +2959,134 @@
   }
 
   /* =========================================================
+     RENDER: SUGGESTIONS -- a team feedback board, separate from tasks.
+     Replies live as an embedded array on the suggestion doc (same
+     shape/rationale as task comments), newest suggestion first.
+  ========================================================= */
+  function suggestionCardHtml(s) {
+    var replies = s.replies || [];
+    var repliesHtml = replies.map(function (r, i) {
+      return '<div class="flex items-start gap-2">' +
+        '<span class="w-5 h-5 rounded-full ' + avatarColor(r.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">' + initials(r.author || '?') + '</span>' +
+        '<div class="min-w-0 flex-1 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500"><span class="font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(r.author || 'Unknown') + '</span> · ' + formatShortDate(localDateOf(r.date)) + '</p>' +
+          '<p class="text-sm text-zinc-700 dark:text-zinc-200 mt-0.5">' + escapeHtml(r.text) + '</p>' +
+        '</div>' +
+        '<button type="button" class="suggestion-reply-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-suggestion-id="' + s.id + '" data-i="' + i + '" aria-label="Remove reply">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+      '</div>';
+    }).join('');
+
+    return (
+      '<div class="suggestion-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">' +
+        '<div class="flex items-start gap-2.5">' +
+          '<span class="w-7 h-7 rounded-full ' + avatarColor(s.author || '') + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(s.author || '?') + '</span>' +
+          '<div class="min-w-0 flex-1">' +
+            '<p class="text-xs text-zinc-400 dark:text-zinc-500"><span class="font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(s.author || 'Unknown') + '</span> · ' + formatShortDate(localDateOf(s.date)) + '</p>' +
+            '<p class="text-sm text-zinc-800 dark:text-zinc-100 mt-0.5 whitespace-pre-wrap">' + escapeHtml(s.text) + '</p>' +
+          '</div>' +
+          '<button type="button" class="suggestion-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-suggestion-id="' + s.id + '" aria-label="Remove suggestion">' + svgIcon('x', 'w-3.5 h-3.5') + '</button>' +
+        '</div>' +
+        (repliesHtml ? '<div class="flex flex-col gap-2 mt-3 pl-9">' + repliesHtml + '</div>' : '') +
+        '<div class="flex items-center gap-2 mt-3 pl-9">' +
+          '<input type="text" class="suggestion-reply-input flex-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-suggestion-id="' + s.id + '" maxlength="500" placeholder="Reply…">' +
+          '<button type="button" class="suggestion-reply-add-btn shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700" data-suggestion-id="' + s.id + '">Reply</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderSuggestions() {
+    var container = document.getElementById('suggestions-list');
+    var list = suggestions.slice().sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+    container.innerHTML = list.length
+      ? list.map(suggestionCardHtml).join('')
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No suggestions yet — be the first to share an idea.</p>';
+  }
+
+  document.getElementById('suggestion-add-btn').addEventListener('click', function () {
+    var input = document.getElementById('suggestion-input');
+    var text = input.value.trim();
+    if (!text) return;
+    var user = auth.currentUser;
+    setDoc(doc(suggestionsCol), {
+      text: text,
+      author: user ? (user.displayName || user.email) : null,
+      date: new Date().toISOString(),
+      replies: []
+    }).then(function () {
+      input.value = '';
+    }).catch(function (err) {
+      showToast('Could not post suggestion: ' + err.message, 'error');
+    });
+  });
+
+  document.getElementById('suggestion-input').addEventListener('keydown', function (e) {
+    // Enter posts, Shift+Enter (or any other modifier) inserts a newline -- matches the
+    // task comment box's existing convention rather than inventing a different one here.
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('suggestion-add-btn').click();
+    }
+  });
+
+  function addSuggestionReply(suggestionId, inputEl) {
+    var text = inputEl.value.trim();
+    if (!text) return;
+    var user = auth.currentUser;
+    updateDoc(doc(suggestionsCol, suggestionId), {
+      replies: arrayUnion({ text: text, author: user ? (user.displayName || user.email) : null, date: new Date().toISOString() })
+    }).then(function () {
+      inputEl.value = '';
+    }).catch(function (err) {
+      showToast('Could not post reply: ' + err.message, 'error');
+    });
+  }
+
+  document.getElementById('suggestions-list').addEventListener('click', function (e) {
+    var replyBtn = e.target.closest('.suggestion-reply-add-btn');
+    if (replyBtn) {
+      var card = replyBtn.closest('.suggestion-card');
+      var input = card ? card.querySelector('.suggestion-reply-input') : null;
+      if (input) addSuggestionReply(replyBtn.getAttribute('data-suggestion-id'), input);
+      return;
+    }
+    var removeBtn = e.target.closest('.suggestion-remove');
+    if (removeBtn) {
+      var suggestionId = removeBtn.getAttribute('data-suggestion-id');
+      var suggestion = suggestions.find(function (s) { return s.id === suggestionId; });
+      var suggestionSnippet = suggestion && suggestion.text ? (suggestion.text.length > 60 ? suggestion.text.slice(0, 60) + '…' : suggestion.text) : 'This suggestion';
+      openConfirm('Remove this suggestion?', '"' + suggestionSnippet + '" (and any replies on it) will be removed for everyone. This cannot be undone.', function () {
+        deleteDoc(doc(suggestionsCol, suggestionId)).catch(function (err) {
+          showToast('Could not remove suggestion: ' + err.message, 'error');
+        });
+      });
+      return;
+    }
+    var replyRemoveBtn = e.target.closest('.suggestion-reply-remove');
+    if (replyRemoveBtn) {
+      var rSuggestionId = replyRemoveBtn.getAttribute('data-suggestion-id');
+      var rSuggestion = suggestions.find(function (s) { return s.id === rSuggestionId; });
+      if (!rSuggestion) return;
+      var idx = parseInt(replyRemoveBtn.dataset.i, 10);
+      var replyList = (rSuggestion.replies || []).slice();
+      if (idx < 0 || idx >= replyList.length) return;
+      openConfirm('Remove this reply?', 'This removes it for everyone. This cannot be undone.', function () {
+        replyList.splice(idx, 1);
+        updateDoc(doc(suggestionsCol, rSuggestionId), { replies: replyList }).catch(function (err) {
+          showToast('Could not remove reply: ' + err.message, 'error');
+        });
+      });
+    }
+  });
+
+  document.getElementById('suggestions-list').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.classList.contains('suggestion-reply-input')) {
+      e.preventDefault();
+      addSuggestionReply(e.target.getAttribute('data-suggestion-id'), e.target);
+    }
+  });
+
+  /* =========================================================
      RENDER: ARCHIVED
   ========================================================= */
   function renderArchived() {
@@ -2991,7 +3147,7 @@
   /* =========================================================
      VIEW SWITCH
   ========================================================= */
-  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', activity: 'Activity', archived: 'Archived' };
+  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived' };
 
   function setView(view) {
     currentView = view;
@@ -3098,6 +3254,7 @@
     if (currentView === 'people') renderPeople();
     if (currentView === 'projects') renderProjects();
     if (currentView === 'activity') renderActivityFeed();
+    if (currentView === 'suggestions') renderSuggestions();
     if (currentView === 'archived') renderArchived();
   }
 
@@ -3342,6 +3499,7 @@
     if (unsubTasks) { unsubTasks(); unsubTasks = null; }
     if (unsubActivity) { unsubActivity(); unsubActivity = null; }
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
+    if (unsubSuggestions) { unsubSuggestions(); unsubSuggestions = null; }
   }
 
   function startListeners() {
@@ -3382,6 +3540,12 @@
       if (currentView === 'activity') renderActivityFeed();
     }, function (err) {
       console.error('activity listener error', err);
+    });
+    unsubSuggestions = onSnapshot(suggestionsCol, function (snap) {
+      suggestions = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      if (currentView === 'suggestions') renderSuggestions();
+    }, function (err) {
+      showToast('Suggestions aren\'t loading: ' + err.message, 'error');
     });
   }
 

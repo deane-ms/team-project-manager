@@ -36,6 +36,13 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // Suggestions are a shared feedback board, same "whole team edits everything" model as
+    // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
+    // on the doc, not a subcollection, so there's nothing further to scope here).
+    match /suggestions/{suggestionId} {
+      allow read, write: if isMediashock();
+    }
+
     match /notifications/{notifId} {
       allow create: if isMediashock();
       allow read, update, delete: if isMediashock() && isNotificationRecipient(resource.data);
