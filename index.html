@@ -2421,6 +2421,111 @@
     });
   }
 
+  // Same batched-write shape as archiveCompletedTasks, scoped to one project -- used by the
+  // "mark project complete" deadline popup below. Re-filters to status === 'Done' at commit
+  // time (not just trusting the caller's earlier check) in case someone added a new, not-done
+  // task to this project in the few seconds the popup was open on screen.
+  function archiveProjectTasks(name) {
+    var toArchive = activeTasks().filter(function (t) { return t.project === name && t.status === 'Done'; });
+    if (!toArchive.length) return Promise.resolve(0);
+    var now = new Date().toISOString();
+    var chunks = [];
+    for (var i = 0; i < toArchive.length; i += 500) chunks.push(toArchive.slice(i, i + 500));
+    var chain = Promise.resolve();
+    chunks.forEach(function (chunk) {
+      chain = chain.then(function () {
+        var batch = writeBatch(db);
+        chunk.forEach(function (t) { batch.update(doc(tasksCol, t.id), { archivedAt: now }); });
+        return batch.commit();
+      });
+    });
+    return chain.then(function () {
+      logActivity('board_archived', 'Archived ' + toArchive.length + ' task' + (toArchive.length === 1 ? '' : 's') + ' from "' + name + '" (marked complete)');
+      return toArchive.length;
+    });
+  }
+
+  /* =========================================================
+     PROJECT DEADLINE POPUPS -- two nudges shown to a project's own
+     assignee(s), once per project per session:
+       1. deadline reached/passed + every active task is Done -> offer
+          to archive them all (moves the project into Completed).
+       2. deadline is today + not everything is done -> a reminder,
+          no action taken.
+     "The project's deadline" is the LATEST deadline among its active
+     (non-archived) tasks -- the point by which the whole project, not
+     just its next task, is meant to be done.
+  ========================================================= */
+  var projectPopupShown = {};
+  var projectPopupQueue = [];
+  var projectPopupShowing = false;
+
+  function advanceProjectPopupQueue() {
+    var next = projectPopupQueue.shift();
+    if (!next) { projectPopupShowing = false; return; }
+    projectPopupShowing = true;
+    next(advanceProjectPopupQueue);
+  }
+  function enqueueProjectPopup(fn) {
+    projectPopupQueue.push(fn);
+    if (!projectPopupShowing) advanceProjectPopupQueue();
+  }
+
+  function promptProjectReadyToComplete(name, projectTasks, deadline, done) {
+    openConfirm(
+      'Mark "' + name + '" complete?',
+      'Every task is done and the deadline (' + formatShortDate(deadline) + ') has passed. Archive all ' + projectTasks.length + ' task' + (projectTasks.length === 1 ? '' : 's') + ' to move this project into Completed? Nothing is deleted -- archived tasks can be restored any time.',
+      function () {
+        archiveProjectTasks(name).then(function (n) {
+          showToast('Archived ' + n + ' task' + (n === 1 ? '' : 's') + ' -- "' + name + '" moved to Completed', 'success');
+        }).catch(function (err) {
+          showToast('Could not archive project tasks: ' + err.message, 'error');
+        }).finally(done);
+      },
+      { tone: 'question', confirmText: 'Mark complete', cancelText: 'Not yet', onCancel: done }
+    );
+  }
+
+  function promptProjectDueToday(name, projectTasks, done) {
+    var remaining = projectTasks.filter(function (t) { return t.status !== 'Done'; }).length;
+    openConfirm(
+      '"' + name + '" is due today',
+      remaining + ' of ' + projectTasks.length + ' task' + (projectTasks.length === 1 ? '' : 's') + " still isn't done yet. Just a heads-up.",
+      done,
+      { tone: 'question', confirmText: 'Got it', cancelText: 'Dismiss', onCancel: done }
+    );
+  }
+
+  function checkProjectDeadlinePopups() {
+    // Never interrupt an open task edit or an already-open confirm -- the next tasks
+    // onSnapshot fire (a live shared board gets these often) will catch it once clear.
+    if (!taskModal.classList.contains('hidden') || !confirmModal.classList.contains('hidden')) return;
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    if (!myName) return;
+    var byProject = {};
+    activeTasks().forEach(function (t) {
+      if (!t.project) return;
+      (byProject[t.project] = byProject[t.project] || []).push(t);
+    });
+    Object.keys(byProject).sort().forEach(function (name) {
+      if (projectPopupShown[name]) return;
+      var projectTasks = byProject[name];
+      if (!projectTasks.some(function (t) { return t.assignee === myName; })) return;
+      var deadlines = projectTasks.map(function (t) { return t.deadline; }).filter(Boolean);
+      if (!deadlines.length) return;
+      var latestDeadline = deadlines.reduce(function (a, b) { return b > a ? b : a; });
+      var days = daysUntil(latestDeadline);
+      var allDone = projectTasks.every(function (t) { return t.status === 'Done'; });
+      if (days !== null && days <= 0 && allDone) {
+        projectPopupShown[name] = true;
+        enqueueProjectPopup(function (done) { promptProjectReadyToComplete(name, projectTasks, latestDeadline, done); });
+      } else if (days === 0 && !allDone) {
+        projectPopupShown[name] = true;
+        enqueueProjectPopup(function (done) { promptProjectDueToday(name, projectTasks, done); });
+      }
+    });
+  }
+
   function archiveTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
     updateDoc(doc(tasksCol, id), { archivedAt: new Date().toISOString() }).then(function () {
@@ -3734,6 +3839,7 @@
         }
       }
       renderAll();
+      checkProjectDeadlinePopups();
     }, function (err) {
       showToast('Live sync error: ' + err.message, 'error');
     });
@@ -3858,7 +3964,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-06T10:02:16Z";
+  var CURRENT_BUILD_VERSION = "2026-08-06T13:37:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

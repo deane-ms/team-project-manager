@@ -95,8 +95,23 @@ to bottom:
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
-     billable time.
+     billable time. A project is "Completed" purely by every one of its tasks having `archivedAt`
+     set (`activeCount === 0`), not by task `status` — a project can be all-`Done` and still show
+     as Ongoing until someone (or `checkProjectDeadlinePopups`, below) actually archives them.
    - Checklist items support drag-to-reorder (native HTML5 DnD) in `renderChecklistEditor`.
+   - `checkProjectDeadlinePopups()` (called after every `tasks` `onSnapshot`, guarded by
+     `projectPopupShown` so each qualifying project only prompts once per session) nudges a
+     project's own assignee(s) — anyone with at least one active task in it — around its
+     deadline, defined as the *latest* deadline among its active tasks (when the whole project
+     is meant to be done, not just its next task): if that date has arrived or passed and every
+     active task is `status === 'Done'`, `promptProjectReadyToComplete` offers to bulk-archive
+     them via `archiveProjectTasks` (same batched-write shape as the existing "Archive completed"
+     board action, scoped to one project); if it's due today and something isn't done yet,
+     `promptProjectDueToday` is a plain reminder, no action taken. Both reuse `openConfirm`
+     (tone `'question'`) and are serialized through a small queue (`enqueueProjectPopup`/
+     `advanceProjectPopupQueue`) so two qualifying projects in the same snapshot don't stomp each
+     other's modal state — and both defer entirely while the task modal or another confirm is
+     already open, rather than interrupting an edit in progress.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
