@@ -54,6 +54,21 @@ to bottom:
    visually (dot + bold vs. muted text). The `suggestions` tab (comment/reply on a
    feature-request board, not tied to a task) follows the same embedded-array reply model as task
    comments — see Firestore data model below.
+   - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
+     `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
+     `notifications` `onSnapshot` listener in `startListeners` for anything that arrives *after*
+     the listener attaches (`notifStreamStartedAt` guards against popping the whole existing
+     backlog on every page load). Tab-open-somewhere only — no service-worker push, no server.
+   - **Email**: a separate, out-of-band GitHub Actions workflow
+     (`.github/workflows/notify-email.yml`, script in `scripts/send-notification-emails.mjs`)
+     polls for `notifications` docs with `emailed: false` every ~10 minutes and sends mail via
+     Resend. It resolves a notification's `recipient` (a display name) to an email address via a
+     `users` directory collection, upserted client-side on every sign-in
+     (`upsertUserDirectory`, called from `onAuthStateChanged`) — so a teammate's email is only
+     resolvable once they've signed in at least once. Needs three GitHub repo secrets
+     (`FIREBASE_SERVICE_ACCOUNT`, `RESEND_API_KEY`, `EMAIL_FROM`); see the script's header comment
+     for what each does. This exists instead of a Cloud Function specifically to avoid requiring
+     the Blaze billing plan.
 3. **Drive picker integration** — lazy-loads the Google Picker API (`ensureGapiLoaded`) so users
    can attach a Drive folder to a task/project without guessing folder names.
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
@@ -107,13 +122,19 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 - **`suggestions`** — one doc per suggestion, with replies as an embedded array
   (`{text, author, date}` objects, updated via full-array-rewrite on `updateDoc`) rather than a
   subcollection. Shared read/write like `tasks`.
+- **`users`** — a name→email directory, one doc per uid, upserted by each user on sign-in
+  (`upsertUserDirectory`). Exists solely so the email-notification GitHub Action — which only has
+  Firestore access, not Google auth — can resolve a notification's `recipient` display name to an
+  address. Readable by the whole team; writable only by the account whose own uid it is.
 
 Any *new* top-level collection needs both a `firestore.rules` block and, if it's ever queried with
 `where` + `orderBy` together, an entry in `firestore.indexes.json` — and neither deploys with the
 site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes require a separate
 `firebase deploy` (or pasting the rules into the Firebase Console) as a one-time manual step per
 change, or every read/write against the new collection fails with "Missing or insufficient
-permissions" even though the code and the deployed page are otherwise correct.
+permissions" even though the code and the deployed page are otherwise correct. This applies to the
+new `users` collection above — its rule needs a manual rules deploy before the directory upsert
+(and therefore email notifications) will work.
 
 ### Auth
 

@@ -210,6 +210,10 @@
               <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
               <span id="theme-toggle-label">Switch to dark mode</span>
             </button>
+            <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+              <span id="desktop-notif-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
+              <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
+            </button>
             <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
             <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
               <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -667,8 +671,28 @@
      time they have the app open (or already open, since it's live).
   ========================================================= */
   var notificationsCol = collection(db, "notifications");
+  var usersCol = collection(db, "users");
   var unsubNotifications = null;
   var myNotifications = [];
+  var notifStreamStartedAt = 0;
+  var firedDesktopNotifIds = {};
+
+  function fireDesktopNotification(notif) {
+    if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
+    firedDesktopNotifIds[notif.id] = true;
+    var title = notif.type === 'mention' ? (notif.author + ' mentioned you') : (notif.author + ' commented');
+    var n = new Notification(title, {
+      body: (notif.taskName ? notif.taskName + ': ' : '') + (notif.snippet || ''),
+      icon: 'favicon.png',
+      tag: notif.id
+    });
+    n.onclick = function () {
+      window.focus();
+      var t = notif.taskId ? tasks.find(function (x) { return x.id === notif.taskId; }) : null;
+      if (t) openTaskModal(t);
+      n.close();
+    };
+  }
 
   /* =========================================================
      SUGGESTIONS -- a lightweight team feedback board, separate from
@@ -680,6 +704,18 @@
   var suggestionsCol = collection(db, "suggestions");
   var unsubSuggestions = null;
   var suggestions = [];
+
+  // Keeps a name->email directory so the email-notification GitHub Action (which only sees
+  // Firestore, not Google auth) can resolve a `recipient` display name to an address --
+  // notifications themselves only ever store the display name, matching how mentions are
+  // parsed. Written on every sign-in so the directory self-heals if a name changes.
+  function upsertUserDirectory(user) {
+    setDoc(doc(usersCol, user.uid), {
+      name: user.displayName || user.email,
+      email: user.email,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).catch(function (e) { console.error('Failed to update user directory', e); });
+  }
 
   function parseMentions(text) {
     var mentioned = [];
@@ -707,7 +743,8 @@
         author: myName || 'unknown',
         snippet: text.slice(0, 140),
         at: new Date().toISOString(),
-        read: false
+        read: false,
+        emailed: false
       }).catch(function (e) { console.error('Failed to notify comment', e); });
     });
   }
@@ -839,7 +876,9 @@
     clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
     archive: '<polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>',
     checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>',
-    reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>'
+    reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
+    bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>'
   };
 
   function svgIcon(name, cls) {
@@ -1063,6 +1102,62 @@
 
   document.getElementById('btn-theme-toggle').addEventListener('click', function () {
     toggleTheme();
+    document.getElementById('user-menu-panel').classList.add('hidden');
+  });
+
+  /* =========================================================
+     DESKTOP NOTIFICATIONS -- an opt-in local preference (per browser,
+     same storage pattern as THEME_KEY) that pops a native OS
+     notification when a new @mention/comment notification arrives
+     while a tab is open (see the notifications onSnapshot listener in
+     startListeners). There is no server push here -- this only fires
+     while some tab on this browser is open, even if backgrounded.
+  ========================================================= */
+  var DESKTOP_NOTIF_KEY = 'flowboard_desktop_notif';
+
+  function desktopNotifWanted() {
+    try { return localStorage.getItem(DESKTOP_NOTIF_KEY) === 'on'; } catch (e) { return false; }
+  }
+
+  function desktopNotifActive() {
+    return desktopNotifWanted() && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  }
+
+  function syncDesktopNotifToggleIcon() {
+    var iconEl = document.getElementById('desktop-notif-toggle-icon');
+    var labelEl = document.getElementById('desktop-notif-toggle-label');
+    if (!iconEl || !labelEl) return;
+    var on = desktopNotifActive();
+    iconEl.innerHTML = svgIcon(on ? 'bell' : 'bellOff', 'w-4 h-4');
+    labelEl.textContent = 'Desktop notifications: ' + (on ? 'On' : 'Off');
+  }
+
+  function toggleDesktopNotif() {
+    if (typeof Notification === 'undefined') {
+      showToast('This browser doesn\'t support desktop notifications', 'error');
+      return;
+    }
+    if (desktopNotifActive()) {
+      try { localStorage.setItem(DESKTOP_NOTIF_KEY, 'off'); } catch (e) { /* ignore */ }
+      syncDesktopNotifToggleIcon();
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      showToast('Notifications are blocked for this site -- re-enable them in your browser\'s site settings', 'error');
+      return;
+    }
+    Notification.requestPermission().then(function (perm) {
+      if (perm === 'granted') {
+        try { localStorage.setItem(DESKTOP_NOTIF_KEY, 'on'); } catch (e) { /* ignore */ }
+      } else {
+        showToast('Desktop notifications need permission to be allowed', 'info');
+      }
+      syncDesktopNotifToggleIcon();
+    });
+  }
+
+  document.getElementById('btn-desktop-notif-toggle').addEventListener('click', function () {
+    toggleDesktopNotif();
     document.getElementById('user-menu-panel').classList.add('hidden');
   });
 
@@ -3506,9 +3601,20 @@
     if (unsubTasks) return;
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     if (myName) {
+      notifStreamStartedAt = Date.now();
       var myNotificationsQuery = query(notificationsCol, where('recipient', '==', myName), orderBy('at', 'desc'), limit(30));
       unsubNotifications = onSnapshot(myNotificationsQuery, function (snap) {
         myNotifications = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        // Only pop a desktop notification for docs that showed up after this listener
+        // attached -- otherwise the initial snapshot of pre-existing unread notifications
+        // would fire a burst of popups every time the app is opened.
+        snap.docChanges().forEach(function (change) {
+          if (change.type !== 'added') return;
+          var data = Object.assign({ id: change.doc.id }, change.doc.data());
+          if (data.read) return;
+          if (new Date(data.at).getTime() < notifStreamStartedAt) return;
+          fireDesktopNotification(data);
+        });
         renderNotificationBell();
       }, function (err) {
         // A failed-precondition here almost always means the composite index this query
@@ -3643,6 +3749,7 @@
     var userChipAvatar = document.getElementById('user-chip-avatar');
     userChipAvatar.innerHTML = svgIcon('user', 'w-3.5 h-3.5');
     userChipAvatar.className = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-300';
+    upsertUserDirectory(user);
     startListeners();
   });
 
@@ -3698,6 +3805,7 @@
   ========================================================= */
   function init() {
     syncThemeToggleIcon();
+    syncDesktopNotifToggleIcon();
     syncGanttProgressToggle();
     setView('board');
     renderAll();

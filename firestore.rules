@@ -47,5 +47,15 @@ service cloud.firestore {
       allow create: if isMediashock();
       allow read, update, delete: if isMediashock() && isNotificationRecipient(resource.data);
     }
+
+    // A name->email directory, upserted by each user on sign-in (see upsertUserDirectory in
+    // index.html) so the email-notification GitHub Action can resolve a notification's
+    // `recipient` display name to an address -- it only has Firestore access, not Google
+    // auth. Readable by the whole team (harmless, same info as a Google Workspace directory)
+    // but writable only by the account whose own uid it is.
+    match /users/{uid} {
+      allow read: if isMediashock();
+      allow write: if isMediashock() && request.auth.uid == uid;
+    }
   }
 }
