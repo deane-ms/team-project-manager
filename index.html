@@ -2728,6 +2728,7 @@
   function projectTaskRowHtml(t) {
     var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var minutes = taskTimeMinutes(t);
+    var overtimeMinutes = taskOvertimeMinutes(t);
     return (
       '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition w-full">' +
         '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
@@ -2735,7 +2736,10 @@
           '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(STATUS_LABELS[t.status] || t.status) + (t.archivedAt ? ' · Archived' : '') + '</p>' +
         '</div>' +
-        '<span class="text-xs font-semibold shrink-0 text-zinc-400 dark:text-zinc-500">' + (minutes ? formatDuration(minutes) : '—') + '</span>' +
+        '<div class="text-right shrink-0">' +
+          '<span class="block text-xs font-semibold text-zinc-400 dark:text-zinc-500">' + (minutes ? formatDuration(minutes) : '—') + '</span>' +
+          (overtimeMinutes ? '<span class="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">' + formatDuration(overtimeMinutes) + ' OT</span>' : '') +
+        '</div>' +
       '</button>'
     );
   }
