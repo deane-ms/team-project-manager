@@ -671,7 +671,6 @@
      time they have the app open (or already open, since it's live).
   ========================================================= */
   var notificationsCol = collection(db, "notifications");
-  var usersCol = collection(db, "users");
   var unsubNotifications = null;
   var myNotifications = [];
   var notifStreamStartedAt = 0;
@@ -705,18 +704,6 @@
   var unsubSuggestions = null;
   var suggestions = [];
 
-  // Keeps a name->email directory so the email-notification GitHub Action (which only sees
-  // Firestore, not Google auth) can resolve a `recipient` display name to an address --
-  // notifications themselves only ever store the display name, matching how mentions are
-  // parsed. Written on every sign-in so the directory self-heals if a name changes.
-  function upsertUserDirectory(user) {
-    setDoc(doc(usersCol, user.uid), {
-      name: user.displayName || user.email,
-      email: user.email,
-      updatedAt: new Date().toISOString()
-    }, { merge: true }).catch(function (e) { console.error('Failed to update user directory', e); });
-  }
-
   function parseMentions(text) {
     var mentioned = [];
     uniqueValues('assignee').forEach(function (name) {
@@ -743,8 +730,7 @@
         author: myName || 'unknown',
         snippet: text.slice(0, 140),
         at: new Date().toISOString(),
-        read: false,
-        emailed: false
+        read: false
       }).catch(function (e) { console.error('Failed to notify comment', e); });
     });
   }
@@ -3749,7 +3735,6 @@
     var userChipAvatar = document.getElementById('user-chip-avatar');
     userChipAvatar.innerHTML = svgIcon('user', 'w-3.5 h-3.5');
     userChipAvatar.className = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-300';
-    upsertUserDirectory(user);
     startListeners();
   });
 
