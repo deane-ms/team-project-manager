@@ -673,13 +673,15 @@
   var notificationsCol = collection(db, "notifications");
   var unsubNotifications = null;
   var myNotifications = [];
-  var notifStreamStartedAt = 0;
+  var notifListenerReady = false;
   var firedDesktopNotifIds = {};
 
   function fireDesktopNotification(notif) {
     if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
     firedDesktopNotifIds[notif.id] = true;
-    var title = notif.type === 'mention' ? (notif.author + ' mentioned you') : (notif.author + ' commented');
+    var title = notif.type === 'mention' ? (notif.author + ' mentioned you')
+      : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
+      : (notif.author + ' commented');
     var n = new Notification(title, {
       body: (notif.taskName ? notif.taskName + ': ' : '') + (notif.snippet || ''),
       icon: 'favicon.png',
@@ -733,6 +735,24 @@
         read: false
       }).catch(function (e) { console.error('Failed to notify comment', e); });
     });
+  }
+
+  // Notifies a task's new assignee on creation or reassignment -- separate from
+  // notifyOnComment since assigning a task doesn't necessarily come with a comment.
+  function notifyAssignment(task, assigneeName) {
+    var user = auth.currentUser;
+    var myName = user ? (user.displayName || user.email) : null;
+    if (!assigneeName || assigneeName === myName) return;
+    setDoc(doc(notificationsCol), {
+      recipient: assigneeName,
+      type: 'assigned',
+      taskId: task.id,
+      taskName: task.name,
+      author: myName || 'unknown',
+      snippet: task.deadline ? ('Due ' + formatShortDate(task.deadline)) : 'No deadline set',
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify assignment', e); });
   }
 
   /* =========================================================
@@ -2114,8 +2134,10 @@
         var changes = describeTaskChanges(oldTask, taskData);
         var changeSummary = changes.slice(0, 3).join(', ') + (changes.length > 3 ? ' (+' + (changes.length - 3) + ' more)' : '');
         logActivity('task_updated', changes.length ? 'Updated "' + name + '": ' + changeSummary : 'Updated task "' + name + '"');
+        if (oldTask.assignee !== assignee) notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
       } else {
         logActivity('task_created', 'Added task "' + name + '"');
+        notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
       }
       closeTaskModal();
     }).catch(function (err) {
@@ -3587,20 +3609,27 @@
     if (unsubTasks) return;
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     if (myName) {
-      notifStreamStartedAt = Date.now();
+      notifListenerReady = false;
       var myNotificationsQuery = query(notificationsCol, where('recipient', '==', myName), orderBy('at', 'desc'), limit(30));
       unsubNotifications = onSnapshot(myNotificationsQuery, function (snap) {
         myNotifications = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-        // Only pop a desktop notification for docs that showed up after this listener
-        // attached -- otherwise the initial snapshot of pre-existing unread notifications
-        // would fire a burst of popups every time the app is opened.
-        snap.docChanges().forEach(function (change) {
-          if (change.type !== 'added') return;
-          var data = Object.assign({ id: change.doc.id }, change.doc.data());
-          if (data.read) return;
-          if (new Date(data.at).getTime() < notifStreamStartedAt) return;
-          fireDesktopNotification(data);
-        });
+        // Only pop a desktop notification for docs added *after* the listener's first
+        // snapshot -- otherwise the initial snapshot of pre-existing unread notifications
+        // would fire a burst of popups every time the app is opened. Deliberately not a
+        // timestamp comparison (used to check `data.at < notifStreamStartedAt`): `at` is a
+        // client-generated timestamp from the sender's machine, so any clock skew between two
+        // people's computers made brand-new notifications look "older" than this tab's start
+        // time and silently swallowed the popup while the in-app bell (no such check) still
+        // updated fine. A ready-flag needs no clock at all.
+        if (notifListenerReady) {
+          snap.docChanges().forEach(function (change) {
+            if (change.type !== 'added') return;
+            var data = Object.assign({ id: change.doc.id }, change.doc.data());
+            if (data.read) return;
+            fireDesktopNotification(data);
+          });
+        }
+        notifListenerReady = true;
         renderNotificationBell();
       }, function (err) {
         // A failed-precondition here almost always means the composite index this query
@@ -3658,7 +3687,7 @@
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
+              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
               '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
             '</div>' +
           '</button>';
@@ -3748,7 +3777,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-07-31T07:00:25Z";
+  var CURRENT_BUILD_VERSION = "2026-08-06T08:24:44Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

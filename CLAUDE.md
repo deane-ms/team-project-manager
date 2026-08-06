@@ -54,18 +54,26 @@ to bottom:
 
 1. **Firebase setup** — `firebaseConfig`/emulator switch, `isAllowedEmail` domain gate.
 2. **Notifications** — `parseMentions`/`notifyOnComment`: comments create `notifications` docs for
-   the assignee and any `@Name`-mentioned teammates. The notification bell shows read/unread state
-   visually (dot + bold vs. muted text). The `suggestions` tab (comment/reply on a
-   feature-request board, not tied to a task) follows the same embedded-array reply model as task
-   comments — see Firestore data model below.
+   the assignee and any `@Name`-mentioned teammates. `notifyAssignment` separately notifies a
+   task's assignee on creation or reassignment, even with no comment attached (hooked into the
+   task-save handler, gated on `oldTask.assignee !== assignee`). The notification bell shows
+   read/unread state visually (dot + bold vs. muted text). The `suggestions` tab (comment/reply on
+   a feature-request board, not tied to a task) follows the same embedded-array reply model as
+   task comments — see Firestore data model below.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
-     `notifications` `onSnapshot` listener in `startListeners` for anything that arrives *after*
-     the listener attaches (`notifStreamStartedAt` guards against popping the whole existing
-     backlog on every page load). Tab-open-somewhere only — no service-worker push, no server.
-     Requires the browser's Notification permission to be granted; a comment/mention never
-     notifies its own author (see `delete recipients[myName]` in `notifyOnComment`), so testing
-     needs a second account/tab, not a self-mention.
+     `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the
+     listener's first snapshot (`notifListenerReady` flips true once that first snapshot resolves,
+     so only later `docChanges()` "added" events pop a notification — this avoids bursting the
+     whole existing backlog open every page load). Deliberately not a timestamp comparison: an
+     earlier version compared each notification's client-generated `at` field against this tab's
+     own `Date.now()` at attach time, which silently ate popups whenever the notifying user's and
+     the recipient's machine clocks disagreed (the in-app bell has no such check, so it kept
+     working — only desktop popups went quiet). Tab-open-somewhere only — no service-worker push,
+     no server. Requires the browser's Notification permission to be granted; a comment/mention/
+     assignment never notifies its own author (see `delete recipients[myName]` in
+     `notifyOnComment`, and the self-check in `notifyAssignment`), so testing needs a second
+     account/tab, not a self-mention.
 3. **Drive picker integration** — lazy-loads the Google Picker API (`ensureGapiLoaded`) so users
    can attach a Drive folder to a task/project without guessing folder names.
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
