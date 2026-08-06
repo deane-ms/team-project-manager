@@ -556,6 +556,9 @@
             </button>
           </div>
           <span class="text-xs text-zinc-400 dark:text-zinc-500 shrink-0">hrs</span>
+          <select id="task-time-checklist-select" title="Which checklist item is this time for?" class="shrink-0 max-w-[10rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <option value="">General (no item)</option>
+          </select>
           <input type="text" id="task-time-note" maxlength="140" placeholder="What did you work on? (optional)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <button type="button" id="task-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Billable</button>
           <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>
@@ -1437,12 +1440,19 @@
     if (task) renderCommentsLog(task.comments, document.getElementById('task-comments-log'));
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
+    document.getElementById('task-time-checklist-select').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
     exitTimeEntryEditMode();
     currentTimeEntries = task && task.timeEntries ? task.timeEntries.slice() : [];
-    renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
-    currentChecklist = task && task.checklist ? task.checklist.slice() : [];
+    // Backfills an `id` onto any checklist item saved before per-item time tracking existed,
+    // so the "Working on" select in Time Tracking always has something stable to link against
+    // (self-heals into Firestore next time this task is saved -- see upsertUserDirectory in
+    // the sibling Content Hub app for the same "fix it forward on load" pattern).
+    currentChecklist = (task && task.checklist ? task.checklist.slice() : []).map(function (item) {
+      return item.id ? item : Object.assign({}, item, { id: uid() });
+    });
     renderChecklistEditor();
+    renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
 
     populateDatalists();
     taskModal.classList.remove('hidden');
@@ -1483,12 +1493,29 @@
   var checklistTextEditIndex = null;
   var draggedChecklistIndex = null;
 
+  // Sums minutes from currentTimeEntries logged against one checklist item, so its row can
+  // show a running total -- see the "Working on" select in the time-tracking section below.
+  function checklistItemMinutes(itemId) {
+    return currentTimeEntries.filter(function (e) { return e.checklistItemId === itemId; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
+  }
+
+  // Keeps the time-entry "Working on" dropdown in sync with the current checklist -- called
+  // from renderChecklistEditor so the two never drift out of sync with each other.
+  function renderChecklistItemSelect() {
+    var select = document.getElementById('task-time-checklist-select');
+    var current = select.value;
+    select.innerHTML = '<option value="">General (no item)</option>' +
+      currentChecklist.map(function (item) { return '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.text) + '</option>'; }).join('');
+    select.value = currentChecklist.some(function (item) { return item.id === current; }) ? current : '';
+  }
+
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
     el.innerHTML = currentChecklist.length
       ? currentChecklist.map(function (item, i) {
           var editingLink = checklistLinkEditIndex === i;
           var editingText = checklistTextEditIndex === i;
+          var itemMinutes = checklistItemMinutes(item.id);
           return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50" data-checklist-i="' + i + '">' +
             '<div class="flex items-center gap-2 px-2 py-1.5">' +
               '<span draggable="true" data-checklist-drag-handle data-checklist-i="' + i + '" title="Drag to reorder" aria-label="Drag to reorder" class="hidden sm:flex shrink-0 w-4 h-4 items-center justify-center text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
@@ -1499,6 +1526,7 @@
                   : '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>') +
                 (item.link && !editingLink ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-brand-600 dark:text-brand-400 truncate hover:underline">' + escapeHtml(item.link) + '</a>' : '') +
               '</div>' +
+              (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Rename item" aria-label="Rename item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
@@ -1516,6 +1544,7 @@
       var linkInput = el.querySelector('.checklist-link-input');
       if (linkInput) { linkInput.focus(); linkInput.select(); }
     }
+    renderChecklistItemSelect();
   }
 
   function commitChecklistLink(inputEl) {
@@ -1657,7 +1686,7 @@
     var input = document.getElementById('task-checklist-input');
     var text = input.value.trim();
     if (!text) return;
-    currentChecklist.push({ text: text, done: false });
+    currentChecklist.push({ id: uid(), text: text, done: false });
     input.value = '';
     renderChecklistEditor();
     input.focus();
@@ -1691,6 +1720,7 @@
     var list = entries || [];
     logEl.innerHTML = list.length
       ? list.map(function (e, i) {
+          var linkedItem = e.checklistItemId ? currentChecklist.find(function (item) { return item.id === e.checklistItemId; }) : null;
           return '<div class="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
             '<span class="w-4 h-4 rounded-full ' + avatarColor(e.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">' + initials(e.author || '?') + '</span>' +
             '<div class="min-w-0 flex-1">' +
@@ -1700,6 +1730,7 @@
                 (e.overtime ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
                 '<span class="text-xs text-zinc-400 dark:text-zinc-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
               '</div>' +
+              (linkedItem ? '<p class="text-xs font-medium text-brand-600 dark:text-brand-400 mt-0.5 truncate">' + escapeHtml(linkedItem.text) + '</p>' : '') +
               (e.note ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
@@ -1763,6 +1794,7 @@
     timeEntryEditIndex = idx;
     document.getElementById('task-time-hours').value = entry.minutes / 60;
     document.getElementById('task-time-note').value = entry.note || '';
+    document.getElementById('task-time-checklist-select').value = entry.checklistItemId || '';
     setBillableToggle(document.getElementById('task-time-billable'), !!entry.billable);
     document.getElementById('task-time-add-btn').textContent = 'Save';
     document.getElementById('task-time-cancel-edit-btn').classList.remove('hidden');
@@ -1773,39 +1805,46 @@
     exitTimeEntryEditMode();
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
+    document.getElementById('task-time-checklist-select').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
   });
 
-  function commitTimeEntry(minutes, note, billable, overtime) {
+  function commitTimeEntry(minutes, note, billable, overtime, checklistItemId) {
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
+    var checklistSelectEl = document.getElementById('task-time-checklist-select');
     if (timeEntryEditIndex !== null) {
       var existing = currentTimeEntries[timeEntryEditIndex];
       existing.minutes = minutes;
       existing.note = note;
       existing.billable = billable;
       existing.overtime = !!overtime;
+      existing.checklistItemId = checklistItemId || null;
     } else {
       var user = auth.currentUser;
-      currentTimeEntries.push({ minutes: minutes, note: note, billable: billable, overtime: !!overtime, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
+      currentTimeEntries.push({ minutes: minutes, note: note, billable: billable, overtime: !!overtime, checklistItemId: checklistItemId || null, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
     }
     hoursEl.value = '';
     noteEl.value = '';
+    checklistSelectEl.value = '';
     setBillableToggle(billableEl, true);
     exitTimeEntryEditMode();
     renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
+    renderChecklistEditor();
   }
 
   document.getElementById('task-time-add-btn').addEventListener('click', function () {
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
+    var checklistSelectEl = document.getElementById('task-time-checklist-select');
     var hours = parseFloat(hoursEl.value);
     if (!hours || hours <= 0) return;
     var minutes = Math.round(hours * 60);
     var billable = billableEl.getAttribute('data-active') === 'true';
     var note = noteEl.value.trim();
+    var checklistItemId = checklistSelectEl.value || null;
 
     var user = auth.currentUser;
     var personName = user ? (user.displayName || user.email) : null;
@@ -1824,16 +1863,16 @@
         openConfirm(
           'That\'s over ' + formatDuration(OVERTIME_DAILY_MINUTES) + ' logged that day',
           'With this change, logged time for ' + formatShortDate(entryDate) + ' comes to ' + formatDuration(totalAfterEdit) + '. Mark it as overtime?',
-          function () { commitTimeEntry(minutes, note, billable, true); },
+          function () { commitTimeEntry(minutes, note, billable, true, checklistItemId); },
           {
-            onCancel: function () { commitTimeEntry(minutes, note, billable, false); },
+            onCancel: function () { commitTimeEntry(minutes, note, billable, false, checklistItemId); },
             confirmText: 'Yes, mark as overtime',
             cancelText: 'No, just log it',
             tone: 'question'
           }
         );
       } else {
-        commitTimeEntry(minutes, note, billable, false);
+        commitTimeEntry(minutes, note, billable, false, checklistItemId);
       }
       return;
     }
@@ -1844,16 +1883,16 @@
       openConfirm(
         'That\'s over ' + formatDuration(OVERTIME_DAILY_MINUTES) + ' logged today',
         'This entry brings your total logged time today to ' + formatDuration(totalAfter) + '. Mark it as overtime?',
-        function () { commitTimeEntry(minutes, note, billable, true); },
+        function () { commitTimeEntry(minutes, note, billable, true, checklistItemId); },
         {
-          onCancel: function () { commitTimeEntry(minutes, note, billable, false); },
+          onCancel: function () { commitTimeEntry(minutes, note, billable, false, checklistItemId); },
           confirmText: 'Yes, mark as overtime',
           cancelText: 'No, just log it',
           tone: 'question'
         }
       );
     } else {
-      commitTimeEntry(minutes, note, billable, false);
+      commitTimeEntry(minutes, note, billable, false, checklistItemId);
     }
   });
 
@@ -1872,6 +1911,7 @@
         currentTimeEntries.splice(idx, 1);
         if (timeEntryEditIndex === idx) exitTimeEntryEditMode();
         renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
+        renderChecklistEditor();
       });
     }
   });
@@ -3446,7 +3486,7 @@
   function sanitizeImportedChecklist(list) {
     if (!Array.isArray(list)) return [];
     return list.map(function (item) {
-      return { text: String((item && item.text) || '').slice(0, 300), done: !!(item && item.done), link: (item && item.link) ? normalizeUrl(String(item.link)) : '' };
+      return { id: (item && item.id) ? String(item.id) : uid(), text: String((item && item.text) || '').slice(0, 300), done: !!(item && item.done), link: (item && item.link) ? normalizeUrl(String(item.link)) : '' };
     }).filter(function (item) { return item.text; });
   }
 
@@ -3467,6 +3507,7 @@
         note: String((e && e.note) || '').slice(0, 300),
         billable: !!(e && e.billable),
         overtime: !!(e && e.overtime),
+        checklistItemId: (e && e.checklistItemId) ? String(e.checklistItemId) : null,
         date: date,
         author: (e && e.author) ? String(e.author) : null
       };
@@ -3781,7 +3822,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-06T08:29:56Z";
+  var CURRENT_BUILD_VERSION = "2026-08-06T09:29:10Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

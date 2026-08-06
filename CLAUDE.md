@@ -118,6 +118,16 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   name, project, priority, status, start/deadline dates, assignee, Drive link, checklist, comments,
   time entries. Shared read/write for any `@mediashock.com.sg` account — the whole team edits the
   same board by design, so there's no per-task ownership check.
+  - Each **checklist item** carries its own `uid()`-generated `id` (backfilled on load for older
+    tasks saved before this existed — see the `.map()` over `task.checklist` in `openTaskModal`,
+    same "fix it forward" pattern as `upsertUserDirectory` in the sibling Content Hub app), so a
+    **time entry** can optionally reference one via `checklistItemId` (the "Working on" select
+    next to the hours input, `task-time-checklist-select`) — `null`/absent means "General," not
+    tied to any item. `checklistItemMinutes(itemId)` sums an item's linked entries for the small
+    time badge on its checklist row; `renderChecklistItemSelect()` keeps that dropdown's options
+    in sync with the checklist and is called from the end of `renderChecklistEditor()` so the two
+    never drift apart. Removing a checklist item does *not* touch time entries that referenced its
+    id — they keep counting toward the task's totals, they just stop matching any item's badge.
 - **`activity`** — append-only log (`logActivity`), queried as latest 50 by `at desc`.
 - **`notifications`** — per-recipient; unlike the other two collections this one *does* restrict
   read/update/delete to the addressed recipient (matched against `request.auth.token.name` or
