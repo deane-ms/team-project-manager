@@ -121,11 +121,17 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   - Each **checklist item** carries its own `uid()`-generated `id` (backfilled on load for older
     tasks saved before this existed — see the `.map()` over `task.checklist` in `openTaskModal`,
     same "fix it forward" pattern as `upsertUserDirectory` in the sibling Content Hub app), so a
-    **time entry** can optionally reference one via `checklistItemId` (the "Working on" select
-    next to the hours input, `task-time-checklist-select`) — `null`/absent means "General," not
-    tied to any item. `checklistItemMinutes(itemId)` sums an item's linked entries for the small
-    time badge on its checklist row; `renderChecklistItemSelect()` keeps that dropdown's options
-    in sync with the checklist and is called from the end of `renderChecklistEditor()` so the two
+    **time entry** can optionally reference one via `checklistItemId` — `null`/absent means
+    "General," not tied to any item. There's no separate picker UI for this: the single
+    `task-time-note` field doubles as both "what did you work on" and "which item," linked to a
+    `task-time-checklist-suggestions` `<datalist>` of the checklist's item texts (same
+    input-with-`<datalist>`-autocomplete pattern as the Assignee field) for discoverability.
+    `checklistItemIdForNote(note)` resolves the link by exact case-insensitive text match against
+    `currentChecklist` at commit time — so picking the suggestion (or typing an item's name
+    verbatim) links it, but "Partial Content on 7 Aug, minus the CTA" doesn't, only the bare item
+    text does. `checklistItemMinutes(itemId)` sums an item's linked entries for the small time
+    badge on its checklist row; `renderChecklistItemSuggestions()` keeps the datalist's options in
+    sync with the checklist and is called from the end of `renderChecklistEditor()` so the two
     never drift apart. Removing a checklist item does *not* touch time entries that referenced its
     id — they keep counting toward the task's totals, they just stop matching any item's badge.
 - **`activity`** — append-only log (`logActivity`), queried as latest 50 by `at desc`.

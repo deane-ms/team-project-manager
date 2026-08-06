@@ -556,10 +556,8 @@
             </button>
           </div>
           <span class="text-xs text-zinc-400 dark:text-zinc-500 shrink-0">hrs</span>
-          <select id="task-time-checklist-select" title="Which checklist item is this time for?" class="shrink-0 max-w-[10rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-            <option value="">General (no item)</option>
-          </select>
-          <input type="text" id="task-time-note" maxlength="140" placeholder="What did you work on? (optional)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input type="text" id="task-time-note" list="task-time-checklist-suggestions" maxlength="140" placeholder="What did you work on? (optional — pick a checklist item or type a note)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <datalist id="task-time-checklist-suggestions"></datalist>
           <button type="button" id="task-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Billable</button>
           <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>
           <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Log</button>
@@ -1471,7 +1469,6 @@
     if (task) renderCommentsLog(task.comments, document.getElementById('task-comments-log'));
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
-    document.getElementById('task-time-checklist-select').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
     exitTimeEntryEditMode();
     currentTimeEntries = task && task.timeEntries ? task.timeEntries.slice() : [];
@@ -1525,19 +1522,28 @@
   var draggedChecklistIndex = null;
 
   // Sums minutes from currentTimeEntries logged against one checklist item, so its row can
-  // show a running total -- see the "Working on" select in the time-tracking section below.
+  // show a running total -- see checklistItemIdForNote below for how an entry gets linked.
   function checklistItemMinutes(itemId) {
     return currentTimeEntries.filter(function (e) { return e.checklistItemId === itemId; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
   }
 
-  // Keeps the time-entry "Working on" dropdown in sync with the current checklist -- called
-  // from renderChecklistEditor so the two never drift out of sync with each other.
-  function renderChecklistItemSelect() {
-    var select = document.getElementById('task-time-checklist-select');
-    var current = select.value;
-    select.innerHTML = '<option value="">General (no item)</option>' +
-      currentChecklist.map(function (item) { return '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.text) + '</option>'; }).join('');
-    select.value = currentChecklist.some(function (item) { return item.id === current; }) ? current : '';
+  // Keeps the time-entry note field's datalist suggestions in sync with the current checklist
+  // -- called from renderChecklistEditor so the two never drift out of sync with each other.
+  function renderChecklistItemSuggestions() {
+    document.getElementById('task-time-checklist-suggestions').innerHTML =
+      currentChecklist.map(function (item) { return '<option value="' + escapeHtml(item.text) + '">'; }).join('');
+  }
+
+  // A time entry links to a checklist item by exact text match (case-insensitive) against the
+  // note the person typed or picked from the datalist -- one field doing double duty as both
+  // "which item" and "what note", rather than a separate select alongside it. Trade-off: typing
+  // an item's name plus extra detail ("Partial Content on 7 Aug, minus the CTA") no longer links
+  // to that item, only the bare item text does.
+  function checklistItemIdForNote(note) {
+    var trimmed = (note || '').trim().toLowerCase();
+    if (!trimmed) return null;
+    var match = currentChecklist.find(function (item) { return item.text.trim().toLowerCase() === trimmed; });
+    return match ? match.id : null;
   }
 
   function renderChecklistEditor() {
@@ -1575,7 +1581,7 @@
       var linkInput = el.querySelector('.checklist-link-input');
       if (linkInput) { linkInput.focus(); linkInput.select(); }
     }
-    renderChecklistItemSelect();
+    renderChecklistItemSuggestions();
   }
 
   function commitChecklistLink(inputEl) {
@@ -1735,7 +1741,7 @@
           return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
             '<div class="flex items-center gap-1.5 mb-1">' +
               '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
-              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(c.date)) + '</span>' +
+              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(c.date)) + ', ' + formatTimeOnly(c.date) + '</span>' +
               '<div class="ml-auto flex items-center gap-0.5">' +
                 '<button type="button" class="comment-reply p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Reply">' + svgIcon('reply', 'w-3 h-3') + '</button>' +
                 '<button type="button" class="comment-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
@@ -1824,8 +1830,11 @@
     if (!entry) return;
     timeEntryEditIndex = idx;
     document.getElementById('task-time-hours').value = entry.minutes / 60;
-    document.getElementById('task-time-note').value = entry.note || '';
-    document.getElementById('task-time-checklist-select').value = entry.checklistItemId || '';
+    // Falls back to the linked item's own text when there's no separate note -- so re-opening
+    // an entry that was logged by picking a checklist item (and nothing else) doesn't look like
+    // it lost its link, even though the link is really re-derived from this text on save.
+    var linkedItem = entry.checklistItemId ? currentChecklist.find(function (item) { return item.id === entry.checklistItemId; }) : null;
+    document.getElementById('task-time-note').value = entry.note || (linkedItem ? linkedItem.text : '');
     setBillableToggle(document.getElementById('task-time-billable'), !!entry.billable);
     document.getElementById('task-time-add-btn').textContent = 'Save';
     document.getElementById('task-time-cancel-edit-btn').classList.remove('hidden');
@@ -1836,7 +1845,6 @@
     exitTimeEntryEditMode();
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
-    document.getElementById('task-time-checklist-select').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
   });
 
@@ -1844,7 +1852,6 @@
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
-    var checklistSelectEl = document.getElementById('task-time-checklist-select');
     if (timeEntryEditIndex !== null) {
       var existing = currentTimeEntries[timeEntryEditIndex];
       existing.minutes = minutes;
@@ -1858,7 +1865,6 @@
     }
     hoursEl.value = '';
     noteEl.value = '';
-    checklistSelectEl.value = '';
     setBillableToggle(billableEl, true);
     exitTimeEntryEditMode();
     renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
@@ -1869,13 +1875,12 @@
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
-    var checklistSelectEl = document.getElementById('task-time-checklist-select');
     var hours = parseFloat(hoursEl.value);
     if (!hours || hours <= 0) return;
     var minutes = Math.round(hours * 60);
     var billable = billableEl.getAttribute('data-active') === 'true';
     var note = noteEl.value.trim();
-    var checklistItemId = checklistSelectEl.value || null;
+    var checklistItemId = checklistItemIdForNote(note);
 
     var user = auth.currentUser;
     var personName = user ? (user.displayName || user.email) : null;
@@ -3853,7 +3858,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-06T09:44:34Z";
+  var CURRENT_BUILD_VERSION = "2026-08-06T10:02:16Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
