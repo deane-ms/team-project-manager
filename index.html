@@ -88,6 +88,14 @@
   .checklist-item-row.drag-over { outline: 2px dashed #a5b4fc; outline-offset: -2px; }
   .dark .checklist-item-row.drag-over { outline-color: #4f46e5; }
 
+  /* Completed-projects disclosure -- hide the native <summary> marker (two different
+     mechanisms needed for cross-browser: list-style for Firefox/Chromium, the pseudo-element
+     for older WebKit) and rotate our own chevron icon on open instead. */
+  summary { list-style: none; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  .disclosure-chevron { transition: transform 0.15s; }
+  details[open] > summary .disclosure-chevron { transform: rotate(90deg); }
+
   .modal-backdrop { background: rgba(24, 24, 27,0.55); backdrop-filter: blur(2px); }
   .dark .modal-backdrop { background: rgba(9, 9, 11, 0.75); }
 
@@ -2744,6 +2752,32 @@
     );
   }
 
+  function projectCardHtml(p) {
+    var rowsHtml = p.rows.length
+      ? p.rows.map(projectTaskRowHtml).join('')
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No tasks yet.</p>';
+
+    var badges = '';
+    if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
+    if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
+
+    return (
+      '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
+        '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
+          '<div class="min-w-0 flex-1">' +
+            '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
+            '<div class="flex items-center gap-1.5 mt-0.5">' +
+              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
+              badges +
+            '</div>' +
+          '</div>' +
+          '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
+        '</div>' +
+        '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
+      '</div>'
+    );
+  }
+
   function renderProjects() {
     var container = document.getElementById('projects-grid');
     var projectNames = {};
@@ -2760,38 +2794,65 @@
       var totalMinutes = mine.reduce(function (sum, t) { return sum + taskTimeMinutes(t); }, 0);
       var billableMinutes = mine.reduce(function (sum, t) { return sum + taskBillableMinutes(t); }, 0);
       var overtimeMinutes = mine.reduce(function (sum, t) { return sum + taskOvertimeMinutes(t); }, 0);
+      // "Active" here means "not archived" -- a project only counts as fully wrapped up
+      // (Completed, below) once every one of its tasks has actually been archived, not just
+      // moved to the Done column.
       var activeCount = mine.filter(function (t) { return !t.archivedAt; }).length;
       var rows = mine.slice().sort(function (a, b) { return taskTimeMinutes(b) - taskTimeMinutes(a); });
-      return { name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes, overtimeMinutes: overtimeMinutes, activeCount: activeCount };
+      // Real stored timestamps, not the project *name* text -- some project names embed a
+      // date-like prefix as a team naming convention (e.g. "260702[Google]..."), but that's
+      // free text a person typed, not a structured field this can sort on reliably.
+      var deadlineTimes = mine.filter(function (t) { return !t.archivedAt && t.deadline; }).map(function (t) { return parseDate(t.deadline).getTime(); });
+      var nextDeadline = deadlineTimes.length ? Math.min.apply(null, deadlineTimes) : null;
+      var archivedTimes = mine.filter(function (t) { return t.archivedAt; }).map(function (t) { return new Date(t.archivedAt).getTime(); });
+      var lastArchivedAt = archivedTimes.length ? Math.max.apply(null, archivedTimes) : null;
+      return {
+        name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes,
+        overtimeMinutes: overtimeMinutes, activeCount: activeCount, nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt
+      };
     });
 
-    summaries.sort(function (a, b) { return b.totalMinutes - a.totalMinutes; });
+    var ongoing = summaries.filter(function (p) { return p.activeCount > 0; });
+    var completed = summaries.filter(function (p) { return p.activeCount === 0; });
 
-    container.innerHTML = summaries.map(function (p) {
-      var rowsHtml = p.rows.length
-        ? p.rows.map(projectTaskRowHtml).join('')
-        : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No tasks yet.</p>';
+    // Ongoing: soonest upcoming deadline first (what needs attention next); no-deadline
+    // projects sort last rather than dropping out of the list.
+    ongoing.sort(function (a, b) {
+      if (a.nextDeadline === null && b.nextDeadline === null) return a.name.localeCompare(b.name);
+      if (a.nextDeadline === null) return 1;
+      if (b.nextDeadline === null) return -1;
+      return a.nextDeadline - b.nextDeadline;
+    });
+    // Completed: most recently wrapped up first.
+    completed.sort(function (a, b) {
+      if (a.lastArchivedAt === null && b.lastArchivedAt === null) return a.name.localeCompare(b.name);
+      if (a.lastArchivedAt === null) return 1;
+      if (b.lastArchivedAt === null) return -1;
+      return b.lastArchivedAt - a.lastArchivedAt;
+    });
 
-      var badges = '';
-      if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
-      if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
+    var ongoingHtml = ongoing.length
+      ? '<div class="flex flex-col gap-3">' + ongoing.map(projectCardHtml).join('') + '</div>'
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No ongoing projects.</p>';
 
-      return (
-        '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
-          '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
-            '<div class="min-w-0 flex-1">' +
-              '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
-              '<div class="flex items-center gap-1.5 mt-0.5">' +
-                '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
-                badges +
-              '</div>' +
-            '</div>' +
-            '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
-          '</div>' +
-          '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
-        '</div>'
-      );
-    }).join('');
+    // Completed is a <details> disclosure, collapsed by default (auto-opened only when it's
+    // the only thing there is to show) -- it's the bucket most likely to keep growing
+    // indefinitely as projects wrap up, and it's rarely what you need day-to-day, so it
+    // shouldn't push the ongoing list (the one people actually check regularly) down the page.
+    var completedHtml = '<details' + (ongoing.length === 0 && completed.length > 0 ? ' open' : '') + '>' +
+      '<summary class="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">' +
+        '<svg class="disclosure-chevron w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
+        'Completed (' + completed.length + ')' +
+      '</summary>' +
+      (completed.length
+        ? '<div class="flex flex-col gap-3">' + completed.map(projectCardHtml).join('') + '</div>'
+        : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No completed projects yet.</p>') +
+    '</details>';
+
+    container.innerHTML =
+      '<h3 class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">Ongoing (' + ongoing.length + ')</h3>' +
+      ongoingHtml +
+      completedHtml;
   }
 
   /* =========================================================
