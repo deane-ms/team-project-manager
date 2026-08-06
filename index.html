@@ -2535,9 +2535,18 @@
     // Rebuilding innerHTML always resets scrollLeft to 0 (the range start), which can leave
     // "today" scrolled out of view on any range that extends more than a screen-width of
     // days into the future. Re-center it every render instead of leaving that to chance.
+    //
+    // The sticky Task label column doesn't scroll away -- it's pinned at the viewport's own
+    // left edge (0 to GANTT_LABEL_WIDTH) for as long as the view is scrolled at all. So "30%
+    // into view" has to mean 30% into the day-column area that's actually left over after
+    // that column, not 30% of the whole card width. Getting this wrong (as an earlier version
+    // of this code did) put "today" -- and any bar near it -- at a raw viewport-x that could
+    // land *underneath* the label column on any card narrower than ~1000px, rendering that
+    // bar visually overlapping the task names instead of in the day grid where it belongs.
     var scrollWrap = wrap.firstElementChild;
     if (scrollWrap) {
-      var target = GANTT_LABEL_WIDTH + todayIndex * dayWidth - scrollWrap.clientWidth * 0.3;
+      var visibleDayAreaWidth = Math.max(0, scrollWrap.clientWidth - GANTT_LABEL_WIDTH);
+      var target = todayIndex * dayWidth - visibleDayAreaWidth * 0.3;
       scrollWrap.scrollLeft = Math.max(0, target);
     }
   }
