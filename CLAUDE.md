@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> Patterns shared across every Mediashock internal tool (notifications, theme toggle, icons,
+> auth, Firestore rules gotchas) live in `CLAUDE.md` in the parent `Claude Projects/` folder —
+> check there before building something this project's own architecture below doesn't cover.
+
 ## What this is
 
 Flowboard — a shared kanban/task-prioritization board for Mediashock APAC, built as a single
