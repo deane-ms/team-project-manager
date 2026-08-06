@@ -157,3 +157,21 @@ Google OAuth restricted via `hd` custom param + client-side `isAllowedEmail` che
 Firestore-rules-level `isMediashock()` check (the real boundary — see rules file comments).
 `onAuthStateChanged` drives `startListeners`/`stopListeners` and toggles the whole
 auth-gate/app-root visibility.
+
+## Automated UI/UX optimization reviews
+
+A scheduled cloud routine (`https://claude.ai/code/routines/trig_01LFPtkH67p4A3HKqjQMrUb2`, cron
+`0 1-21/5 * * *`, ~5 runs/day) reviews this repo unattended and opens a GitHub issue titled
+"UI/UX Optimization Report — <date>" when it finds something concrete — categorized 🔴 Critical /
+🟡 Refinement / 🔵 Feature Optimization, citing specific function/line. It skips creating a new
+issue if one from the last 24h already exists, and opens nothing at all if it found nothing real.
+
+**This is report-only by design, not the original "propose then wait for a reply" spec it was
+adapted from.** A cron-fired cloud session runs once, unattended, and finishes — it cannot pause
+mid-run and wait days for a human to reply "1, 3, 4" the way an interactive chat can. So the
+automated run's tools are deliberately restricted to `Bash`/`Read`/`Grep`/`Glob` (no `Edit`/
+`Write`), and its prompt forbids touching code entirely. **Implementing anything from a report is
+always a separate, manually-triggered step**: open the GitHub issue, then ask Claude in a normal
+interactive session (e.g. "implement items 1 and 3 from issue #N") — that request, in a real
+conversation, is the actual approval gate. Manage/disable the schedule at
+`https://claude.ai/code/routines`.
