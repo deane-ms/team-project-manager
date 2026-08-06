@@ -112,6 +112,33 @@ to bottom:
      `advanceProjectPopupQueue`) so two qualifying projects in the same snapshot don't stomp each
      other's modal state — and both defer entirely while the task modal or another confirm is
      already open, rather than interrupting an edit in progress.
+   - `filters.search` (the search box, `#filter-search`) matches name/project/assignee plus
+     checklist-item text and comment text (`applyFilters`) — already wired into Board, Gantt, and
+     People (all three call `applyFilters(activeTasks())`); Calendar/Projects/Activity/Archived/
+     Suggestions don't route through it.
+   - **Task dependencies**: a task can depend on ("be blocked by") any number of other tasks via
+     `dependsOn: [taskId, ...]` on the task doc, edited in the task modal's Dependencies section —
+     an input+datalist picker (`task-deps-input`/`task-deps-suggestions`, same idiom as the
+     Assignee field) resolves a typed/picked name to an id by exact match, since there was no
+     existing multi-select widget to reuse (`enhanceSelect` is strictly single-value). Cycles are
+     rejected client-side by `wouldCreateCycle` (walks the saved `dependsOn` graph via DFS) before
+     an id is added to `currentDependsOn`. `renderDependenciesEditor` also shows a read-only
+     reverse lookup ("Blocks N other tasks") and a "Blocked by" summary. Board cards show a
+     `BLOCKED` badge (amber, `link` icon) when any dependency isn't `status === 'Done'` — this is
+     advisory only, nothing prevents changing status/archiving a blocked task or one that blocks
+     others. Gantt does **not** visualize dependency arrows — the chart's bar-position math and
+     documented z-index stacking (label column vs. today-line vs. bars) made connector lines a
+     real risk to an already-fragile view for a first pass; revisit as a dedicated follow-up if
+     it's actually needed, e.g. an SVG overlay scoped to the day-grid area only (`grid-column: 2 /
+     -1`) to sidestep the label column's `z-20`.
+   - **This Week digest** (`btn-digest`/`digest-panel`, `renderDigestPanel`): a bell-and-dropdown
+     icon next to the notification bell, same interaction pattern, scoped to the signed-in
+     viewer's own tasks (`t.assignee === myName`) — Overdue, Due in the next 7 days, and
+     "Recently completed" (really "currently `status === 'Done'`," since tasks have no
+     `completedAt` timestamp, only `archivedAt` — a separate, later action). Deliberately in-app
+     rather than emailed/Slacked: no connector for either exists yet, and this needed no new
+     integration to ship. Called from `renderAll()` so it stays in sync with every task change
+     like every other view.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
@@ -131,8 +158,9 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 
 - **`tasks`** — one doc per task, client-generated IDs (`uid()`, not Firestore auto-IDs). Fields:
   name, project, priority, status, start/deadline dates, assignee, Drive link, checklist, comments,
-  time entries. Shared read/write for any `@mediashock.com.sg` account — the whole team edits the
-  same board by design, so there's no per-task ownership check.
+  time entries, `dependsOn` (array of other task ids, see below). Shared read/write for any
+  `@mediashock.com.sg` account — the whole team edits the same board by design, so there's no
+  per-task ownership check.
   - Each **checklist item** carries its own `uid()`-generated `id` (backfilled on load for older
     tasks saved before this existed — see the `.map()` over `task.checklist` in `openTaskModal`,
     same "fix it forward" pattern as `upsertUserDirectory` in the sibling Content Hub app), so a
