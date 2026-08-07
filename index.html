@@ -468,7 +468,24 @@
           <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Project <span class="text-rose-500">*</span></label>
           <div class="relative">
             <svg class="w-4 h-4 text-brand-600 dark:text-brand-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>
-            <input id="task-project" type="text" readonly maxlength="60" title="Pick a project folder from Google Drive" placeholder="Browse Drive to select a folder" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-8 pr-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <input id="task-project" list="project-suggestions" type="text" maxlength="200" title="Type a project name, or paste a Drive folder link" placeholder="e.g. Acme Rebrand" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-8 pr-9 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+            <datalist id="project-suggestions"></datalist>
+            <button type="button" id="task-project-browse" title="Browse Drive for a project folder" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>
+            </button>
+          </div>
+          <!-- The Drive link has no field of its own any more -- it rides along on the Project
+               field (pasted in, or filled by the Drive picker) and lives in this hidden input.
+               Still stored as its own `driveLink` task field, so existing tasks keep working. -->
+          <input type="hidden" id="task-drive">
+          <div class="mt-1 flex items-center gap-1.5 text-[11px] min-w-0">
+            <span id="task-project-hint" class="text-zinc-400 dark:text-zinc-500">Type a name, or paste a Drive folder link</span>
+            <span id="task-project-link-row" class="hidden min-w-0 flex-1 items-center gap-1.5">
+              <svg class="w-3 h-3 shrink-0 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>
+              <a id="task-drive-open" href="#" target="_blank" rel="noopener noreferrer" class="truncate font-medium text-brand-600 dark:text-brand-400 hover:underline"></a>
+              <button type="button" id="task-drive-copy" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Copy</button>
+              <button type="button" id="task-drive-remove" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400">Remove</button>
+            </span>
           </div>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
@@ -528,20 +545,6 @@
           <input id="task-deadline" type="date" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark] disabled:opacity-50 disabled:cursor-not-allowed">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
-      </div>
-
-      <div>
-        <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Google Drive Link</label>
-        <div class="relative">
-          <button type="button" id="task-drive-open" title="Open link" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-zinc-400 dark:disabled:hover:text-zinc-500 disabled:cursor-default" disabled>
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          </button>
-          <input id="task-drive" type="text" placeholder="https://drive.google.com/…" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-8 pr-9 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-          <button type="button" id="task-drive-copy" title="Copy link" disabled class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 disabled:hover:text-zinc-400 dark:disabled:hover:text-zinc-500 disabled:cursor-default">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-          </button>
-        </div>
-        <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
       </div>
 
       <div class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
@@ -857,8 +860,13 @@
         .setCallback(function (data) {
           if (data.action === google.picker.Action.PICKED) {
             var picked = data.docs[0];
-            document.getElementById('task-project').value = picked.name;
+            // Only name the project from the folder if nothing's been typed yet -- the field
+            // is free-type now, so someone who already named it "Q3 Campaign" and then browsed
+            // to attach the folder shouldn't have their name overwritten by the folder's.
+            var projectEl = document.getElementById('task-project');
+            if (!projectEl.value.trim()) projectEl.value = picked.name;
             document.getElementById('task-drive').value = 'https://drive.google.com/drive/folders/' + picked.id;
+            syncDriveLinkButtons();
           }
         })
         .build()
@@ -1471,7 +1479,17 @@
 
   function setFieldError(inputEl, message) {
     inputEl.classList.add('border-rose-400');
-    var errEl = inputEl.parentElement.querySelector('.field-error');
+    // Walk up until we find the field's error <p>, rather than only checking the input's
+    // immediate parent -- fields wrapped in a `.relative` div for an overlaid icon (Project)
+    // keep their .field-error outside that wrapper, so the old one-level lookup silently
+    // found nothing and the message never appeared.
+    var scope = inputEl.parentElement;
+    var errEl = null;
+    while (scope && !errEl) {
+      errEl = scope.querySelector('.field-error');
+      if (scope === taskForm) break;
+      scope = scope.parentElement;
+    }
     if (errEl) {
       errEl.textContent = message;
       errEl.classList.remove('hidden');
@@ -1533,16 +1551,61 @@
     taskForm.reset();
   }
 
+  // Project and Google Drive Link used to be two separate fields that a single Drive pick
+  // filled in together, which read as two things to fill instead of one. They're now one
+  // free-type Project field that also absorbs a link: whatever's typed is the project name
+  // (the grouping key for Projects/Gantt/People/filters, so it has to stay a real name), and
+  // any link found in it is pulled out into the hidden task-drive input and shown as a small
+  // link/Copy/Remove line underneath. Same "one input, link auto-detected out of it" idea as
+  // the sibling Content Hub's Images field.
+  var PROJECT_URL_RE = /(?:https?:\/\/|www\.)\S+/i;
+
   function syncDriveLinkButtons() {
-    var hasLink = !!document.getElementById('task-drive').value.trim();
-    document.getElementById('task-drive-open').disabled = !hasLink;
-    document.getElementById('task-drive-copy').disabled = !hasLink;
+    var url = document.getElementById('task-drive').value.trim();
+    var hasLink = !!url;
+    var row = document.getElementById('task-project-link-row');
+    var openEl = document.getElementById('task-drive-open');
+    // Toggling both classes rather than relying on `hidden` beating `flex` in the stylesheet
+    // order -- same idiom the task modal itself uses.
+    row.classList.toggle('hidden', !hasLink);
+    row.classList.toggle('flex', hasLink);
+    document.getElementById('task-project-hint').classList.toggle('hidden', hasLink);
+    openEl.href = hasLink ? normalizeUrl(url) : '#';
+    openEl.textContent = hasLink ? url.replace(/^https?:\/\//i, '') : '';
+    openEl.title = url;
   }
 
-  document.getElementById('task-drive').addEventListener('input', syncDriveLinkButtons);
-  document.getElementById('task-drive-open').addEventListener('click', function () {
-    var url = document.getElementById('task-drive').value.trim();
-    if (url) window.open(normalizeUrl(url), '_blank', 'noopener,noreferrer');
+  // Pulls a link out of the Project field and parks it in task-drive, leaving whatever else
+  // was typed as the project name. Runs on paste and on blur -- deliberately not on every
+  // keystroke, or a hand-typed URL would get absorbed halfway through being typed.
+  function absorbProjectLink() {
+    var projectEl = document.getElementById('task-project');
+    var match = projectEl.value.match(PROJECT_URL_RE);
+    if (!match) return;
+    // Same trailing-punctuation trim as the Content Hub's pasted-Drive-link handling, so
+    // "folder: https://drive.google.com/…/1a2B3c." doesn't glue the period into the URL.
+    var url = normalizeUrl(match[0].replace(/[.,;:!?)\]}'"]+$/, ''));
+    document.getElementById('task-drive').value = url;
+    projectEl.value = projectEl.value.replace(match[0], '').replace(/\s+/g, ' ').trim();
+    syncDriveLinkButtons();
+    if (projectEl.value) {
+      showToast('Drive link attached to this project', 'success');
+    } else {
+      showToast('Drive link attached -- now give the project a name', 'info');
+      projectEl.focus();
+    }
+  }
+
+  document.getElementById('task-project').addEventListener('paste', function () {
+    // Read the field after the browser has actually inserted the pasted text.
+    setTimeout(absorbProjectLink, 0);
+  });
+  document.getElementById('task-project').addEventListener('change', absorbProjectLink);
+  document.getElementById('task-project-browse').addEventListener('click', browseDriveForProject);
+  document.getElementById('task-drive-remove').addEventListener('click', function () {
+    document.getElementById('task-drive').value = '';
+    syncDriveLinkButtons();
+    document.getElementById('task-project').focus();
   });
   document.getElementById('task-drive-copy').addEventListener('click', function () {
     var url = document.getElementById('task-drive').value.trim();
@@ -1859,7 +1922,7 @@
     if (!text) return;
     var match = currentTasksForDeps().find(function (t) { return t.name.toLowerCase() === text.toLowerCase(); });
     if (!match) { showToast('No active task named "' + text + '"', 'error'); return; }
-    if (editingTaskId &amp;&amp; wouldCreateCycle(editingTaskId, match.id)) {
+    if (editingTaskId && wouldCreateCycle(editingTaskId, match.id)) {
       showToast('Can\'t add that -- it would create a circular dependency', 'error');
       return;
     }
@@ -2267,15 +2330,14 @@
   function populateDatalists() {
     var assigneeList = document.getElementById('assignee-suggestions');
     assigneeList.innerHTML = uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">'; }).join('');
+    // Project is free-type now, so it needs the same autocomplete Assignee has -- without it,
+    // "Acme Rebrand" and "acme rebrand" would quietly become two separate projects everywhere
+    // that groups by this field (Projects view, Gantt, People, filters).
+    var projectList = document.getElementById('project-suggestions');
+    projectList.innerHTML = uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
   }
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
-  // The Project field itself is read-only -- it can only be set by picking a real Drive
-  // folder, so clicking or keyboard-activating it opens the Drive picker directly.
-  document.getElementById('task-project').addEventListener('click', browseDriveForProject);
-  document.getElementById('task-project').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); browseDriveForProject(); }
-  });
   document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
     var deadlineEl = document.getElementById('task-deadline');
     deadlineEl.disabled = e.target.checked;
@@ -2319,13 +2381,17 @@
     var hasError = false;
     if (!name) { setFieldError(nameEl, 'Task name is required.'); hasError = true; }
     if (!project) { setFieldError(projectEl, 'Project is required.'); hasError = true; }
+    // The input allows 200 chars so a pasted Drive URL isn't truncated before absorbProjectLink
+    // can pull it out -- the name that's left over still has to be a sane length.
+    else if (project.length > 60) { setFieldError(projectEl, 'Keep the project name under 60 characters.'); hasError = true; }
     if (!assignee) { setFieldError(assigneeEl, 'Assignee is required.'); hasError = true; }
     if (deadline && startDate && parseDate(startDate) > parseDate(deadline)) {
       setFieldError(deadlineEl, 'Deadline must be on or after the start date.');
       hasError = true;
     }
+    // task-drive is a hidden input now, so its error has to surface on the Project field.
     if (driveEl.value.trim() && !/^https?:\/\/.+\..+/.test(driveLink)) {
-      setFieldError(driveEl, 'Please enter a valid link.');
+      setFieldError(projectEl, 'The attached link doesn\'t look valid.');
       hasError = true;
     }
     if (hasError) return;
@@ -4188,7 +4254,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-06T15:08:20Z";
+  var CURRENT_BUILD_VERSION = "2026-08-07T03:57:13Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

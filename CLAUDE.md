@@ -42,6 +42,17 @@ There's no CI/deploy script in this repo. When shipping a change to `index.html`
 - `CURRENT_BUILD_VERSION` (near the bottom of the module script in `index.html`)
 - `version.txt` (same timestamp)
 
+**Syntax-check before shipping.** There's no build step, so nothing catches a broken `<script>` —
+and because it's one big `type="module"`, a single syntax error anywhere kills the *entire* app,
+not just the feature that introduced it. This has already shipped once: commit `7ca02d4` landed a
+literal `&amp;&amp;` (HTML-escaped `&&`) inside `addDependency()`, which made the whole module fail
+to parse and took the live board down completely. Extract the module and run `node --check` on it
+before any push:
+
+```
+node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');fs.writeFileSync('/tmp/mod.mjs',h.match(/<script type=\"module\">([\s\S]*?)<\/script>/)[1])" && node --check /tmp/mod.mjs
+```
+
 The deployed page polls `version.txt` every 60s and auto-reloads clients once it changes — but
 `reloadIfPendingAndSafe()` will never reload out from under a user with a modal open, so a stale
 tab can sit on `pendingBuildVersion` for a while. If the two timestamps drift, clients get stuck
@@ -76,9 +87,37 @@ to bottom:
      account/tab, not a self-mention.
 3. **Drive picker integration** — lazy-loads the Google Picker API (`ensureGapiLoaded`) so users
    can attach a Drive folder to a task/project without guessing folder names.
+   - **Project and Google Drive Link are one field, not two.** They used to be separate inputs
+     that a single Drive pick filled in together, and Project was `readonly` — the only way to
+     set it was to browse Drive, so a project with no Drive folder couldn't be named at all.
+     Now `#task-project` is free-type and doubles as the link entry point: `absorbProjectLink()`
+     (on `paste` and on `change`/blur, deliberately **not** on every keystroke, or a hand-typed
+     URL gets absorbed halfway through being typed) pulls any URL out of the field into a hidden
+     `#task-drive` input, leaving the rest of the text as the project name. Trailing sentence
+     punctuation is trimmed off the URL first, same as the sibling Content Hub's pasted-Drive-link
+     handling. Still stored as two separate task fields (`project` + `driveLink`) — `project` is
+     the grouping key for Projects/Gantt/People/`filters`, so it has to stay a real name and can
+     never become a URL. Existing tasks need no migration.
+   - The attached link surfaces as a one-line link/Copy/Remove row under the field
+     (`#task-project-link-row`), swapped with a `#task-project-hint` when nothing's attached —
+     `syncDriveLinkButtons()` toggles both `hidden` *and* `flex` rather than relying on
+     stylesheet order, matching how the task modal itself is shown/hidden.
+   - The Drive picker now fills the project name **only when the field is blank**
+     (`openDrivePicker`'s callback), so someone who already typed "Q3 Campaign" and then browses
+     to attach the folder doesn't get their name overwritten by the folder's.
+   - `#task-project` carries `maxlength="200"` so a pasted Drive URL isn't truncated before
+     `absorbProjectLink()` can extract it; the 60-char limit on the *name* is enforced in the
+     submit handler instead. It also has a `#project-suggestions` datalist (populated from
+     `uniqueValues('project')`) — without it, free-type would quietly split "Acme Rebrand" and
+     "acme rebrand" into two projects everywhere that groups by this field.
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
 5. **Modal + UI helpers** — task modal, checklist editor, time-entry editor, "enhanced select"
    dropdown widget, mention autocomplete menu.
+   - `setFieldError(inputEl, message)` walks *up* from the input looking for the field's
+     `.field-error` `<p>`, rather than only checking the input's immediate parent. Fields wrapped
+     in a `.relative` div for an overlaid icon (Project) keep their `.field-error` outside that
+     wrapper, so the original one-level lookup silently found nothing and those fields' validation
+     messages never appeared at all — the input just turned red with no explanation.
 6. **Task mutations** — `deleteTask`, `updateTaskStatus`, `replaceAllTasks` (import), archive/
    unarchive — all writing directly to Firestore; there is no local-first optimistic queue beyond
    what `onSnapshot` naturally re-renders.
