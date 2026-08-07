@@ -257,6 +257,31 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     sync with the checklist and is called from the end of `renderChecklistEditor()` so the two
     never drift apart. Removing a checklist item does *not* touch time entries that referenced its
     id — they keep counting toward the task's totals, they just stop matching any item's badge.
+- **`projects`** — one auto-ID doc per project, `{name, deadline}`, holding the project's **own**
+  deadline, deliberately separate from the deadlines of the tasks inside it. The project name is a
+  **field, not the doc ID**: project names are free text typed into the task modal, and one
+  containing `/` is not a legal document ID. Looked up by name client-side (`projectDeadlineFor`)
+  — one doc per project is a tiny collection, and this needs no composite index. `deadline` is an
+  ISO date string or `null`.
+  - **This resolved a real contradiction.** Before it existed, "project deadline" wasn't stored
+    anywhere and was derived two incompatible ways at once: `renderProjects` sorted Ongoing by the
+    *earliest* active task deadline, while `checkProjectDeadlinePopups` treated the *latest* task
+    deadline as the project's due date. Both now read the stored deadline when one is set and fall
+    back to their original derivation when it isn't, so undated projects behave exactly as before.
+  - **Set in one place only — the Projects tab.** Each project card carries a plain, always-visible
+    `<input type="date">` (`.project-deadline-input`, delegated `change` handler on `#projects-grid`
+    since `renderProjects` replaces the grid's innerHTML on every snapshot). Deliberately *not* also
+    editable in the task modal: the same value settable from two places, where editing it inside one
+    task silently moves it for every other task in the project, reads as a bug even though it isn't.
+  - **Shown on the Gantt as grouped rows.** `renderGantt` regroups its flat task list into
+    `[{__group:true, project, tasks}, ...tasks]` order — a project header row showing the name,
+    `Due <date>` (or `No project deadline`), and task count, with a muted summary bar spanning the
+    project and an amber tick at the deadline (rose once overdue with work outstanding). Anything
+    walking `list` must skip `__group` rows. **The chart's date range has to include project
+    deadlines** (`allDates`) — a project deadline is normally *after* its last task's deadline,
+    which is the point of having one, so without that the marker lands off the right edge and is
+    silently never drawn. Child task rows are indented and drop the project from their subtitle,
+    since the header directly above already states it.
 - **`activity`** — append-only log (`logActivity`), queried as latest 50 by `at desc`.
 - **`notifications`** — per-recipient; unlike the other two collections this one *does* restrict
   read/update/delete to the addressed recipient (matched against `request.auth.token.name` or

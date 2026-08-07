@@ -36,6 +36,14 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // One doc per project, holding the project-level deadline (separate from any task's own
+    // deadline). Auto-ID docs with the project name as a *field*, not as the doc ID -- project
+    // names are free text typed into the task modal, and a name containing "/" is not a legal
+    // document ID. Shared read/write like tasks: the whole team works one board.
+    match /projects/{projectId} {
+      allow read, write: if isMediashock();
+    }
+
     // Suggestions are a shared feedback board, same "whole team edits everything" model as
     // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
     // on the doc, not a subcollection, so there's nothing further to scope here).

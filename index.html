@@ -645,7 +645,7 @@
     getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, connectAuthEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
-    getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
+    getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
     query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -741,6 +741,50 @@
   var suggestionsCol = collection(db, "suggestions");
   var unsubSuggestions = null;
   var suggestions = [];
+
+  /* =========================================================
+     PROJECT DEADLINES -- a project's own deadline, deliberately separate from the deadlines of
+     the tasks inside it. Before this, "project deadline" wasn't stored anywhere: it was derived
+     two contradictory ways (renderProjects sorted by the *earliest* active task deadline,
+     checkProjectDeadlinePopups treated the *latest* as the project's due date). Both now read
+     the real value when one is set and fall back to the old derivation when it isn't, so
+     projects nobody has dated keep behaving exactly as before.
+
+     One doc per project: { name, deadline } with an auto-ID. The name is a *field*, not the doc
+     ID, because project names are free text from the task modal and one containing "/" isn't a
+     legal document ID. Looked up by name client-side -- the collection is one doc per project,
+     so it's tiny, and this needs no composite index.
+  ========================================================= */
+  var projectsCol = collection(db, "projects");
+  var unsubProjects = null;
+  var projectDocs = [];
+
+  function projectDeadlineDoc(name) {
+    return projectDocs.find(function (p) { return p.name === name; }) || null;
+  }
+
+  // ISO date string, or '' when this project has no deadline of its own.
+  function projectDeadlineFor(name) {
+    var d = projectDeadlineDoc(name);
+    return (d && d.deadline) || '';
+  }
+
+  function setProjectDeadline(name, iso) {
+    var existing = projectDeadlineDoc(name);
+    var label = iso ? 'Set ' + name + ' deadline to ' + formatShortDate(iso) : 'Cleared the ' + name + ' deadline';
+    var write = existing
+      ? updateDoc(doc(projectsCol, existing.id), { deadline: iso || null })
+      : addDoc(projectsCol, { name: name, deadline: iso || null });
+    return write.then(function () {
+      showToast(iso ? 'Project deadline saved' : 'Project deadline cleared', 'success');
+      logActivity('project_deadline', label);
+    }).catch(function (err) {
+      // A brand-new collection needs its firestore.rules block deployed separately from the
+      // site (see CLAUDE.md) -- without it every write here fails permission-denied while the
+      // page itself looks perfectly fine, so say so rather than failing silently.
+      showToast('Could not save the project deadline: ' + err.message, 'error');
+    });
+  }
 
   function parseMentions(text) {
     var mentioned = [];
@@ -2230,6 +2274,15 @@
     projectList.innerHTML = uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
   }
 
+  // Delegated so it survives renderProjects() replacing the grid's innerHTML on every snapshot.
+  // `change` (not `input`) so it fires once the date is actually chosen, not on every keystroke
+  // of a partially-typed date.
+  document.getElementById('projects-grid').addEventListener('change', function (e) {
+    var input = e.target.closest('.project-deadline-input');
+    if (!input) return;
+    setProjectDeadline(input.getAttribute('data-project'), input.value);
+  });
+
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
   document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
     var deadlineEl = document.getElementById('task-deadline');
@@ -2618,9 +2671,19 @@
       if (projectPopupShown[name]) return;
       var projectTasks = byProject[name];
       if (!projectTasks.some(function (t) { return t.assignee === myName; })) return;
-      var deadlines = projectTasks.map(function (t) { return t.deadline; }).filter(Boolean);
-      if (!deadlines.length) return;
-      var latestDeadline = deadlines.reduce(function (a, b) { return b > a ? b : a; });
+      // Use the project's own deadline when one is set; otherwise keep the original behaviour
+      // of treating the latest task deadline as "when the whole project should be done". Two
+      // different answers to "when is this project due" used to be possible at once -- the
+      // Projects tab sorted on the earliest task deadline while this popup fired on the latest.
+      var ownDeadline = projectDeadlineFor(name);
+      var latestDeadline;
+      if (ownDeadline) {
+        latestDeadline = ownDeadline;
+      } else {
+        var deadlines = projectTasks.map(function (t) { return t.deadline; }).filter(Boolean);
+        if (!deadlines.length) return;
+        latestDeadline = deadlines.reduce(function (a, b) { return b > a ? b : a; });
+      }
       var days = daysUntil(latestDeadline);
       var allDone = projectTasks.every(function (t) { return t.status === 'Done'; });
       if (days !== null && days <= 0 && allDone) {
@@ -2909,11 +2972,36 @@
 
     list = list.slice().sort(function (a, b) { return parseDate(a.startDate) - parseDate(b.startDate); });
 
+    // Group into [project header row, ...that project's tasks]. Tasks stay in start-date order
+    // inside each group; groups themselves are ordered by whichever project starts first, so
+    // the chart still reads left-to-right overall. A `__group` row is a synthetic entry, not a
+    // task -- everything downstream that walks `list` has to skip it.
+    var byProject = {};
+    list.forEach(function (t) { (byProject[t.project || '—'] = byProject[t.project || '—'] || []).push(t); });
+    var grouped = [];
+    Object.keys(byProject)
+      .sort(function (a, b) {
+        return parseDate(byProject[a][0].startDate) - parseDate(byProject[b][0].startDate);
+      })
+      .forEach(function (name) {
+        grouped.push({ __group: true, project: name, tasks: byProject[name] });
+        byProject[name].forEach(function (t) { grouped.push(t); });
+      });
+    list = grouped;
+
     var today = todayMidnight();
     var allDates = [today];
     list.forEach(function (t) {
+      if (t.__group) return;
       allDates.push(parseDate(t.startDate));
       allDates.push(parseDate(t.deadline));
+    });
+    // A project deadline is normally *after* its last task's deadline -- that's rather the
+    // point of having one -- so the chart's range has to account for it or the marker lands
+    // off the right edge and silently isn't drawn.
+    Object.keys(byProject).forEach(function (name) {
+      var pd = parseDate(projectDeadlineFor(name));
+      if (pd) allDates.push(pd);
     });
     var rangeStart = addDays(new Date(Math.min.apply(null, allDates.map(function (d) { return d.getTime(); }))), -2);
     var rangeEnd = addDays(new Date(Math.max.apply(null, allDates.map(function (d) { return d.getTime(); }))), 4);
@@ -2976,6 +3064,48 @@
 
     // task rows
     list.forEach(function (t, r) {
+      // Project header row: a muted span bar covering the project's whole date footprint, plus
+      // a tick at its own deadline. Reuses the same left/width math as a task bar, so there's
+      // no second positioning scheme to keep in sync with the grid.
+      if (t.__group) {
+        var gRow = r + 3;
+        var gStarts = t.tasks.map(function (x) { return parseDate(x.startDate).getTime(); });
+        var gEnds = t.tasks.map(function (x) { return parseDate(x.deadline).getTime(); });
+        var pdIso = projectDeadlineFor(t.project);
+        var pd = pdIso ? parseDate(pdIso) : null;
+        var gStart = new Date(Math.min.apply(null, gStarts));
+        var lastTaskEnd = Math.max.apply(null, gEnds);
+        var gEnd = pd && pd.getTime() > lastTaskEnd ? pd : new Date(lastTaskEnd);
+        var gLeft = daysBetween(rangeStart, gStart) * dayWidth;
+        var gWidth = (daysBetween(gStart, gEnd) + 1) * dayWidth - 6;
+        // Only "late" while there's still unarchived work -- a finished project that ran past
+        // its date shouldn't keep shouting about it.
+        var gLate = pd && pd < today && t.tasks.some(function (x) { return x.status !== 'Done'; });
+        var gCount = t.tasks.length;
+
+        html += '<div class="sticky left-0 z-20 bg-zinc-50 dark:bg-zinc-700/60 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3 overflow-hidden" style="grid-column:1;grid-row:' + gRow + ';">' +
+          '<div class="min-w-0">' +
+            '<p class="text-sm font-bold text-zinc-700 dark:text-zinc-100 truncate">' + escapeHtml(t.project) + '</p>' +
+            '<p class="text-[11px] truncate ' + (gLate ? 'text-rose-500 dark:text-rose-400 font-semibold' : 'text-zinc-400 dark:text-zinc-500') + '">' +
+              (pd ? 'Due ' + formatShortDate(pdIso) : 'No project deadline') +
+              ' · ' + gCount + ' task' + (gCount === 1 ? '' : 's') +
+            '</p>' +
+          '</div>' +
+        '</div>';
+
+        html += '<div class="relative bg-zinc-50/60 dark:bg-zinc-700/25 border-b border-zinc-200 dark:border-zinc-700" style="grid-column:2 / -1;grid-row:' + gRow + ';">';
+        html += '<div class="absolute rounded-md bg-zinc-300/60 dark:bg-zinc-500/35 border border-zinc-400/30 dark:border-zinc-400/20" style="left:' + Math.max(gLeft, 0) + 'px;width:' + Math.max(gWidth, 18) + 'px;top:' + (rowHeight / 2 - 7) + 'px;height:14px;"></div>';
+        if (pd) {
+          var pdIdx = daysBetween(rangeStart, pd);
+          if (pdIdx >= 0 && pdIdx < totalDays) {
+            html += '<div class="absolute ' + (gLate ? 'bg-rose-500' : 'bg-amber-500') + '" title="' + escapeHtml(t.project + ' deadline: ' + formatShortDate(pdIso)) + '" style="left:' + (pdIdx * dayWidth) + 'px;top:' + (rowHeight / 2 - 9) + 'px;width:3px;height:18px;border-radius:2px;"></div>';
+            html += '<div class="absolute text-[10px] font-bold whitespace-nowrap pointer-events-none ' + (gLate ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400') + '" style="left:' + (pdIdx * dayWidth + 7) + 'px;top:' + (rowHeight / 2 - 8) + 'px;">' + formatShortDate(pdIso) + '</div>';
+          }
+        }
+        html += '</div>';
+        return;
+      }
+
       var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
@@ -2989,10 +3119,13 @@
       // unpositioned bars (auto/0), and still can't collide with the month/day headers
       // (z-10), which occupy the header rows only and never overlap this per-task-row cell.
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+        // Indent under the project header row, and drop the project name from the subtitle --
+        // the group header directly above already says it, so repeating it on every row is noise.
+        '<span class="w-3 shrink-0"></span>' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
           '<p class="text-sm font-semibold text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.project) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + '</p>' +
         '</div>' +
       '</div>';
 
@@ -3240,6 +3373,24 @@
     if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
     if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
+    // This is the one and only place a project deadline is set. Deliberately not also in the
+    // task modal: the same value editable from two places, where changing it inside one task
+    // silently moves it for every other task in the project, reads as a bug even when it isn't.
+    // A plain always-visible date input rather than a click-to-reveal editor -- there's no
+    // hidden state to discover, and an empty one already reads as "nothing set yet".
+    var pDeadline = projectDeadlineFor(p.name);
+    var pDays = pDeadline ? daysUntil(pDeadline) : null;
+    var pLate = pDays !== null && pDays < 0 && p.activeCount > 0;
+    var pSoon = pDays !== null && pDays >= 0 && pDays <= 1 && p.activeCount > 0;
+    var pLabelClass = pLate ? 'text-rose-600 dark:text-rose-400' : (pSoon ? 'text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-500');
+    var deadlineRow =
+      '<div class="flex items-center gap-1.5 mt-1.5">' +
+        '<span class="text-[11px] font-semibold shrink-0 ' + pLabelClass + '">Deadline</span>' +
+        '<input type="date" class="project-deadline-input text-[11px] rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]" ' +
+          'data-project="' + escapeHtml(p.name) + '" value="' + escapeHtml(pDeadline) + '" title="The project\'s own deadline, separate from its tasks\' deadlines">' +
+        (pLate ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300 shrink-0">OVERDUE</span>' : '') +
+      '</div>';
+
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
         '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
@@ -3249,6 +3400,7 @@
               '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
               badges +
             '</div>' +
+            deadlineRow +
           '</div>' +
           '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
         '</div>' +
@@ -3281,8 +3433,15 @@
       // Real stored timestamps, not the project *name* text -- some project names embed a
       // date-like prefix as a team naming convention (e.g. "260702[Google]..."), but that's
       // free text a person typed, not a structured field this can sort on reliably.
+      // Sort key for the Ongoing list. The project's *own* deadline wins when one is set --
+      // that's the real answer to "what's due next". Only when nobody has set one does this
+      // fall back to the old derivation (earliest active task deadline), so undated projects
+      // keep ordering exactly as they did before project deadlines existed.
+      var ownDeadline = projectDeadlineFor(name);
       var deadlineTimes = mine.filter(function (t) { return !t.archivedAt && t.deadline; }).map(function (t) { return parseDate(t.deadline).getTime(); });
-      var nextDeadline = deadlineTimes.length ? Math.min.apply(null, deadlineTimes) : null;
+      var nextDeadline = ownDeadline
+        ? parseDate(ownDeadline).getTime()
+        : (deadlineTimes.length ? Math.min.apply(null, deadlineTimes) : null);
       var archivedTimes = mine.filter(function (t) { return t.archivedAt; }).map(function (t) { return new Date(t.archivedAt).getTime(); });
       var lastArchivedAt = archivedTimes.length ? Math.max.apply(null, archivedTimes) : null;
       return {
@@ -3957,6 +4116,7 @@
     if (unsubActivity) { unsubActivity(); unsubActivity = null; }
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
     if (unsubSuggestions) { unsubSuggestions(); unsubSuggestions = null; }
+    if (unsubProjects) { unsubProjects(); unsubProjects = null; }
   }
 
   function startListeners() {
@@ -4022,6 +4182,14 @@
       if (currentView === 'suggestions') renderSuggestions();
     }, function (err) {
       showToast('Suggestions aren\'t loading: ' + err.message, 'error');
+    });
+    unsubProjects = onSnapshot(projectsCol, function (snap) {
+      projectDocs = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      // Full re-render, not just the Projects tab: project deadlines drive the Gantt's grouped
+      // rows and the deadline popups too, so any of them can be on screen when this fires.
+      renderAll();
+    }, function (err) {
+      showToast('Project deadlines aren\'t loading: ' + err.message, 'error');
     });
   }
 
@@ -4147,7 +4315,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-07T04:22:33Z";
+  var CURRENT_BUILD_VERSION = "2026-08-07T08:04:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
