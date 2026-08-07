@@ -118,6 +118,12 @@ to bottom:
      handling. Still stored as two separate task fields (`project` + `driveLink`) — `project` is
      the grouping key for Projects/Gantt/People/`filters`, so it has to stay a real name and can
      never become a URL. Existing tasks need no migration.
+   - **One icon, on the right.** The field briefly had two: a brand-coloured tray glyph sitting
+     decoratively on the left plus a folder glyph on the right for the Drive picker. The left one
+     was purely ornamental once the field had a real affordance, so the tray glyph moved to the
+     right as the Browse-Drive button and the folder was dropped. It's muted (`text-zinc-400` /
+     `dark:text-zinc-500`, brand only on hover), matching every other icon button in this form —
+     nothing in the Project row is brand-coloured at rest any more.
    - The attached link surfaces as a one-line link/Copy/Remove row under the field
      (`#task-project-link-row`), swapped with a `#task-project-hint` when nothing's attached —
      `syncDriveLinkButtons()` toggles both `hidden` *and* `flex` rather than relying on
@@ -175,21 +181,20 @@ to bottom:
      checklist-item text and comment text (`applyFilters`) — already wired into Board, Gantt, and
      People (all three call `applyFilters(activeTasks())`); Calendar/Projects/Activity/Archived/
      Suggestions don't route through it.
-   - **Task dependencies**: a task can depend on ("be blocked by") any number of other tasks via
-     `dependsOn: [taskId, ...]` on the task doc, edited in the task modal's Dependencies section —
-     an input+datalist picker (`task-deps-input`/`task-deps-suggestions`, same idiom as the
-     Assignee field) resolves a typed/picked name to an id by exact match, since there was no
-     existing multi-select widget to reuse (`enhanceSelect` is strictly single-value). Cycles are
-     rejected client-side by `wouldCreateCycle` (walks the saved `dependsOn` graph via DFS) before
-     an id is added to `currentDependsOn`. `renderDependenciesEditor` also shows a read-only
-     reverse lookup ("Blocks N other tasks") and a "Blocked by" summary. Board cards show a
-     `BLOCKED` badge (amber, `link` icon) when any dependency isn't `status === 'Done'` — this is
-     advisory only, nothing prevents changing status/archiving a blocked task or one that blocks
-     others. Gantt does **not** visualize dependency arrows — the chart's bar-position math and
-     documented z-index stacking (label column vs. today-line vs. bars) made connector lines a
-     real risk to an already-fragile view for a first pass; revisit as a dedicated follow-up if
-     it's actually needed, e.g. an SVG overlay scoped to the day-grid area only (`grid-column: 2 /
-     -1`) to sidestep the label column's `z-20`.
+   - **Task dependencies were removed** (they shipped in `7ca02d4` and were taken out again).
+     The whole editor is gone: the modal's Dependencies section, `wouldCreateCycle`,
+     `renderDependenciesEditor`, `addDependency`, `currentTasksForDeps`, the board card's amber
+     `BLOCKED` badge, and the activity-log diff line. **Don't rebuild it without asking** — it was
+     cut deliberately, not lost.
+     - `dependsOn` is still **read on load and passed straight back through on save**
+       (`currentDependsOn`, a plain variable with no editor attached), so a task saved while the
+       feature existed doesn't get the field wiped by a routine edit. Same "removed from the UI,
+       kept in the data" approach as the Tasks checklist in the sibling Content Hub. It's also
+       still sanitised on Import so an export/import round-trip preserves it.
+     - In practice there is probably no `dependsOn` data at all: the feature only existed between
+       `7ca02d4` and its removal, and that same commit shipped a syntax error that made the whole
+       app fail to load, so nobody could have used it. The round-trip is cheap insurance, not a
+       response to known data.
    - **This Week digest** (`btn-digest`/`digest-panel`, `renderDigestPanel`): a bell-and-dropdown
      icon next to the notification bell, same interaction pattern, scoped to the signed-in
      viewer's own tasks (`t.assignee === myName`) — Overdue, Due in the next 7 days, and
@@ -217,7 +222,8 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 
 - **`tasks`** — one doc per task, client-generated IDs (`uid()`, not Firestore auto-IDs). Fields:
   name, project, priority, status, start/deadline dates, assignee, Drive link, checklist, comments,
-  time entries, `dependsOn` (array of other task ids, see below). Shared read/write for any
+  time entries, plus a vestigial `dependsOn` (array of task ids — no editor, round-tripped only;
+  see "Task dependencies were removed" above). Shared read/write for any
   `@mediashock.com.sg` account — the whole team edits the same board by design, so there's no
   per-task ownership check.
   - Each **checklist item** carries its own `uid()`-generated `id` (backfilled on load for older
