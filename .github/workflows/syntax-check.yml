@@ -1,0 +1,33 @@
+name: Syntax check
+
+# Backstop for the .githooks/pre-push hook, which only runs for people who've opted into it with
+# `git config core.hooksPath .githooks`. This catches a broken index.html even when the hook was
+# skipped, bypassed with --no-verify, or the edit was made in the GitHub web UI.
+#
+# Note this runs *after* the push, so it can't stop GitHub Pages from deploying a broken page --
+# it makes the breakage loud (red X + notification) instead of silent. The hook is what actually
+# prevents it. Making this a real gate would mean moving Pages onto an Actions-based deploy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'scripts/check-syntax.mjs'
+      - '.github/workflows/syntax-check.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'scripts/check-syntax.mjs'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax-check inline scripts in index.html
+        run: node scripts/check-syntax.mjs

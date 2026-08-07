@@ -46,12 +46,32 @@ There's no CI/deploy script in this repo. When shipping a change to `index.html`
 and because it's one big `type="module"`, a single syntax error anywhere kills the *entire* app,
 not just the feature that introduced it. This has already shipped once: commit `7ca02d4` landed a
 literal `&amp;&amp;` (HTML-escaped `&&`) inside `addDependency()`, which made the whole module fail
-to parse and took the live board down completely. Extract the module and run `node --check` on it
-before any push:
+to parse and took the live board down completely.
+
+`scripts/check-syntax.mjs` now guards this — it extracts every inline `<script>` in `index.html`
+(currently 3, not just the big module one) and runs `node --check` over each, reporting failures
+against `index.html`'s own line numbers:
 
 ```
-node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');fs.writeFileSync('/tmp/mod.mjs',h.match(/<script type=\"module\">([\s\S]*?)<\/script>/)[1])" && node --check /tmp/mod.mjs
+node scripts/check-syntax.mjs
 ```
+
+It's wired in two places, because neither alone is enough:
+
+- **`.githooks/pre-push`** actually *prevents* the bad deploy. It needs one command per clone:
+  ```
+  git config core.hooksPath .githooks
+  ```
+  Git hooks aren't distributed by `git clone`, so a fresh checkout has no protection until
+  someone runs that. `git push --no-verify` bypasses it deliberately.
+- **`.github/workflows/syntax-check.yml`** is the backstop for pushes where the hook wasn't
+  enabled, was bypassed, or the edit came from the GitHub web UI. It runs *after* the push, so it
+  can only make the breakage loud (red X) rather than stop it — GitHub Pages will already have
+  deployed. Turning this into a real gate would mean moving Pages off its branch-based build onto
+  an Actions-based deploy that only publishes when the check passes; that's a bigger change and
+  hasn't been done.
+
+Both paths run the same script, so there's one place to fix if the markup ever changes shape.
 
 The deployed page polls `version.txt` every 60s and auto-reloads clients once it changes — but
 `reloadIfPendingAndSafe()` will never reload out from under a user with a modal open, so a stale

@@ -1,0 +1,25 @@
+#!/bin/sh
+# Blocks a push that would deploy a page whose inline scripts don't parse.
+#
+# GitHub Pages serves whatever it's given -- a syntax error in index.html's module script takes
+# the entire board down and nothing in the deploy pipeline complains. Commit 7ca02d4 did exactly
+# that. This runs the same check CI runs, but early enough to actually prevent the bad deploy.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Skip deliberately:       git push --no-verify
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node not found -- skipping syntax check." >&2
+  echo "pre-push: install Node or run 'git push --no-verify' to bypass deliberately." >&2
+  exit 1
+fi
+
+echo "pre-push: syntax-checking inline scripts..."
+if ! node "$(git rev-parse --show-toplevel)/scripts/check-syntax.mjs"; then
+  echo ""
+  echo "pre-push: PUSH BLOCKED -- index.html would deploy broken." >&2
+  echo "pre-push: fix the error above, or 'git push --no-verify' if you really mean it." >&2
+  exit 1
+fi
+
+exit 0
