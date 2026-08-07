@@ -107,6 +107,17 @@
 
   input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
+  /* Chrome draws its own solid black triangle inside any <input list="..."> that has options.
+     It's a filled glyph in the browser's default styling, sitting right next to this app's thin
+     stroked SVG icons -- it reads as a foreign control rather than part of the field. Hidden so
+     the datalist inputs (Project, Assignee, the Time Tracking note) look like every other text
+     input; the suggestions still drop down as soon as you start typing.
+     Scoped to input[list] on purpose: input[type="date"] uses the same pseudo-element for its
+     calendar button, and that one should stay. */
+  input[list]::-webkit-calendar-picker-indicator {
+    display: none !important;
+  }
+
   /* Plain Tailwind (no @tailwindcss/forms plugin) leaves checkboxes fully native, so their
      checked state renders in the browser's default blue instead of the app's brand orange.
      Scoped to this class (not a global reset) so no other input types are affected. */
@@ -4136,7 +4147,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-07T04:14:01Z";
+  var CURRENT_BUILD_VERSION = "2026-08-07T04:22:33Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

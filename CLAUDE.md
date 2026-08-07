@@ -118,6 +118,21 @@ to bottom:
      handling. Still stored as two separate task fields (`project` + `driveLink`) — `project` is
      the grouping key for Projects/Gantt/People/`filters`, so it has to stay a real name and can
      never become a URL. Existing tasks need no migration.
+   - **Chrome's native datalist caret is hidden app-wide.** Any `<input list="...">` whose
+     datalist has options gets a solid black ▼ drawn by Chrome *while the field is focused or
+     hovered* — a filled UA glyph sitting right beside this app's thin stroked SVG icons, which
+     reads as a foreign control. Killed with
+     `input[list]::-webkit-calendar-picker-indicator { display: none !important }` in the `<style>`
+     block. Scoped to `input[list]` deliberately: `input[type="date"]` uses the *same*
+     pseudo-element for its calendar button and must keep it. Affects Project, Assignee, and the
+     Time Tracking note field. Suggestions still drop down as you type; you just can't click an
+     arrow to browse them cold.
+     - **Testing this needs real Chrome, headed, with the field focused.** Playwright's bundled
+       Chromium never draws the caret, headed or not, so a headless run "passes" whether or not
+       the rule works. `getComputedStyle(el, '::-webkit-calendar-picker-indicator')` is also
+       useless here — it reports the UA value (`inline-block`) and ignores author overrides even
+       when they're applied. The only reliable check is a pixel diff of the focused input in
+       `chromium.launch({ channel: 'chrome', headless: false })`.
    - **One icon, on the right.** The field briefly had two: a brand-coloured tray glyph sitting
      decoratively on the left plus a folder glyph on the right for the Drive picker. The left one
      was purely ornamental once the field had a real affordance, so the tray glyph moved to the
