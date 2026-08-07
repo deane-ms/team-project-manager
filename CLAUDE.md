@@ -273,15 +273,11 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     since `renderProjects` replaces the grid's innerHTML on every snapshot). Deliberately *not* also
     editable in the task modal: the same value settable from two places, where editing it inside one
     task silently moves it for every other task in the project, reads as a bug even though it isn't.
-  - **Shown on the Gantt as grouped rows.** `renderGantt` regroups its flat task list into
-    `[{__group:true, project, tasks}, ...tasks]` order — a project header row showing the name,
-    `Due <date>` (or `No project deadline`), and task count, with a muted summary bar spanning the
-    project and an amber tick at the deadline (rose once overdue with work outstanding). Anything
-    walking `list` must skip `__group` rows. **The chart's date range has to include project
-    deadlines** (`allDates`) — a project deadline is normally *after* its last task's deadline,
-    which is the point of having one, so without that the marker lands off the right edge and is
-    silently never drawn. Child task rows are indented and drop the project from their subtitle,
-    since the header directly above already states it.
+  - **Not shown on the Gantt.** Grouping the Gantt's rows by project (a project header row with a
+    summary bar and a deadline tick) was built, shipped, and reverted the same day -- it didn't work
+    in practice on the real board. `renderGantt` is back to a flat, start-date-ordered task list and
+    is byte-identical to its pre-change version. The project deadline lives in the Projects tab only.
+    Don't re-add Gantt grouping without asking first.
 - **`activity`** — append-only log (`logActivity`), queried as latest 50 by `at desc`.
 - **`notifications`** — per-recipient; unlike the other two collections this one *does* restrict
   read/update/delete to the addressed recipient (matched against `request.auth.token.name` or
