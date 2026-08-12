@@ -171,7 +171,13 @@ to bottom:
      than the today-line and day-grid content or bars paint over it (they're normal-flow siblings
      with no explicit z-index, so DOM order wins by default); the "scroll to keep today in view"
      math has to subtract the label column's width from the viewport before positioning, or it
-     lands the target under the sticky column on narrow cards. Bar/dot color comes from `pm`,
+     lands the target under the sticky column on narrow cards. Only tasks with *both* a
+     `startDate` and a `deadline` can plot a bar; both are individually optional elsewhere (the
+     "TBD" deadline checkbox in the task modal), so a task can be otherwise fully filled-in and
+     still have nothing to draw. `#gantt-hidden-note` (updated at the top of `renderGantt`) says
+     how many filtered-in tasks are missing one or both dates, so they don't just silently vanish
+     from this view with no indication anything's hidden — same reasoning for the empty-state
+     message when *every* filtered task is missing a date. Bar/dot color comes from `pm`,
      chosen as `Done` → `DONE_META` (green) → else `isReadyForReview(t)` → `READY_FOR_REVIEW_META`
      (purple) → else `PRIORITY_META[t.priority]`. **Ready for review** means `status === 'Review'`
      *and* every checklist item is checked off (an empty checklist doesn't count — nothing to

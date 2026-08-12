@@ -391,6 +391,7 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-purple-400"></span>Ready for review</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
+            <span id="gantt-hidden-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
             <button type="button" id="gantt-progress-toggle" title="Show/hide checklist progress on the bars" class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
               <span>Progress</span>
@@ -2917,10 +2918,10 @@
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
           '<div class="flex items-center gap-0.5">' +
-            '<span draggable="true" data-drag-handle title="Drag to move" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
-            '<button data-edit-task="' + t.id + '" title="Edit" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
-            (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
-            '<button data-delete-task="' + t.id + '" title="Delete" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
+            '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+            '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+            (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
+            '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
         '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
@@ -2939,7 +2940,7 @@
             (checklist.length ? '<span class="' + chipClass + '" title="' + checklistDone + ' of ' + checklist.length + ' checklist items done">' + svgIcon('checklist', 'w-3.5 h-3.5') + checklistDone + '/' + checklist.length + '</span>' : '') +
             (timeMinutes ? '<span class="' + chipClass + '" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3.5 h-3.5') + formatDuration(timeMinutes) + '</span>' : '') +
             (commentCount ? '<span class="' + chipClass + '" title="' + commentCount + ' comment' + (commentCount === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + commentCount + '</span>' : '') +
-            '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700') + '">' +
+            '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" aria-label="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700') + '">' +
               svgIcon('drive', 'w-4 h-4') +
             '</button>' +
           '</div>' +
@@ -3008,11 +3009,30 @@
   ========================================================= */
   function renderGantt() {
     var wrap = document.getElementById('gantt-wrap');
-    var list = applyFilters(activeTasks()).filter(function (t) { return t.startDate && t.deadline; });
+    var filtered = applyFilters(activeTasks());
+    var list = filtered.filter(function (t) { return t.startDate && t.deadline; });
+
+    // A task with a status, priority, and everything else can still have no start date and/or
+    // deadline (both are optional -- see the "TBD" checkbox in the task modal), and there's
+    // nothing to plot a bar between for one that doesn't. Previously those tasks just vanished
+    // from this view with zero indication anything was hidden. missingDates only counts tasks
+    // that already passed the other filters, so it reads as "N more, once you give them dates"
+    // rather than double-counting anything the priority/project/assignee filters already hid.
+    var missingDates = filtered.length - list.length;
+    var hiddenNote = document.getElementById('gantt-hidden-note');
+    if (missingDates > 0) {
+      hiddenNote.textContent = missingDates + ' task' + (missingDates === 1 ? '' : 's') + ' hidden (no start date/deadline)';
+      hiddenNote.classList.remove('hidden');
+    } else {
+      hiddenNote.classList.add('hidden');
+    }
 
     if (list.length === 0) {
       wrap.innerHTML = '<div class="text-sm text-zinc-400 dark:text-zinc-600 text-center py-16 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">' +
-        'No tasks match the current filters yet.</div>';
+        (missingDates > 0
+          ? missingDates + ' task' + (missingDates === 1 ? '' : 's') + ' match the current filters, but none have both a start date and deadline yet -- add those in the task modal to see them here.'
+          : 'No tasks match the current filters yet.') +
+        '</div>';
       return;
     }
 
@@ -4291,7 +4311,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-12T14:36:13Z";
+  var CURRENT_BUILD_VERSION = "2026-08-12T15:13:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
