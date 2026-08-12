@@ -172,6 +172,16 @@ to bottom:
      with no explicit z-index, so DOM order wins by default); the "scroll to keep today in view"
      math has to subtract the label column's width from the viewport before positioning, or it
      lands the target under the sticky column on narrow cards.
+   - **`dueUrgency(t)`** is the single source of truth for "overdue"/"due soon", shared by the
+     Board badges, stats bar, Projects tab's per-project overdue chip, People view, and the This
+     Week digest. It exempts `status === 'Review'` the same way it already exempted `'Done'` —
+     once a task is sent off for review (client or internal sign-off), the clock isn't really the
+     assignee's anymore, so flagging it OVERDUE the day after its original deadline is a false
+     alarm about someone else's response time, not the assignee falling behind. `renderFocus`
+     shows a dedicated blue "Under review" label for the same status instead of a days-based one
+     (`Xd overdue`/`Due today`/etc.), and `focusScore` skips its urgency boost for Review tasks
+     too — otherwise a heavily-overdue-but-in-review task would still dominate the top of Focus
+     of the Day by sort score even with a calm badge.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its

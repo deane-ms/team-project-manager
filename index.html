@@ -1073,12 +1073,17 @@
 
   // Single source of truth for "overdue" / "due soon" (due today or tomorrow) so the
   // board, focus strip, gantt, and people view can't drift out of sync on the thresholds.
+  // Excludes Review as well as Done: once a task is sent off for review (client or internal
+  // sign-off), it's no longer the assignee's clock running -- flagging it OVERDUE the day
+  // after its deadline is a false alarm about someone else's response time, not a sign the
+  // assignee is behind. See also renderFocus's "Under Review" label for the same status.
   function dueUrgency(t) {
     var days = daysUntil(t.deadline);
+    var exempt = t.status === 'Done' || t.status === 'Review';
     return {
       days: days,
-      overdue: days !== null && days < 0 && t.status !== 'Done',
-      dueSoon: days !== null && days >= 0 && days <= 1 && t.status !== 'Done'
+      overdue: days !== null && days < 0 && !exempt,
+      dueSoon: days !== null && days >= 0 && days <= 1 && !exempt
     };
   }
 
@@ -1341,7 +1346,11 @@
     var days = daysUntil(t.deadline);
     var pw = PRIORITY_WEIGHT[t.priority] || 1;
     var score = pw * 1000;
-    if (days === null) return score;
+    // No urgency boost for a task sitting in Review, even past its original deadline -- same
+    // "not really the assignee's clock anymore" reasoning as dueUrgency's exemption. Otherwise
+    // a heavily-overdue-but-in-review task would still dominate the top of Focus of the Day by
+    // score even though its badge no longer says it's urgent.
+    if (days === null || t.status === 'Review') return score;
     if (days < 0) score += 6000 + Math.min(Math.abs(days), 100) * 10;
     else score += Math.max(0, 30 - days) * 15;
     return score;
@@ -2742,8 +2751,7 @@
     var active = activeTasks();
     var overdue = 0, high = 0, done = 0;
     active.forEach(function (t) {
-      var d = daysUntil(t.deadline);
-      if (d !== null && d < 0 && t.status !== 'Done') overdue++;
+      if (dueUrgency(t).overdue) overdue++;
       if (t.priority === 'High' && t.status !== 'Done') high++;
       if (t.status === 'Done') done++;
     });
@@ -2771,7 +2779,11 @@
       var days = dueUrgency(t).days;
       var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
       var urgencyLabel, urgencyClass;
-      if (days === null) { urgencyLabel = 'TBD'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
+      // Sent off for review (client or internal sign-off) means the clock isn't really the
+      // assignee's anymore -- always shows this instead of a days-based label, even when it's
+      // sitting well past its original deadline, matching dueUrgency's exemption above.
+      if (t.status === 'Review') { urgencyLabel = 'Under review'; urgencyClass = 'text-blue-600 bg-blue-50 dark:text-blue-300 dark:bg-blue-500/15'; }
+      else if (days === null) { urgencyLabel = 'TBD'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
       else if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
       else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
       else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
@@ -4245,7 +4257,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-07T08:21:49Z";
+  var CURRENT_BUILD_VERSION = "2026-08-12T14:19:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
