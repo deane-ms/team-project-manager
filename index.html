@@ -1351,8 +1351,14 @@
     // a heavily-overdue-but-in-review task would still dominate the top of Focus of the Day by
     // score even though its badge no longer says it's urgent.
     if (days === null || t.status === 'Review') return score;
-    if (days < 0) score += 6000 + Math.min(Math.abs(days), 100) * 10;
-    else score += Math.max(0, 30 - days) * 15;
+    // Deadline proximity outweighs priority, not just supplements it: a Low-priority task due
+    // today (1000 + 4000) still outranks a High-priority task due in three weeks (3000 + 100).
+    // Priority remains the tiebreaker for tasks that are similarly urgent, or the only signal
+    // once nothing has a near-term deadline -- it just no longer lets a High-priority task with
+    // weeks of runway jump ahead of something Medium/Low that's actually due soon, which is
+    // what the flat max-450 near-term boost used to allow.
+    if (days < 0) score += 8000 + Math.min(Math.abs(days), 100) * 10;
+    else score += Math.max(0, 4000 - days * 130);
     return score;
   }
 
@@ -2767,7 +2773,21 @@
   function renderFocus() {
     var container = document.getElementById('focus-list');
     var candidates = activeTasks().filter(function (t) { return t.status !== 'Done'; });
-    var top = sortByFocus(candidates).slice(0, 6);
+
+    // Review tasks lost their urgency-score boost (dueUrgency's Review exemption, above) so
+    // they don't get pushed to the top just for looking overdue -- but that also let them get
+    // crowded out of this capped strip entirely by unrelated overdue work elsewhere, even
+    // though someone still wants a reminder something is sitting in review. A couple of slots
+    // are reserved for the highest-priority Review tasks so they stay visible without
+    // dominating the strip; anything beyond that still competes for the remaining slots
+    // normally, same as before.
+    var FOCUS_TOTAL = 6, FOCUS_REVIEW_RESERVED = 2;
+    var reserved = sortByFocus(candidates.filter(function (t) { return t.status === 'Review'; })).slice(0, FOCUS_REVIEW_RESERVED);
+    var reservedIds = {};
+    reserved.forEach(function (t) { reservedIds[t.id] = true; });
+    var openPool = candidates.filter(function (t) { return !reservedIds[t.id]; });
+    var fill = sortByFocus(openPool).slice(0, FOCUS_TOTAL - reserved.length);
+    var top = sortByFocus(reserved.concat(fill));
 
     if (top.length === 0) {
       container.innerHTML = '<div class="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500 py-4 px-1">' +
@@ -4257,7 +4277,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-12T14:19:34Z";
+  var CURRENT_BUILD_VERSION = "2026-08-12T14:31:49Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

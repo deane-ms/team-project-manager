@@ -181,7 +181,19 @@ to bottom:
      shows a dedicated blue "Under review" label for the same status instead of a days-based one
      (`Xd overdue`/`Due today`/etc.), and `focusScore` skips its urgency boost for Review tasks
      too — otherwise a heavily-overdue-but-in-review task would still dominate the top of Focus
-     of the Day by sort score even with a calm badge.
+     of the Day by sort score even with a calm badge. That in turn meant Review tasks could get
+     crowded out of the strip's 6-slot cap entirely by unrelated overdue work elsewhere, so
+     `renderFocus` reserves up to `FOCUS_REVIEW_RESERVED` (2) slots for the highest-priority
+     Review tasks before filling the rest of the 6 normally — guaranteed a little visibility
+     without letting Review tasks dominate the strip the way the old urgency boost did.
+   - **`focusScore(t)`** (shared by `renderFocus` and the Board's "Sort: Focus" option) weighs
+     deadline proximity above priority tier, not just alongside it: a Low-priority task due
+     today outscores a High-priority task due in three weeks. Priority (`PRIORITY_WEIGHT × 1000`)
+     is the tiebreaker among similarly-urgent tasks, or the only signal once nothing has a
+     near-term deadline — it was previously the dominant term for anything not yet overdue (the
+     old near-term boost topped out at +450, dwarfed by the 1000-point gap between priority
+     tiers), which let a High-priority task with weeks of runway rank above something actually
+     due soon.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
