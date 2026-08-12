@@ -171,7 +171,14 @@ to bottom:
      than the today-line and day-grid content or bars paint over it (they're normal-flow siblings
      with no explicit z-index, so DOM order wins by default); the "scroll to keep today in view"
      math has to subtract the label column's width from the viewport before positioning, or it
-     lands the target under the sticky column on narrow cards.
+     lands the target under the sticky column on narrow cards. Bar/dot color comes from `pm`,
+     chosen as `Done` → `DONE_META` (green) → else `isReadyForReview(t)` → `READY_FOR_REVIEW_META`
+     (purple) → else `PRIORITY_META[t.priority]`. **Ready for review** means `status === 'Review'`
+     *and* every checklist item is checked off (an empty checklist doesn't count — nothing to
+     have finished) — fully done from the assignee's side, just waiting on someone else's
+     sign-off, so priority no longer says much about what to look at. Same `pm`-shape object as
+     `PRIORITY_META`/`DONE_META` (`badge`/`dot`/`bar`/`barLight`/`border`), Gantt-only for now —
+     Board cards, Focus of the Day, and People/Projects still color purely by priority/Done.
    - **`dueUrgency(t)`** is the single source of truth for "overdue"/"due soon", shared by the
      Board badges, stats bar, Projects tab's per-project overdue chip, People view, and the This
      Week digest. It exempts `status === 'Review'` the same way it already exempted `'Done'` —

@@ -389,6 +389,7 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span>High</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>Medium</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-purple-400"></span>Ready for review</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
             <button type="button" id="gantt-progress-toggle" title="Show/hide checklist progress on the bars" class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
@@ -959,6 +960,19 @@
   // longer matters once complete, so its color coding (Gantt bar/dot, card badge) switches
   // to this shared "done" green instead of staying tied to whatever priority it last had.
   var DONE_META = { badge: 'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/25', dot: 'bg-emerald-500', bar: 'bg-emerald-400', barLight: 'bg-emerald-100 dark:bg-emerald-500/10', border: 'border-l-emerald-500' };
+  // Same shape again, for a task that's fully checklist-complete AND sitting in Review -- see
+  // isReadyForReview() below. Distinct from DONE_META (not actually finished, still waiting on
+  // someone else's sign-off) and from PRIORITY_META (priority no longer drives what to look at
+  // once every checklist item is checked and it's out of the assignee's hands).
+  var READY_FOR_REVIEW_META = { badge: 'bg-purple-100 text-purple-700 ring-1 ring-inset ring-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:ring-purple-500/25', dot: 'bg-purple-500', bar: 'bg-purple-400', barLight: 'bg-purple-100 dark:bg-purple-500/10', border: 'border-l-purple-500' };
+
+  // A task is "ready for review": everything on its checklist is checked off and it's sitting
+  // in the Review column -- fully done from the assignee's side, just waiting on someone else's
+  // approval. An empty checklist doesn't count (nothing to have finished).
+  function isReadyForReview(t) {
+    var checklist = t.checklist || [];
+    return t.status === 'Review' && checklist.length > 0 && checklist.every(function (i) { return i.done; });
+  }
 
   var AVATAR_PALETTE = ['bg-brand-500', 'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-teal-500'];
 
@@ -3071,7 +3085,7 @@
 
     // task rows
     list.forEach(function (t, r) {
-      var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
+      var pm = t.status === 'Done' ? DONE_META : (isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium));
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
 
@@ -4277,7 +4291,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-12T14:31:49Z";
+  var CURRENT_BUILD_VERSION = "2026-08-12T14:36:13Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
