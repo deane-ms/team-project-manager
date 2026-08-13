@@ -788,10 +788,19 @@
     });
   }
 
+  // A matched name must END where the name ends. Without MENTION_TAIL, an assignee name that
+  // happens to be a prefix of a longer word notifies the wrong person: with "Dee" on the board,
+  // typing "@Deepak" matched "@Dee" and sent Dee a notification for a comment that never named
+  // them. Shared with enrichCommentText below so the notify side and the display side can't
+  // drift -- the display side rendered the same bug as a half-highlighted "@Dee|pak". The
+  // sibling Content Hub has the identical pair (parseMentions/enrichFeedbackText); keep all
+  // four in sync.
+  var MENTION_TAIL = '(?![A-Za-z0-9])';
+
   function parseMentions(text) {
     var mentioned = [];
     uniqueValues('assignee').forEach(function (name) {
-      var re = new RegExp('@' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      var re = new RegExp('@' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + MENTION_TAIL, 'i');
       if (re.test(text)) mentioned.push(name);
     });
     return mentioned;
@@ -830,7 +839,7 @@
   function enrichCommentText(text) {
     var names = uniqueValues('assignee').slice().sort(function (a, b) { return b.length - a.length; });
     var mentionRe = names.length
-      ? new RegExp('@(?:' + names.map(function (name) { return escapeHtml(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')', 'gi')
+      ? new RegExp('@(?:' + names.map(function (name) { return escapeHtml(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')' + MENTION_TAIL, 'gi')
       : null;
     return String(text || '').split(COMMENT_URL_RE).map(function (segment, i) {
       if (i % 2 === 1) {
@@ -4311,7 +4320,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-12T15:13:07Z";
+  var CURRENT_BUILD_VERSION = "2026-08-13T07:56:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

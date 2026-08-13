@@ -91,6 +91,15 @@ to bottom:
    read/unread state visually (dot + bold vs. muted text). The `suggestions` tab (comment/reply on
    a feature-request board, not tied to a task) follows the same embedded-array reply model as
    task comments — see Firestore data model below.
+   - **A mention must END where the name ends.** `parseMentions` and `enrichCommentText` both
+     append a shared `MENTION_TAIL = '(?![A-Za-z0-9])'` to their generated regex. Without it an
+     assignee name that's a prefix of a longer word matched inside it: with "Dee" on the board,
+     typing "@Deepak" sent Dee a real mention notification for a comment that never named them, and
+     rendered as a half-highlighted "@Dee"+"pak". Sorting names longest-first in `enrichCommentText`
+     does *not* cover this -- that only handles one assignee name being a prefix of another, not of
+     an arbitrary word. The sibling Content Hub has the identical pair
+     (`parseMentions`/`enrichFeedbackText`) and the same constant; all four were fixed together, so
+     a change to one needs the same change in the other three.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
      `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the
