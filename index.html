@@ -592,6 +592,7 @@
           <input type="text" id="task-time-note" list="task-time-checklist-suggestions" maxlength="140" placeholder="What did you work on? (optional — pick a checklist item or type a note)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="task-time-checklist-suggestions"></datalist>
           <button type="button" id="task-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Billable</button>
+          <button type="button" id="task-time-overtime" data-active="false" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500">Overtime</button>
           <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>
           <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Log</button>
         </div>
@@ -952,7 +953,6 @@
   var STATUS_LABELS = { Pipeline: 'Pipeline', 'In Progress': 'In Progress', Review: 'Review', Done: 'Completed' };
   var PRIORITIES = ['High', 'Medium', 'Low'];
   var PRIORITY_WEIGHT = { High: 3, Medium: 2, Low: 1 };
-  var OVERTIME_DAILY_MINUTES = 8 * 60;
   var GANTT_DAY_WIDTH = 36;
   var GANTT_LABEL_WIDTH = 300;
   var GANTT_PROGRESS_KEY = 'flowboard_gantt_progress';
@@ -1144,24 +1144,6 @@
 
   function taskOvertimeMinutes(task) {
     return (task.timeEntries || []).filter(function (e) { return e.overtime; }).reduce(function (sum, e) { return sum + (e.minutes || 0); }, 0);
-  }
-
-  function personMinutesLoggedOnDate(personName, dateStr, excludeTaskId) {
-    var total = 0;
-    tasks.forEach(function (t) {
-      if (t.id === excludeTaskId) return;
-      (t.timeEntries || []).forEach(function (e) {
-        if (e.author === personName && e.date && localDateOf(e.date) === dateStr) total += (e.minutes || 0);
-      });
-    });
-    currentTimeEntries.forEach(function (e) {
-      if (e.author === personName && e.date && localDateOf(e.date) === dateStr) total += (e.minutes || 0);
-    });
-    return total;
-  }
-
-  function personMinutesLoggedToday(personName, excludeTaskId) {
-    return personMinutesLoggedOnDate(personName, toDateInputValue(new Date()), excludeTaskId);
   }
 
   function describeTaskChanges(oldTask, data) {
@@ -1606,6 +1588,7 @@
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
+    setOvertimeToggle(document.getElementById('task-time-overtime'), false);
     exitTimeEntryEditMode();
     currentTimeEntries = task && task.timeEntries ? task.timeEntries.slice() : [];
     // Backfills an `id` onto any checklist item saved before per-item time tracking existed,
@@ -2005,6 +1988,29 @@
     setBillableToggle(this, this.getAttribute('data-active') !== 'true');
   });
 
+  // Manually tagged, same shape/pattern as Billable -- was previously auto-detected from
+  // whether the day's cumulative logged time crossed OVERTIME_DAILY_MINUTES, surfaced via an
+  // openConfirm popup at log time. That could fire on an unrelated small entry just because
+  // earlier entries the same day already pushed the total over 8h, and only checked the
+  // logged-in person's own name, not whoever the task was actually logged against -- a plain
+  // toggle is more predictable and matches how Billable already works.
+  function setOvertimeToggle(btn, active) {
+    btn.setAttribute('data-active', active ? 'true' : 'false');
+    btn.classList.toggle('border-amber-200', active);
+    btn.classList.toggle('dark:border-amber-500/30', active);
+    btn.classList.toggle('bg-amber-50', active);
+    btn.classList.toggle('dark:bg-amber-500/15', active);
+    btn.classList.toggle('text-amber-700', active);
+    btn.classList.toggle('dark:text-amber-400', active);
+    btn.classList.toggle('border-zinc-200', !active);
+    btn.classList.toggle('dark:border-zinc-700', !active);
+    btn.classList.toggle('text-zinc-400', !active);
+    btn.classList.toggle('dark:text-zinc-500', !active);
+  }
+  document.getElementById('task-time-overtime').addEventListener('click', function () {
+    setOvertimeToggle(this, this.getAttribute('data-active') !== 'true');
+  });
+
   function exitTimeEntryEditMode() {
     timeEntryEditIndex = null;
     document.getElementById('task-time-add-btn').textContent = 'Log';
@@ -2022,6 +2028,7 @@
     var linkedItem = entry.checklistItemId ? currentChecklist.find(function (item) { return item.id === entry.checklistItemId; }) : null;
     document.getElementById('task-time-note').value = entry.note || (linkedItem ? linkedItem.text : '');
     setBillableToggle(document.getElementById('task-time-billable'), !!entry.billable);
+    setOvertimeToggle(document.getElementById('task-time-overtime'), !!entry.overtime);
     document.getElementById('task-time-add-btn').textContent = 'Save';
     document.getElementById('task-time-cancel-edit-btn').classList.remove('hidden');
     document.getElementById('task-time-hours').focus();
@@ -2032,12 +2039,14 @@
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
+    setOvertimeToggle(document.getElementById('task-time-overtime'), false);
   });
 
   function commitTimeEntry(minutes, note, billable, overtime, checklistItemId) {
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
+    var overtimeEl = document.getElementById('task-time-overtime');
     if (timeEntryEditIndex !== null) {
       var existing = currentTimeEntries[timeEntryEditIndex];
       existing.minutes = minutes;
@@ -2052,6 +2061,7 @@
     hoursEl.value = '';
     noteEl.value = '';
     setBillableToggle(billableEl, true);
+    setOvertimeToggle(overtimeEl, false);
     exitTimeEntryEditMode();
     renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
     renderChecklistEditor();
@@ -2061,61 +2071,15 @@
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
+    var overtimeEl = document.getElementById('task-time-overtime');
     var hours = parseFloat(hoursEl.value);
     if (!hours || hours <= 0) return;
     var minutes = Math.round(hours * 60);
     var billable = billableEl.getAttribute('data-active') === 'true';
+    var overtime = overtimeEl.getAttribute('data-active') === 'true';
     var note = noteEl.value.trim();
     var checklistItemId = checklistItemIdForNote(note);
-
-    var user = auth.currentUser;
-    var personName = user ? (user.displayName || user.email) : null;
-
-    if (timeEntryEditIndex !== null) {
-      // Re-check the threshold against the entry's own day (not necessarily today, if you're
-      // revisiting an older entry) so editing the hours can both add and clear the overtime
-      // flag, instead of leaving it frozen at whatever it was when first logged.
-      var existingEntry = currentTimeEntries[timeEntryEditIndex];
-      var entryDate = (existingEntry && existingEntry.date) ? localDateOf(existingEntry.date) : toDateInputValue(new Date());
-      var editBaseTotal = personName ? personMinutesLoggedOnDate(personName, entryDate, editingTaskId) : 0;
-      if (existingEntry && existingEntry.author === personName) editBaseTotal -= (existingEntry.minutes || 0);
-      var totalAfterEdit = editBaseTotal + minutes;
-
-      if (totalAfterEdit > OVERTIME_DAILY_MINUTES) {
-        openConfirm(
-          'That\'s over ' + formatDuration(OVERTIME_DAILY_MINUTES) + ' logged that day',
-          'With this change, logged time for ' + formatShortDate(entryDate) + ' comes to ' + formatDuration(totalAfterEdit) + '. Mark it as overtime?',
-          function () { commitTimeEntry(minutes, note, billable, true, checklistItemId); },
-          {
-            onCancel: function () { commitTimeEntry(minutes, note, billable, false, checklistItemId); },
-            confirmText: 'Yes, mark as overtime',
-            cancelText: 'No, just log it',
-            tone: 'question'
-          }
-        );
-      } else {
-        commitTimeEntry(minutes, note, billable, false, checklistItemId);
-      }
-      return;
-    }
-
-    var totalAfter = (personName ? personMinutesLoggedToday(personName, editingTaskId) : 0) + minutes;
-
-    if (totalAfter > OVERTIME_DAILY_MINUTES) {
-      openConfirm(
-        'That\'s over ' + formatDuration(OVERTIME_DAILY_MINUTES) + ' logged today',
-        'This entry brings your total logged time today to ' + formatDuration(totalAfter) + '. Mark it as overtime?',
-        function () { commitTimeEntry(minutes, note, billable, true, checklistItemId); },
-        {
-          onCancel: function () { commitTimeEntry(minutes, note, billable, false, checklistItemId); },
-          confirmText: 'Yes, mark as overtime',
-          cancelText: 'No, just log it',
-          tone: 'question'
-        }
-      );
-    } else {
-      commitTimeEntry(minutes, note, billable, false, checklistItemId);
-    }
+    commitTimeEntry(minutes, note, billable, overtime, checklistItemId);
   });
 
   document.getElementById('task-time-log').addEventListener('click', function (e) {
@@ -4320,7 +4284,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-13T07:56:28Z";
+  var CURRENT_BUILD_VERSION = "2026-08-14T03:05:29Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

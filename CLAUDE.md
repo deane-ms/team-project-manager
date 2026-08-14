@@ -262,6 +262,14 @@ to bottom:
      rather than emailed/Slacked: no connector for either exists yet, and this needed no new
      integration to ship. Called from `renderAll()` so it stays in sync with every task change
      like every other view.
+   - **Overtime is manually tagged** (`task-time-overtime`, `setOvertimeToggle`) — a plain toggle
+     button next to Billable, same shape and pattern. It used to be auto-detected: crossing
+     `OVERTIME_DAILY_MINUTES` (8h) in a person's cumulative logged time for the day popped an
+     `openConfirm` at log time asking whether to mark it. That could fire on an unrelated small
+     entry just because *earlier* entries the same day already pushed the total over 8h, and only
+     ever checked the signed-in user's own name — not necessarily who the task was actually being
+     logged against. A manual toggle is more predictable, at the cost of the automatic nudge that
+     used to catch it even when nobody was thinking about it.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
