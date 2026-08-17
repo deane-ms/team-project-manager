@@ -2248,13 +2248,46 @@
     projectList.innerHTML = uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('');
   }
 
-  // Delegated so it survives renderProjects() replacing the grid's innerHTML on every snapshot.
+  // Which project's deadline field is currently revealed for editing. Only ever one at a time, and
+  // only needed for projects that have no deadline yet -- once one is set the field shows anyway.
+  var projectDeadlineEditing = null;
+
+  // All three handlers are delegated: renderProjects() replaces the grid's innerHTML on every
+  // snapshot, so anything bound directly to a card would be thrown away.
+  var projectsGrid = document.getElementById('projects-grid');
+
+  projectsGrid.addEventListener('click', function (e) {
+    var addBtn = e.target.closest('.project-deadline-add');
+    if (!addBtn) return;
+    projectDeadlineEditing = addBtn.getAttribute('data-project');
+    renderProjects();
+    // Open the picker straight away -- clicking "+ Deadline" should not need a second click on the
+    // field that replaces it. showPicker() is behind a try/catch because it throws in browsers that
+    // don't support it (and in some automated contexts), where the focused input is enough.
+    var input = projectsGrid.querySelector('.project-deadline-input[data-autofocus="1"]');
+    if (input) {
+      input.focus();
+      try { input.showPicker(); } catch (err) { /* focus alone is a fine fallback */ }
+    }
+  });
+
   // `change` (not `input`) so it fires once the date is actually chosen, not on every keystroke
   // of a partially-typed date.
-  document.getElementById('projects-grid').addEventListener('change', function (e) {
+  projectsGrid.addEventListener('change', function (e) {
     var input = e.target.closest('.project-deadline-input');
     if (!input) return;
+    projectDeadlineEditing = null;
     setProjectDeadline(input.getAttribute('data-project'), input.value);
+  });
+
+  // Revealed but then abandoned without picking anything: collapse back to "+ Deadline" rather than
+  // leaving an empty date box sitting there, which is the clutter this whole thing exists to avoid.
+  projectsGrid.addEventListener('focusout', function (e) {
+    var input = e.target.closest('.project-deadline-input');
+    if (!input || !projectDeadlineEditing) return;
+    if (input.value) return;
+    projectDeadlineEditing = null;
+    renderProjects();
   });
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
@@ -3316,20 +3349,38 @@
     // This is the one and only place a project deadline is set. Deliberately not also in the
     // task modal: the same value editable from two places, where changing it inside one task
     // silently moves it for every other task in the project, reads as a bug even when it isn't.
-    // A plain always-visible date input rather than a click-to-reveal editor -- there's no
-    // hidden state to discover, and an empty one already reads as "nothing set yet".
+    // Progressive disclosure, not an always-visible field. This started as a permanent date input
+    // on every card, which meant an empty mm/dd/yyyy box on every undated project -- reading like a
+    // form you were supposed to fill in, one per project, for a value most projects never set. That
+    // trade made sense while the deadline was also drawn on the Timeline; once that was reverted the
+    // visible cost stayed and the payoff shrank. So: undated projects show a quiet "+ Deadline"
+    // affordance, and the real <input type="date"> is swapped in only once clicked (or once a
+    // deadline exists). projectDeadlineEditing holds the project name currently being edited.
     var pDeadline = projectDeadlineFor(p.name);
     var pDays = pDeadline ? daysUntil(pDeadline) : null;
     var pLate = pDays !== null && pDays < 0 && p.activeCount > 0;
     var pSoon = pDays !== null && pDays >= 0 && pDays <= 1 && p.activeCount > 0;
     var pLabelClass = pLate ? 'text-rose-600 dark:text-rose-400' : (pSoon ? 'text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-500');
-    var deadlineRow =
-      '<div class="flex items-center gap-1.5 mt-1.5">' +
-        '<span class="text-[11px] font-semibold shrink-0 ' + pLabelClass + '">Deadline</span>' +
-        '<input type="date" class="project-deadline-input text-[11px] rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]" ' +
-          'data-project="' + escapeHtml(p.name) + '" value="' + escapeHtml(pDeadline) + '" title="The project\'s own deadline, separate from its tasks\' deadlines">' +
-        (pLate ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300 shrink-0">OVERDUE</span>' : '') +
-      '</div>';
+    var editingThis = projectDeadlineEditing === p.name;
+    var deadlineRow;
+    if (!pDeadline && !editingThis) {
+      deadlineRow =
+        '<div class="flex items-center gap-1.5 mt-1.5">' +
+          '<button type="button" class="project-deadline-add text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1" ' +
+            'data-project="' + escapeHtml(p.name) + '" title="Set a deadline for the project itself, separate from its tasks\' deadlines">' +
+            svgIcon('plus', 'w-3 h-3') + 'Deadline' +
+          '</button>' +
+        '</div>';
+    } else {
+      deadlineRow =
+        '<div class="flex items-center gap-1.5 mt-1.5">' +
+          '<span class="text-[11px] font-semibold shrink-0 ' + pLabelClass + '">Deadline</span>' +
+          '<input type="date" class="project-deadline-input text-[11px] rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark]" ' +
+            'data-project="' + escapeHtml(p.name) + '" value="' + escapeHtml(pDeadline) + '"' + (editingThis ? ' data-autofocus="1"' : '') +
+            ' title="The project\'s own deadline, separate from its tasks\' deadlines. Clear it to remove.">' +
+          (pLate ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300 shrink-0">OVERDUE</span>' : '') +
+        '</div>';
+    }
 
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
@@ -4256,7 +4307,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-17T08:57:26Z";
+  var CURRENT_BUILD_VERSION = "2026-08-17T09:10:06Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -349,11 +349,22 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     *earliest* active task deadline, while `checkProjectDeadlinePopups` treated the *latest* task
     deadline as the project's due date. Both now read the stored deadline when one is set and fall
     back to their original derivation when it isn't, so undated projects behave exactly as before.
-  - **Set in one place only — the Projects tab.** Each project card carries a plain, always-visible
-    `<input type="date">` (`.project-deadline-input`, delegated `change` handler on `#projects-grid`
-    since `renderProjects` replaces the grid's innerHTML on every snapshot). Deliberately *not* also
-    editable in the task modal: the same value settable from two places, where editing it inside one
-    task silently moves it for every other task in the project, reads as a bug even though it isn't.
+  - **Set in one place only — the Projects tab**, and progressively disclosed. A project with no
+    deadline shows a quiet `+ Deadline` button (`.project-deadline-add`); the real
+    `<input type="date">` (`.project-deadline-input`) is swapped in on click, or shown outright once a
+    deadline exists. `projectDeadlineEditing` holds the one project name currently revealed.
+    Abandoning the field without picking anything (`focusout` with an empty value) collapses it back,
+    and clearing an existing deadline does too. All three handlers are delegated on `#projects-grid`,
+    since `renderProjects` replaces its innerHTML on every snapshot.
+    - **It used to be an always-visible date input on every card, and that was wrong.** The argument
+      for it was "no hidden state to discover" — but it put an empty `mm/dd/yyyy` box on every
+      undated project (9 of them on the real board), which reads as a form you're required to fill
+      in, for a value most projects never set. That trade was defensible while the deadline was also
+      drawn on the Timeline; once Timeline grouping was reverted the visible cost stayed and the
+      payoff shrank, so it became clutter. Reported by the user as simply "why is the deadline there?".
+    - Deliberately *not* also editable in the task modal: the same value settable from two places,
+      where editing it inside one task silently moves it for every other task in the project, reads
+      as a bug even though it isn't.
   - **Not shown on the Gantt.** Grouping the Gantt's rows by project (a project header row with a
     summary bar and a deadline tick) was built, shipped, and reverted the same day -- it didn't work
     in practice on the real board. `renderGantt` is back to a flat, start-date-ordered task list and
