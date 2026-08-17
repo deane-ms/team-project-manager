@@ -370,9 +370,13 @@
 
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" data-view class="active-view flex-1">
+      <!-- The "Load sample tasks" button was removed along with seedDemoData(): the seeded tasks
+           were indistinguishable from real ones once created, and it invented five fictional
+           teammates who then persisted in the assignee autocomplete and the @mention roster. The
+           sibling Content Hub removed its equivalent seeding for the same reason -- see
+           "One-time onboarding banner" in its DESIGN.md. Don't re-add mock-content seeding. -->
       <div id="empty-board-banner" class="hidden items-center justify-between gap-3 mb-4 px-4 py-3 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm text-zinc-500 dark:text-zinc-400">
-        <span>Board is empty — nothing here yet.</span>
-        <button id="btn-load-sample" type="button" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">Load sample tasks</button>
+        <span>Board is empty — add your first task to get started.</span>
       </div>
       <div id="board-columns" class="flex overflow-x-auto snap-x snap-mandatory -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start"></div>
     </section>
@@ -507,7 +511,7 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
-          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="e.g. Priya Nair" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="Start typing a name…" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="assignee-suggestions"></datalist>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
@@ -1293,39 +1297,6 @@
     toggleDesktopNotif();
     document.getElementById('user-menu-panel').classList.add('hidden');
   });
-
-  /* =========================================================
-     SAMPLE DATA (used only by the opt-in "Load sample tasks" action)
-  ========================================================= */
-  function seedDemoData() {
-    var today = todayMidnight();
-    var samples = [
-      { name: 'Shoot brand hero video', project: 'Q3 Rebrand', priority: 'High', status: 'In Progress', assignee: 'Priya Nair', startOffset: -3, dueOffset: 1, drive: 'https://drive.google.com/drive/folders/brand-hero' },
-      { name: 'Client feedback revisions — homepage', project: 'Nova Website', priority: 'High', status: 'Review', assignee: 'Marcus Lee', startOffset: -2, dueOffset: 0, drive: 'https://drive.google.com/drive/folders/nova-revisions' },
-      { name: 'Edit social teaser cutdown', project: 'Q3 Rebrand', priority: 'High', status: 'Pipeline', assignee: 'Ava Chen', startOffset: 0, dueOffset: 2, drive: '' },
-      { name: 'Finalize deck for pitch meeting', project: 'Atlas Pitch', priority: 'Medium', status: 'In Progress', assignee: 'Marcus Lee', startOffset: -1, dueOffset: 3, drive: 'https://drive.google.com/drive/folders/atlas-pitch-deck' },
-      { name: 'Storyboard episode 4', project: 'Podcast Series', priority: 'Medium', status: 'Pipeline', assignee: 'Diego Ruiz', startOffset: 1, dueOffset: 6, drive: '' },
-      { name: 'Color grade final cut', project: 'Nova Website', priority: 'Medium', status: 'Review', assignee: 'Ava Chen', startOffset: -4, dueOffset: -1, drive: 'https://drive.google.com/drive/folders/nova-grade' },
-      { name: 'Organize asset library', project: 'Internal Ops', priority: 'Low', status: 'Pipeline', assignee: 'Sam Osei', startOffset: 2, dueOffset: 9, drive: '' },
-      { name: 'Send wrap report to client', project: 'Atlas Pitch', priority: 'Low', status: 'Done', assignee: 'Priya Nair', startOffset: -8, dueOffset: -5, drive: 'https://drive.google.com/drive/folders/atlas-wrap' },
-      { name: 'Publish podcast episode 3', project: 'Podcast Series', priority: 'Medium', status: 'Done', assignee: 'Diego Ruiz', startOffset: -6, dueOffset: -3, drive: '' },
-      { name: 'Draft Q4 content calendar', project: 'Internal Ops', priority: 'Low', status: 'In Progress', assignee: 'Sam Osei', startOffset: -1, dueOffset: 8, drive: '' }
-    ];
-    return samples.map(function (s) {
-      return {
-        id: uid(),
-        name: s.name,
-        project: s.project,
-        priority: s.priority,
-        status: s.status,
-        assignee: s.assignee,
-        startDate: toDateInputValue(addDays(today, s.startOffset)),
-        deadline: toDateInputValue(addDays(today, s.dueOffset)),
-        driveLink: s.drive,
-        createdAt: new Date().toISOString()
-      };
-    });
-  }
 
   /* =========================================================
      FILTERING / SORTING / SCORING
@@ -3746,7 +3717,27 @@
     // Picking a view closes the mobile nav menu -- it stays open on desktop since there
     // `view-tab-row` is always visible regardless of this class (sm:flex overrides it).
     document.getElementById('view-tab-row').classList.add('hidden');
+    syncSearchAvailability();
     renderCurrentSecondaryView();
+  }
+
+  // Only these views run their task list through applyFilters(). On the others the search box did
+  // nothing at all while still looking perfectly usable -- so typing "sizzle" on Archived returned
+  // no visible change and read as "there is no such task in the archive", which is not what it
+  // meant. Disable it there and say why, rather than leaving it silently inert.
+  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people'];
+
+  function syncSearchAvailability() {
+    var input = document.getElementById('filter-search');
+    if (!input) return;
+    var searchable = SEARCHABLE_VIEWS.indexOf(currentView) !== -1;
+    input.disabled = !searchable;
+    input.title = searchable ? '' : 'Search doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView);
+    input.placeholder = searchable
+      ? 'Search tasks, checklists, comments…'
+      : 'Search doesn\'t apply here';
+    input.classList.toggle('opacity-50', !searchable);
+    input.classList.toggle('cursor-not-allowed', !searchable);
   }
 
   document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
@@ -3871,25 +3862,6 @@
     document.getElementById('filter-assignee').value = '';
     filterAssigneePill.sync();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
-  });
-
-  /* =========================================================
-     LOAD SAMPLE TASKS (opt-in, only offered when the board is empty)
-  ========================================================= */
-  document.getElementById('btn-load-sample').addEventListener('click', function (e) {
-    var btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = 'Loading…';
-    var sampleTasks = seedDemoData();
-    replaceAllTasks(sampleTasks).then(function () {
-      showToast('Sample tasks loaded', 'success');
-      logActivity('board_seeded', 'Loaded ' + sampleTasks.length + ' sample tasks');
-    }).catch(function (err) {
-      showToast('Could not load sample tasks: ' + err.message, 'error');
-    }).finally(function () {
-      btn.disabled = false;
-      btn.textContent = 'Load sample tasks';
-    });
   });
 
   /* =========================================================
@@ -4284,7 +4256,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-14T03:05:29Z";
+  var CURRENT_BUILD_VERSION = "2026-08-17T08:57:26Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

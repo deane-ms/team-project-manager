@@ -237,9 +237,17 @@ to bottom:
      other's modal state — and both defer entirely while the task modal or another confirm is
      already open, rather than interrupting an edit in progress.
    - `filters.search` (the search box, `#filter-search`) matches name/project/assignee plus
-     checklist-item text and comment text (`applyFilters`) — already wired into Board, Gantt, and
-     People (all three call `applyFilters(activeTasks())`); Calendar/Projects/Activity/Archived/
-     Suggestions don't route through it.
+     checklist-item text and comment text (`applyFilters`) — wired into **Board, Gantt, Calendar and
+     People**, the four views listed in `SEARCHABLE_VIEWS`. Projects/Activity/Archived/Suggestions
+     don't route through it. (An earlier version of this note also excluded Calendar; that stopped
+     being true once `renderCalendar` started calling `applyFilters` and the note wasn't updated —
+     if you change which views filter, change `SEARCHABLE_VIEWS` and this line together.)
+     - **The box disables itself on the views it doesn't affect.** `syncSearchAvailability()`, called
+       from `setView`, sets `disabled`, swaps the placeholder to "Search doesn't apply here", adds a
+       tooltip naming the view, and dims it. Previously the box stayed fully enabled everywhere, so
+       typing on Archived changed nothing and read as "there is no such task in the archive" — a
+       wrong answer rather than no answer. If you make another view searchable, add it to
+       `SEARCHABLE_VIEWS` and it picks this up automatically.
    - **Task dependencies were removed** (they shipped in `7ca02d4` and were taken out again).
      The whole editor is gone: the modal's Dependencies section, `wouldCreateCycle`,
      `renderDependenciesEditor`, `addDependency`, `currentTasksForDeps`, the board card's amber
@@ -274,6 +282,27 @@ to bottom:
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
 9. **Version-poll auto-reload** — see Deploying above.
+
+### No mock/sample data
+
+There is deliberately **no sample or demo content anywhere in this app.** A `seedDemoData()`
+function and a "Load sample tasks" button (`#btn-load-sample`, shown in the empty-board banner) used
+to inject 10 fictional tasks — and with them five invented teammates (Priya Nair, Marcus Lee, Ava
+Chen, Diego Ruiz, Sam Osei) and five invented projects. Both are removed.
+
+The problem wasn't the button, it was what it left behind: seeded tasks are indistinguishable from
+real ones once created, and the invented names persisted into the assignee autocomplete and the
+`@mention` roster (`uniqueValues('assignee')`), so they kept resurfacing as if they were colleagues.
+The sibling Content Hub removed its equivalent seeding for exactly this reason — see "One-time
+onboarding banner" in its `DESIGN.md`. **Don't re-add mock-content seeding.** If an onboarding aid is
+wanted again, prefer something visibly marked as an example over real-looking documents.
+
+The empty-board banner remains, now just saying the board is empty. The assignee field's placeholder
+is a neutral instruction rather than a fake person's name, for the same reason.
+
+Note this was a *code* removal — it can't delete tasks that button already created. If sample tasks
+were ever loaded on the live board, those documents are still there and have to be deleted from the
+board itself.
 
 ### State model
 
