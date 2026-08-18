@@ -246,12 +246,15 @@ to bottom:
        feedback about grouped and ungrouped cards looking inconsistent: there's no longer a
        second look to be inconsistent with.
      - **`boardTaskRowHtml(t)`** is a compact two-line row (task name; then a priority/status dot,
-       assignee, deadline, and an OVERDUE/DUE TODAY/DUE TOMORROW badge when relevant), not a
-       shrunken version of the old full task-card. Editing, archiving, deleting, checklist/time/
-       comment counts, and the Drive-link shortcut are all dropped from the row itself — every one
-       of them is still reachable by opening the task (`data-open-task`, unchanged), where the
-       task modal's own Edit/Delete/Archive controls already live. Nothing here is a
-       functionality loss, just one click further away in exchange for a row that reads as a row.
+       assignee, deadline with a calendar icon, and an OVERDUE/DUE TODAY/DUE TOMORROW badge when
+       relevant), not a shrunken version of the old full task-card. Checklist/time/comment counts
+       and the Drive-link shortcut stay dropped — reachable by opening the task (`data-open-task`,
+       unchanged). **Edit/Archive/Delete icon buttons shipped removed, then came back** — their
+       first removal was reported as a real usability loss ("icons and buttons are missing now,
+       compromising on usability"), not just fewer badges: those are core actions people expect to
+       reach without opening the full modal first, unlike the info-only counts/link that stayed
+       cut. Row padding also went `py-2.5` → `py-3` and the metadata line's top margin `mt-0.5` →
+       `mt-1` after the same feedback called the rows "too cramp."
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span

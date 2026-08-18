@@ -3099,11 +3099,10 @@
 
   // One compact row per task, meant to live inside projectGroupCardHtml's wrapper below -- not
   // a shrunken version of the old full task-card, a different, deliberately narrower format.
-  // Editing, archiving, deleting, checklist/time/comment counts, and the Drive-link shortcut are
-  // all dropped from the row itself; every one of them is still reachable by opening the task
-  // (data-open-task, same as before), which is where the task modal's own Edit/Delete/Archive
-  // controls already live -- nothing here is a functionality loss, just one click further away
-  // in exchange for a row that actually reads as a row instead of a squeezed card.
+  // Checklist/time/comment counts and the Drive-link shortcut stay dropped -- reachable by
+  // opening the task (data-open-task) -- but Edit/Archive/Delete came back as icon buttons after
+  // their removal was reported as a real usability loss, not just fewer badges: those are core
+  // actions people expect to reach without opening the full modal first.
   function boardTaskRowHtml(t) {
     var isDone = t.status === 'Done';
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
@@ -3116,20 +3115,25 @@
     var rowBg = isDone ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-white dark:bg-zinc-800';
 
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex items-start gap-2 px-3.5 py-2.5 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
-        '<span class="w-2 h-2 rounded-full mt-1.5 shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex items-start gap-2.5 px-3.5 py-3 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
+        '<span class="w-2 h-2 rounded-full mt-2 shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-          '<div class="flex items-center gap-1.5 mt-0.5 flex-wrap">' +
+          '<div class="flex items-center gap-1.5 mt-1 flex-wrap">' +
             '<span class="w-4 h-4 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
             '<span class="text-xs text-zinc-300 dark:text-zinc-600">&middot;</span>' +
-            '<span class="text-xs ' + dateClass + '">' + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
+            '<span class="flex items-center gap-1 text-xs ' + dateClass + '">' + svgIcon('calendar', 'w-3 h-3') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1 py-0.5 rounded">OVERDUE</span>' : '') +
             (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
           '</div>' +
         '</div>' +
-        '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 shrink-0">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+        '<div class="flex items-center gap-0.5 shrink-0">' +
+          '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+          '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+          (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
+          '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
+        '</div>' +
       '</div>'
     );
   }
@@ -3140,7 +3144,7 @@
   function projectGroupCardHtml(g) {
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
-        '<div class="px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">' +
+        '<div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
           '<p class="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
         '</div>' +
         '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700">' + g.tasks.map(boardTaskRowHtml).join('') + '</div>' +
@@ -4577,7 +4581,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T09:05:14Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T09:45:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
