@@ -254,7 +254,11 @@ to bottom:
        compromising on usability"), not just fewer badges: those are core actions people expect to
        reach without opening the full modal first, unlike the info-only counts/link that stayed
        cut. Row padding also went `py-2.5` → `py-3` and the metadata line's top margin `mt-0.5` →
-       `mt-1` after the same feedback called the rows "too cramp."
+       `mt-1` after the same feedback called the rows "too cramp." The gap *between* project
+       cards in a column (`data-column-body`'s own `gap-*`) went `gap-2.5` → `gap-4` on a
+       follow-up "space out the cards more" — a separate axis from the in-row padding above; both
+       needed their own pass. The project title itself went `text-sm` → `text-base` (matching the
+       column header `<h3>`'s size) for clearer hierarchy over the `text-sm` task names below it.
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span
