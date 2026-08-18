@@ -271,7 +271,13 @@ to bottom:
        the metadata line too** — the priority dot next to the task name (still there) was reported
        as insufficient on its own ("priority labels are missing"): a colored dot backed only by a
        hover `title` isn't actually readable at a glance, which the badge fixes without removing
-       the dot's quick left-edge color scan down a column of rows.
+       the dot's quick left-edge color scan down a column of rows. That badge landing right next
+       to the avatar/assignee/date with only `gap-1.5` between everything then got its own "too
+       cluttered" report — the metadata line's gap went `gap-1.5` → `gap-2`, badge/overdue/
+       due-soon pills' padding `px-1` → `px-1.5`, and the gap under the task name `mt-1` → `mt-1.5`;
+       the avatar+assignee pair is now wrapped in its own flex span so they stay visually paired
+       as one unit as the surrounding gap grows, and the `·` separator between assignee and date
+       was dropped — redundant once real spacing does that job instead.
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span
