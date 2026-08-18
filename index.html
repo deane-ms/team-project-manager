@@ -3097,74 +3097,53 @@
     return order.map(function (key) { return { project: key, tasks: byProject[key] }; });
   }
 
-  // showProjectOnCard is false for every card after the first in a same-project run (see
-  // renderBoard) -- the first card already named the project, so repeating it on every card in
-  // a 3-4-card stack was the exact clutter this exists to remove. A singleton "run" of one card
-  // is always its own first card, so it keeps showing both.
-  function taskCardHtml(t, showProjectOnCard) {
+  // One compact row per task, meant to live inside projectGroupCardHtml's wrapper below -- not
+  // a shrunken version of the old full task-card, a different, deliberately narrower format.
+  // Editing, archiving, deleting, checklist/time/comment counts, and the Drive-link shortcut are
+  // all dropped from the row itself; every one of them is still reachable by opening the task
+  // (data-open-task, same as before), which is where the task modal's own Edit/Delete/Archive
+  // controls already live -- nothing here is a functionality loss, just one click further away
+  // in exchange for a row that actually reads as a row instead of a squeezed card.
+  function boardTaskRowHtml(t) {
     var isDone = t.status === 'Done';
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400');
-    var hasDrive = !!t.driveLink;
-    var checklist = t.checklist || [];
-    var checklistDone = checklist.filter(function (i) { return i.done; }).length;
-    var timeMinutes = taskTimeMinutes(t);
-    var commentCount = (t.comments || []).length;
-    var chipClass = 'flex items-center gap-1 text-xs text-zinc-900 dark:text-white';
-
     var justCompleted = !!justCompletedIds[t.id];
-    // Done cards get an actual green wash, not just the thin left-border accent every other
-    // priority already gets -- the column itself went back to neutral (see renderBoard), so the
-    // "this is done" signal now lives on the card, where it's visible regardless of which column
-    // layout/grouping is on screen.
-    var cardBg = isDone
-      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-800/40'
-      : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700';
-    // The task line used to be text-xs/zinc-400 sitting right under the title with almost no
-    // gap, which read as a caption stuck to the title rather than a second distinct piece of
-    // information -- bumped a size/weight step up (still clearly secondary to the bold project
-    // title) and given real breathing room (mt-1) instead of just mb-1 on the line above it.
-    var titleHtml = showProjectOnCard
-      ? '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1.5 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.project) + '</p>' +
-        '<p class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mt-1 mb-3 line-clamp-1">' + escapeHtml(t.name) + '</p>'
-      // First card of a same-project group already carries the project name (see renderBoard) --
-      // repeating it on every card in the run was the exact clutter this exists to avoid, so the
-      // rest of the group leads with the task itself, same bold treatment the project gets above.
-      : '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-3 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>';
+    // Same green-wash-on-Done signal the old card had, just on a row instead of a card -- kept
+    // deliberately, since it was its own explicit request separate from this grouping change.
+    var rowBg = isDone ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-white dark:bg-zinc-800';
 
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + cardBg + ' border border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
-        '<div class="flex items-start justify-between gap-2 mb-2">' +
-          '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
-          '<div class="flex items-center gap-0.5">' +
-            '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
-            '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
-            (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
-            '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex items-start gap-2 px-3.5 py-2.5 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
+        '<span class="w-2 h-2 rounded-full mt-1.5 shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<div class="flex items-center gap-1.5 mt-0.5 flex-wrap">' +
+            '<span class="w-4 h-4 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
+            '<span class="text-xs text-zinc-300 dark:text-zinc-600">&middot;</span>' +
+            '<span class="text-xs ' + dateClass + '">' + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
+            (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1 py-0.5 rounded">OVERDUE</span>' : '') +
+            (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
           '</div>' +
         '</div>' +
-        titleHtml +
-        '<div class="flex items-center justify-between text-xs mb-3">' +
-          '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
-          (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
-          (dueSoon ? '<span class="text-xs font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
+        '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 shrink-0">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+      '</div>'
+    );
+  }
+
+  // One card per project, holding every one of its tasks in this column as rows -- the single
+  // treatment every project gets now, whether it has one task or five, which is what actually
+  // resolves "grouped cards look different from ungrouped ones": there's no longer a second look.
+  function projectGroupCardHtml(g) {
+    return (
+      '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
+        '<div class="px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">' +
+          '<p class="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
         '</div>' +
-        '<div class="flex items-center justify-between flex-wrap gap-y-1 pt-2.5 border-t border-zinc-100 dark:border-zinc-700">' +
-          '<div class="flex items-center gap-1.5 min-w-0">' +
-            '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
-            '<span class="text-xs text-zinc-600 dark:text-zinc-300 truncate">' + escapeHtml(t.assignee) + '</span>' +
-          '</div>' +
-          '<div class="flex items-center gap-1.5 shrink-0">' +
-            (checklist.length ? '<span class="' + chipClass + '" title="' + checklistDone + ' of ' + checklist.length + ' checklist items done">' + svgIcon('checklist', 'w-3.5 h-3.5') + checklistDone + '/' + checklist.length + '</span>' : '') +
-            (timeMinutes ? '<span class="' + chipClass + '" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3.5 h-3.5') + formatDuration(timeMinutes) + '</span>' : '') +
-            (commentCount ? '<span class="' + chipClass + '" title="' + commentCount + ' comment' + (commentCount === 1 ? '' : 's') + '">' + svgIcon('message', 'w-3.5 h-3.5') + commentCount + '</span>' : '') +
-            '<button data-drive-link="' + t.id + '" title="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" aria-label="' + (hasDrive ? 'Open Google Drive asset' : 'No Drive link added') + '" class="w-7 h-7 flex items-center justify-center rounded-md ' + (hasDrive ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-zinc-300 dark:text-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700') + '">' +
-              svgIcon('drive', 'w-4 h-4') +
-            '</button>' +
-          '</div>' +
-        '</div>' +
+        '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700">' + g.tasks.map(boardTaskRowHtml).join('') + '</div>' +
       '</div>'
     );
   }
@@ -3185,20 +3164,17 @@
       var isDoneCol = status === 'Done';
       var items = sortTasksForDisplay(filtered.filter(function (t) { return t.status === status; }));
       // Column background reverted to the same neutral zinc every column already used -- the
-      // "this is done" signal moved to the card itself (see taskCardHtml's cardBg), so tinting
+      // "this is done" signal moved to the row itself (see boardTaskRowHtml's rowBg), so tinting
       // the whole column on top of that read as too much at once.
-      // Grouping is nothing but tighter spacing plus "only the first card in a run names the
-      // project" -- no header, no indent, no border. A dot/label/left-border treatment was tried
-      // first and reported as clutter precisely because it's a visual motif that exists nowhere
-      // else on a card; every card here still looks exactly like an ordinary one. The wrapper div
-      // itself carries no visible styling -- it exists only to give a same-project run its own
-      // smaller gap (gap-1.5) distinct from the column's normal card-to-card gap (gap-2.5, on
-      // data-column-body below), which is what actually reads as "these belong together."
+      // Every project in this column is one card (projectGroupCardHtml) holding its tasks as
+      // compact rows (boardTaskRowHtml) -- the same treatment whether a project has one task or
+      // five, which is what actually resolves "grouped looks different from ungrouped": there's
+      // only one look. Two earlier attempts (a dot/label/indent header, then same-format cards
+      // with tighter spacing) were both reported back as not matching what was actually being
+      // asked for -- a real project-card container with a task list inside, each row still
+      // showing assignee/deadline -- confirmed against a mockup before building this version.
       var cardsHtml = items.length
-        ? groupTasksByProject(items).map(function (g) {
-            var cardsForGroup = g.tasks.map(function (t, i) { return taskCardHtml(t, i === 0); }).join('');
-            return g.tasks.length > 1 ? '<div class="flex flex-col gap-1.5">' + cardsForGroup + '</div>' : cardsForGroup;
-          }).join('')
+        ? groupTasksByProject(items).map(projectGroupCardHtml).join('')
         : '<div class="text-xs text-zinc-400 dark:text-zinc-600 text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks here</div>';
 
       return (
@@ -4601,7 +4577,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T08:53:40Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T09:05:14Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -227,42 +227,44 @@ to bottom:
      old near-term boost topped out at +450, dwarfed by the 1000-point gap between priority
      tiers), which let a High-priority task with weeks of runway rank above something actually
      due soon.
-   - **Board cards are grouped by project within each column** (`groupTasksByProject`, called
-     from `renderBoard`). This *is* project-row-grouping, on the one view where the earlier
-     Gantt attempt at the same idea (`db57071` — "didn't work in practice on the real board")
-     doesn't apply: a Gantt row's whole point is chronological alignment (who's doing what at the
-     same time), and clustering by project breaks that. A Kanban column has no such axis — it's
-     already siloed by status — so this is closer to a plain Jira/Trello swimlane than to what was
-     reverted there. Went through two smaller, lower-risk steps first (a card title swap, then a
-     "Sort: Project" option) before landing here once the smaller versions were confirmed not
-     enough — grouping was asked for explicitly, twice, after seeing those.
-     - `groupTasksByProject(list)` clusters an *already-sorted* column's cards without
-       reordering them — a project's group appears wherever its first (best-sorted) card would
-       have anyway, and cards keep their relative order within the group. So the "Sort: Focus /
-       Priority / Deadline / Project" dropdown still controls order — which group comes first,
-       and card order within a group — it just no longer controls *whether* cards cluster, which
-       now happens unconditionally regardless of sort mode.
-     - **No header, no indent, no border on a group — a dot/uppercase-label/left-border version
-       was tried first and reported back as clutter.** The reason: it was a visual motif that
-       existed nowhere else on a card, so it read as a new, separate UI element rather than an
-       extension of the existing card design. What ships now is invisible structurally — a group
-       is just its cards, in a plain wrapper `<div>` with a smaller `gap-1.5` (vs. the column's
-       normal `gap-2.5`) so a same-project run visibly sits tighter together than the surrounding
-       cards, with no styling of its own.
-     - **`taskCardHtml(t, showProjectOnCard)`'s second parameter is true only for the *first* card
-       in a same-project run** (`renderBoard` passes `i === 0` per group), not "true for every
-       singleton" — a run of one card is trivially its own first card, so nothing changes for
-       those. Every card after the first in a multi-card run shows only the task name, bold, in
-       the same slot the project name would have occupied — repeating the project on every card
-       in a 3-4-card stack was the actual clutter, not the grouping/clustering itself.
-     - **The task line under a shown project name got a legibility pass too** (`text-xs` →
-       `text-sm font-medium`, plus real `mt-1` spacing instead of relying on the title's `mb-1`
-       alone) — the original swap moved which field was bold but left the secondary line small,
-       low-contrast, and visually stuck to the title above it with almost no gap, which read as a
-       caption rather than a second distinct piece of information. Reported directly ("still in
-       grey and small text... no separation between it and the project title").
-       `renderFocus`'s Focus-of-the-Day cards are unaffected by any of this — a narrower,
-       always-just-this-person's-work strip that wasn't part of this request.
+   - **Board columns render one card per project, not one card per task** (`groupTasksByProject`
+     + `projectGroupCardHtml` + `boardTaskRowHtml`, all called from `renderBoard`). This *is*
+     project-row-grouping, on the one view where the earlier Gantt attempt at the same idea
+     (`db57071` — "didn't work in practice on the real board") doesn't apply: a Gantt row's whole
+     point is chronological alignment (who's doing what at the same time), and clustering by
+     project breaks that. A Kanban column has no such axis — it's already siloed by status — so
+     this is closer to a plain Jira/Trello swimlane than to what was reverted there.
+     - `groupTasksByProject(list)` clusters an *already-sorted* column's tasks by project without
+       reordering them — a project's group appears wherever its first (best-sorted) task would
+       have anyway, and tasks keep their relative order within the group. So the "Sort: Focus /
+       Priority / Deadline / Project" dropdown still controls order (which project card comes
+       first, and row order within it) — it just no longer controls *whether* tasks cluster,
+       which happens unconditionally regardless of sort mode.
+     - **`projectGroupCardHtml(g)`** is the one wrapper every project gets — project name as the
+       card header, tasks underneath as `divide-y`-separated rows — whether the project has one
+       task or five. That "always the same treatment" is what actually resolved the repeated
+       feedback about grouped and ungrouped cards looking inconsistent: there's no longer a
+       second look to be inconsistent with.
+     - **`boardTaskRowHtml(t)`** is a compact two-line row (task name; then a priority/status dot,
+       assignee, deadline, and an OVERDUE/DUE TODAY/DUE TOMORROW badge when relevant), not a
+       shrunken version of the old full task-card. Editing, archiving, deleting, checklist/time/
+       comment counts, and the Drive-link shortcut are all dropped from the row itself — every one
+       of them is still reachable by opening the task (`data-open-task`, unchanged), where the
+       task modal's own Edit/Delete/Archive controls already live. Nothing here is a
+       functionality loss, just one click further away in exchange for a row that reads as a row.
+       Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
+       `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
+       `.task-just-completed`) keep working unchanged — only the inner grip span
+       (`data-drag-handle`) is actually `draggable="true"`; the dragstart it fires bubbles up to
+       whatever ancestor has the listener, so a row works exactly like the old card did there.
+     - **Three iterations landed here, not one.** A dot/uppercase-label/left-border header on
+       cards that stayed full-size was reported as clutter — a visual motif existing nowhere else
+       on a card. Removing the header but keeping full-size cards (just tighter-spaced, first
+       card naming the project) was reported as still not what was meant. What was actually
+       wanted — confirmed against a text mockup before building it a third time, after two misses
+       — was a real project-card container with a task list inside it, each row still showing
+       assignee/deadline. `renderFocus`'s Focus-of-the-Day cards are unaffected by any of this —
+       a narrower, always-just-this-person's-work strip that was never part of this request.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
@@ -332,7 +334,7 @@ to bottom:
      rather than emailed/Slacked: no connector for either exists yet, and this needed no new
      integration to ship. Called from `renderAll()` so it stays in sync with every task change
      like every other view.
-   - **Completion motivators** (`renderBoard`, `taskCardHtml`, `updateTaskStatus`,
+   - **Completion motivators** (`renderBoard`, `boardTaskRowHtml`, `updateTaskStatus`,
      `statusTransitionEffects`) — three small, deliberately-scoped-down pieces addressing "moving
      a card into Done should feel rewarding," built after a toast-per-task-move idea was rejected
      in conversation for fatigue risk on a busy shared board:
@@ -359,15 +361,14 @@ to bottom:
        write goes out**, not inside a `.then()` — the `onSnapshot`-driven re-render that actually
        paints the card in its new column can land before the write's own promise resolves, and
        setting the flag too late means the pulse silently never shows.
-       - **The green "this is done" signal lives on the card (`taskCardHtml`'s `cardBg`), not the
-         column.** It briefly lived on the column too (an emerald tint on the Done column's
+       - **The green "this is done" signal lives on the row (`boardTaskRowHtml`'s `rowBg`), not
+         the column.** It briefly lived on the column too (an emerald tint on the Done column's
          header/background) — reverted after feedback that tinting the whole column on top of
-         already-green cards was too much at once. A Done card now gets an actual background
-         wash (`bg-emerald-50 dark:bg-emerald-500/10`), not just the thin `border-l-4` accent
-         every priority already carries, so the signal is visible on the card itself regardless
-         of which column/grouping layout is on screen. The Done column's header keeps its small
-         emerald "N today" pill (a status readout, not a column-wide tint) and its neutral zinc
-         background/border, same as every other column.
+         already-green cards was too much at once. A Done task's row now gets an actual
+         background wash (`bg-emerald-50 dark:bg-emerald-500/10`), so the signal is visible
+         regardless of which project card it's sitting in. The Done column's header keeps its
+         small emerald "N today" pill (a status readout, not a column-wide tint) and its neutral
+         zinc background/border, same as every other column.
      - **"N today" badge**: the Done column header shows a count of tasks with `completedAt` on
        today's local date (`completedTodayCount`, via the existing `localDateOf` helper — not a
        raw UTC slice, for the same reason `localDateOf` exists elsewhere). It bounces
