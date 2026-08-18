@@ -377,6 +377,7 @@
             <option value="focus">Sort: Focus</option>
             <option value="priority">Sort: Priority</option>
             <option value="deadline">Sort: Deadline</option>
+            <option value="project">Sort: Project</option>
           </select>
           <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
@@ -1411,6 +1412,21 @@
         if (!da) return 1;
         if (!db) return -1;
         return da - db;
+      });
+    }
+    if (filters.sortBy === 'project') {
+      // Groups same-project cards together purely by sort order -- no header row, no DOM
+      // restructuring, so none of the drag-and-drop / mobile-column risk a real stacked-group
+      // view would carry. Tasks with no project sort last rather than mixing in alphabetically,
+      // same "undated sorts last" convention as the deadline sort above. Ties within a project
+      // fall back to focus score so the cluster itself is still in a sensible order.
+      return list.slice().sort(function (a, b) {
+        var pa = a.project || '', pb = b.project || '';
+        if (!pa && !pb) return focusScore(b) - focusScore(a);
+        if (!pa) return 1;
+        if (!pb) return -1;
+        var diff = pa.localeCompare(pb);
+        return diff !== 0 ? diff : focusScore(b) - focusScore(a);
       });
     }
     return sortByFocus(list);
@@ -3050,8 +3066,8 @@
             '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
-        '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-        '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-3 line-clamp-1">' + escapeHtml(t.project) + '</p>' +
+        '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.project) + '</p>' +
+        '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-3 line-clamp-1">' + escapeHtml(t.name) + '</p>' +
         '<div class="flex items-center justify-between text-xs mb-3">' +
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
           (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
@@ -4494,7 +4510,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T08:02:30Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T08:14:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

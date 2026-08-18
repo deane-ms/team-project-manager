@@ -216,6 +216,26 @@ to bottom:
      old near-term boost topped out at +450, dwarfed by the 1000-point gap between priority
      tiers), which let a High-priority task with weeks of runway rank above something actually
      due soon.
+   - **Board card title shows the project, not the task** (`taskCardHtml`) — the bold headline is
+     `t.project`, the muted line under it is `t.name`. This was flipped from the original
+     task-first layout: task names on the real board are often near-identical across a project
+     ("Create webinar assets_2 Sep" vs "_3 Sep") and unreadable without the project for context,
+     while the project name alone usually says what actually needs doing. Deliberately *not* a
+     re-run of the Gantt's project-grouping revert (`db57071` — "didn't work in practice on the
+     real board") — this is a title swap, not row grouping or a restructured renderer, so none of
+     whatever broke there (most likely the Gantt's chronological row order losing its meaning once
+     grouped) applies to a plain field swap on an already-per-status-column card. Only Board cards
+     changed; `renderFocus`'s Focus-of-the-Day cards still lead with the task name — a narrower,
+     always-just-this-person's-work strip where the task itself is usually already the clearest
+     label, and changing it wasn't asked for.
+   - **`sortTasksForDisplay`'s `'project'` option** (`filters.sortBy`, `#sort-by`) sorts cards by
+     `t.project` (localeCompare; project-less tasks sort last, same convention as the deadline
+     sort's undated-last rule), falling back to `focusScore` as the tiebreaker
+     within a project so the cluster itself isn't in an arbitrary order. Paired with the title
+     swap above, this clusters same-project cards adjacent to each other with a repeated bold
+     project name marking the boundary — the lower-risk alternative to actual stacked/collapsible
+     project headers, which remains a real possibility later but wasn't built here (see the
+     `db57071` note above for why that's a deliberately separate, more careful step).
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
