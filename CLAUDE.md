@@ -205,6 +205,14 @@ to bottom:
      sign-off, so priority no longer says much about what to look at. Same `pm`-shape object as
      `PRIORITY_META`/`DONE_META` (`badge`/`dot`/`bar`/`barLight`/`border`), Gantt-only for now —
      Board cards, Focus of the Day, and People/Projects still color purely by priority/Done.
+     - **The sticky Task label column leads with the project, not the task** — same field-priority
+       swap as the Board cards (`t.project` bold, `t.assignee + ' · ' + t.name` muted underneath;
+       used to be `t.name` bold / `assignee · project` underneath). Asked for directly after
+       seeing the Board's version. Deliberately **not** a rerun of the Gantt's project-*grouping*
+       revert (`db57071` — row-per-project header/summary-bar, reverted for not working on the
+       real board): this is a label-text swap on the same flat, date-sorted row list that already
+       exists, nothing about row order, count, or the chronological alignment a Gantt exists for
+       changes. That's the actual reason grouping failed there and a plain swap doesn't share it.
    - **`dueUrgency(t)`** is the single source of truth for "overdue"/"due soon", shared by the
      Board badges, stats bar, Projects tab's per-project overdue chip, People view, and the This
      Week digest. It exempts `status === 'Review'` the same way it already exempted `'Done'` —
@@ -259,6 +267,11 @@ to bottom:
        follow-up "space out the cards more" — a separate axis from the in-row padding above; both
        needed their own pass. The project title itself went `text-sm` → `text-base` (matching the
        column header `<h3>`'s size) for clearer hierarchy over the `text-sm` task names below it.
+       **A visible priority/status badge (`pm.badge`, "MEDIUM"/"HIGH"/"Completed") came back into
+       the metadata line too** — the priority dot next to the task name (still there) was reported
+       as insufficient on its own ("priority labels are missing"): a colored dot backed only by a
+       hover `title` isn't actually readable at a glance, which the badge fixes without removing
+       the dot's quick left-edge color scan down a column of rows.
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span
