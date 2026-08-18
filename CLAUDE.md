@@ -265,11 +265,51 @@ to bottom:
    - **This Week digest** (`btn-digest`/`digest-panel`, `renderDigestPanel`): a bell-and-dropdown
      icon next to the notification bell, same interaction pattern, scoped to the signed-in
      viewer's own tasks (`t.assignee === myName`) — Overdue, Due in the next 7 days, and
-     "Recently completed" (really "currently `status === 'Done'`," since tasks have no
-     `completedAt` timestamp, only `archivedAt` — a separate, later action). Deliberately in-app
+     "Recently completed" (still really "currently `status === 'Done'`," even though a real
+     `completedAt` timestamp exists now — see "Completion motivators" below; this list wasn't
+     switched to it, see the comment above `renderDigestPanel` for why). Deliberately in-app
      rather than emailed/Slacked: no connector for either exists yet, and this needed no new
      integration to ship. Called from `renderAll()` so it stays in sync with every task change
      like every other view.
+   - **Completion motivators** (`renderBoard`, `taskCardHtml`, `updateTaskStatus`) — three small,
+     deliberately-scoped-down pieces addressing "moving a card into Done should feel rewarding,"
+     built after a toast-per-task-move idea was rejected in conversation for fatigue risk on a
+     busy shared board:
+     - A `completedAt` timestamp is now stamped on every task the moment it enters `Done`
+       (`updateTaskStatus`), and cleared if it's moved back out — the first real completion
+       timestamp this app has had (`archivedAt` is a separate, later, manual action). Existing
+       Done tasks from before this shipped simply have no `completedAt` and don't retroactively
+       gain one — same fix-it-forward approach as the checklist item id backfill.
+     - **Card pulse**: the Done column gets a subtle emerald tint (header + background, distinct
+       from the neutral zinc of every other column), and a card that just moved into Done gets a
+       one-shot pulse animation (`task-just-completed` / `task-complete-pop`). The pulse flag
+       (`justCompletedIds`, id → timestamp, TTL ~3.5s) is set **eagerly in `updateTaskStatus`
+       before the Firestore write goes out**, not inside its `.then()` — the `onSnapshot`-driven
+       re-render that actually paints the card in its new column can land before the write's own
+       promise resolves, and setting the flag too late means the pulse silently never shows.
+     - **"N today" badge**: the Done column header shows a count of tasks with `completedAt` on
+       today's local date (`completedTodayCount`, via the existing `localDateOf` helper — not a
+       raw UTC slice, for the same reason `localDateOf` exists elsewhere). It bounces
+       (`done-today-bounce`) only on the render where the count just increased
+       (`lastDoneTodayCount`, module-scoped) — not on page load, and not on an unrelated re-render
+       from someone else's edit landing via `onSnapshot`.
+     - **Whole-project celebration**: reserved for the one case worth an actual toast — every
+       active task in a project now `Done`. `updateTaskStatus` checks this synchronously against
+       the current `tasks` state before the write (same reasoning as the pulse flag), but only
+       fires `celebrateProjectComplete` — a new `'celebrate'` `showToast` type, sparkle icon,
+       longer 5.2s dwell — after the write actually succeeds, so a failed write can't produce a
+       false "project complete" toast. This is deliberately independent of
+       `checkProjectDeadlinePopups`'s existing archive-prompt, which is gated on the project's
+       *deadline* having passed, not on the moment every task actually finishes — both can fire
+       for the same project, at different times, for different reasons.
+     - All the new CSS animations respect `prefers-reduced-motion` (no existing animation in this
+       app did before this — Flowboard didn't have the guard the sibling apps already use, until
+       now).
+     - **Not verified in a live browser this round** — this environment has no Firebase CLI /
+       emulator installed, and the app is `type="module"` (unlike the sibling MS Creatives, its
+       state isn't reachable from `window.*` for a Playwright smoke test either). Verified via
+       `node scripts/check-syntax.mjs` and a careful manual re-read of the diff only. Worth an
+       emulator-backed pass before/after the next deploy if anything here looks off in practice.
    - **Overtime is manually tagged** (`task-time-overtime`, `setOvertimeToggle`) — a plain toggle
      button next to Billable, same shape and pattern. It used to be auto-detected: crossing
      `OVERTIME_DAILY_MINUTES` (8h) in a person's cumulative logged time for the day popped an

@@ -101,6 +101,26 @@
 
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
   .toast-anim { animation: toast-in 0.18s ease-out; }
+  .celebrate-toast { padding: 0.85rem 1.15rem; font-size: 0.92rem; box-shadow: 0 10px 28px rgba(16, 185, 129, 0.35); }
+
+  /* Completion motivators: a brief pulse on a card the moment it lands in Done, and a small
+     bounce on the Done column's "N today" badge when that count just went up. Both are one-shot
+     and purely decorative -- see updateTaskStatus/renderBoard. */
+  @keyframes task-complete-pop {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45); }
+    35% { transform: scale(1.03); box-shadow: 0 0 0 7px rgba(16, 185, 129, 0.22); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+  .task-just-completed { animation: task-complete-pop 0.6s ease-out; }
+  @keyframes done-today-bounce {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+  .done-today-bounce { animation: done-today-bounce 0.4s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    .task-just-completed, .done-today-bounce { animation: none; }
+  }
 
   .gantt-bar { transition: filter 0.15s ease; }
   .gantt-bar:hover { filter: brightness(0.95); }
@@ -1028,7 +1048,8 @@
     checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>',
     reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
-    bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>'
+    bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>',
+    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -1043,6 +1064,14 @@
   var currentView = 'board';
   var pendingImportData = null;
   var draggedTaskId = null;
+
+  // Completion motivators (Done column tint, card pulse, "N completed today" counter, and the
+  // whole-project celebration toast) -- see updateTaskStatus. justCompletedIds is id -> timestamp,
+  // set eagerly so the pulse class is present before the onSnapshot-triggered re-render that
+  // actually paints the card; lastDoneTodayCount lets the header badge bounce only when the count
+  // just went UP, not on every unrelated board re-render.
+  var justCompletedIds = {};
+  var lastDoneTodayCount = null;
 
   var filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
 
@@ -1119,6 +1148,16 @@
     var d = parseDate(dateStr);
     if (!d) return '—';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  // Tasks completed before this feature existed have no completedAt and never count toward
+  // "today" -- that's fine, they simply don't retroactively qualify (same fix-it-forward
+  // approach as the checklist item ids backfill: only new activity gets the new field).
+  function completedTodayCount() {
+    var todayStr = toDateInputValue(new Date());
+    return activeTasks().filter(function (t) {
+      return t.status === 'Done' && t.completedAt && localDateOf(t.completedAt) === todayStr;
+    }).length;
   }
 
   function checklistProgressPct(task) {
@@ -1377,24 +1416,30 @@
   ========================================================= */
   function showToast(message, type) {
     type = type || 'success';
-    var iconMap = { success: 'check', error: 'alertCircle', info: 'info' };
+    var iconMap = { success: 'check', error: 'alertCircle', info: 'info', celebrate: 'sparkles' };
     var colorMap = {
       success: 'bg-emerald-600',
       error: 'bg-rose-600',
-      info: 'bg-zinc-800'
+      info: 'bg-zinc-800',
+      celebrate: 'bg-emerald-600'
     };
+    var isCelebrate = type === 'celebrate';
     var container = document.getElementById('toast-container');
     var el = document.createElement('div');
-    el.className = 'toast-anim flex items-center gap-2 text-white text-sm font-medium pl-3 pr-4 py-2.5 rounded-lg shadow-pop ' + colorMap[type];
-    el.innerHTML = svgIcon(iconMap[type], 'w-4 h-4 shrink-0') + '<span></span>';
+    el.className = 'toast-anim flex items-center gap-2 text-white text-sm font-medium pl-3 pr-4 py-2.5 rounded-lg shadow-pop ' +
+      colorMap[type] + (isCelebrate ? ' celebrate-toast' : '');
+    el.innerHTML = svgIcon(iconMap[type], (isCelebrate ? 'w-5 h-5' : 'w-4 h-4') + ' shrink-0') + '<span></span>';
     el.querySelector('span').textContent = message;
     container.appendChild(el);
+    // The celebration toast is reserved for finishing a whole project (see
+    // celebrateProjectComplete) -- rare enough to earn a longer dwell than a routine save/delete
+    // confirmation.
     setTimeout(function () {
       el.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
       el.style.opacity = '0';
       el.style.transform = 'translateY(6px)';
       setTimeout(function () { el.remove(); }, 260);
-    }, 2800);
+    }, isCelebrate ? 5200 : 2800);
   }
 
   // Keeps Tab/Shift+Tab cycling within an open modal instead of escaping into the
@@ -2515,11 +2560,39 @@
   function updateTaskStatus(id, newStatus) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t || t.status === newStatus) return;
-    updateDoc(doc(tasksCol, id), { status: newStatus, updatedAt: new Date().toISOString() }).then(function () {
+    var enteringDone = newStatus === 'Done' && t.status !== 'Done';
+    var leavingDone = t.status === 'Done' && newStatus !== 'Done';
+    // Checked against the current local state, before the write goes out -- this is what
+    // actually finishes the project from the person dragging the card's point of view, not
+    // whatever `tasks` looks like once Firestore round-trips (which can lag this moment).
+    var willFinishProject = enteringDone && t.project &&
+      activeTasks().filter(function (x) { return x.project === t.project && x.id !== id && x.status !== 'Done'; }).length === 0;
+
+    if (enteringDone) {
+      // Set eagerly, not inside the .then() below: the onSnapshot-triggered re-render that
+      // actually paints the card in its new column can land before this write's own promise
+      // resolves, and a flag set too late means the pulse silently never shows.
+      justCompletedIds[id] = Date.now();
+      setTimeout(function () { delete justCompletedIds[id]; }, 3500);
+    }
+
+    var patch = { status: newStatus, updatedAt: new Date().toISOString() };
+    if (enteringDone) patch.completedAt = new Date().toISOString();
+    else if (leavingDone) patch.completedAt = null;   // moved back out -- it isn't "completed" anymore
+
+    updateDoc(doc(tasksCol, id), patch).then(function () {
       logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus));
+      if (willFinishProject) celebrateProjectComplete(t.project);
     }).catch(function (err) {
       showToast('Could not move task: ' + err.message, 'error');
     });
+  }
+
+  // The one case that still gets an explicit toast -- reserved for finishing a whole project
+  // (every active task in it now Done), not for every single card move, so it stays a real
+  // moment instead of becoming background noise on a busy shared board.
+  function celebrateProjectComplete(projectName) {
+    showToast('"' + projectName + '" complete — every task is done', 'celebrate');
   }
 
   /* =========================================================
@@ -2826,10 +2899,12 @@
      this answers "what do *I* need to look at this week" -- deliberately
      no Slack/email delivery (no connector for that exists yet), so it's
      an always-available in-app panel instead. "Recently completed" is
-     approximated as status === 'Done', not a true completion-timestamp
-     bucket -- there's no `completedAt` field on tasks (only
-     `archivedAt`, a separate later action), so this is "still sitting
-     in Done" rather than "finished in the last N days."
+     still approximated as status === 'Done' rather than a true
+     completion-timestamp bucket -- a `completedAt` field exists now (see
+     updateTaskStatus, added for the Done-column "N today" counter), but
+     this list deliberately wasn't switched to it: it means "still
+     sitting in Done," not "finished in the last N days," and re-scoping
+     it to a real recency window is a separate, unrequested change.
   ========================================================= */
   function renderDigestPanel() {
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
@@ -2890,8 +2965,10 @@
     var commentCount = (t.comments || []).length;
     var chipClass = 'flex items-center gap-1 text-xs text-zinc-900 dark:text-white';
 
+    var justCompleted = !!justCompletedIds[t.id];
+
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition">' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
           '<div class="flex items-center gap-0.5">' +
@@ -2930,20 +3007,36 @@
     document.getElementById('empty-board-banner').classList.toggle('hidden', activeTasks().length !== 0);
     var filtered = applyFilters(activeTasks());
     var container = document.getElementById('board-columns');
+
+    // "N today" only bounces the run it actually increases -- lastDoneTodayCount starts null so
+    // the very first render (page load) never bounces, and an unrelated re-render (someone edits
+    // a different task's name) doesn't replay it either since the count hasn't changed.
+    var doneToday = completedTodayCount();
+    var bounceDoneToday = lastDoneTodayCount !== null && doneToday > lastDoneTodayCount;
+    lastDoneTodayCount = doneToday;
+
     container.innerHTML = STATUSES.map(function (status) {
+      var isDoneCol = status === 'Done';
       var items = sortTasksForDisplay(filtered.filter(function (t) { return t.status === status; }));
       var cardsHtml = items.length
         ? items.map(taskCardHtml).join('')
         : '<div class="text-xs text-zinc-400 dark:text-zinc-600 text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks here</div>';
+      var colColorClass = isDoneCol
+        ? 'bg-emerald-50/60 dark:bg-emerald-500/[0.04] border border-emerald-200/60 dark:border-emerald-800/40'
+        : 'bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700';
 
       return (
-        '<div class="flex flex-col rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700 min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
+        '<div class="flex flex-col rounded-xl ' + colColorClass + ' min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<h3 class="text-base font-bold text-zinc-700 dark:text-zinc-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
               '<span class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 bg-white/70 dark:bg-zinc-800/70 px-2 py-0.5 rounded-full">' + items.length + '</span>' +
+              (isDoneCol
+                ? '<span class="text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-500/15 px-2 py-0.5 rounded-full' +
+                  (bounceDoneToday ? ' done-today-bounce' : '') + '" title="Completed today">' + doneToday + ' today</span>'
+                : '') +
             '</div>' +
-            (status === 'Done' ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
+            (isDoneCol ? '<button type="button" data-archive-completed title="Archive completed tasks" class="text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
           '</div>' +
           '<div class="flex flex-col gap-2.5 px-2.5 pb-3 flex-1" data-column-body="' + status + '">' + cardsHtml + '</div>' +
         '</div>'
@@ -4307,7 +4400,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-17T09:10:06Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T07:47:41Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
