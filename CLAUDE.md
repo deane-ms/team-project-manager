@@ -216,26 +216,34 @@ to bottom:
      old near-term boost topped out at +450, dwarfed by the 1000-point gap between priority
      tiers), which let a High-priority task with weeks of runway rank above something actually
      due soon.
-   - **Board card title shows the project, not the task** (`taskCardHtml`) — the bold headline is
-     `t.project`, the muted line under it is `t.name`. This was flipped from the original
-     task-first layout: task names on the real board are often near-identical across a project
-     ("Create webinar assets_2 Sep" vs "_3 Sep") and unreadable without the project for context,
-     while the project name alone usually says what actually needs doing. Deliberately *not* a
-     re-run of the Gantt's project-grouping revert (`db57071` — "didn't work in practice on the
-     real board") — this is a title swap, not row grouping or a restructured renderer, so none of
-     whatever broke there (most likely the Gantt's chronological row order losing its meaning once
-     grouped) applies to a plain field swap on an already-per-status-column card. Only Board cards
-     changed; `renderFocus`'s Focus-of-the-Day cards still lead with the task name — a narrower,
-     always-just-this-person's-work strip where the task itself is usually already the clearest
-     label, and changing it wasn't asked for.
-   - **`sortTasksForDisplay`'s `'project'` option** (`filters.sortBy`, `#sort-by`) sorts cards by
-     `t.project` (localeCompare; project-less tasks sort last, same convention as the deadline
-     sort's undated-last rule), falling back to `focusScore` as the tiebreaker
-     within a project so the cluster itself isn't in an arbitrary order. Paired with the title
-     swap above, this clusters same-project cards adjacent to each other with a repeated bold
-     project name marking the boundary — the lower-risk alternative to actual stacked/collapsible
-     project headers, which remains a real possibility later but wasn't built here (see the
-     `db57071` note above for why that's a deliberately separate, more careful step).
+   - **Board cards are grouped by project within each column** (`groupTasksByProject`, called
+     from `renderBoard`). This *is* project-row-grouping, on the one view where the earlier
+     Gantt attempt at the same idea (`db57071` — "didn't work in practice on the real board")
+     doesn't apply: a Gantt row's whole point is chronological alignment (who's doing what at the
+     same time), and clustering by project breaks that. A Kanban column has no such axis — it's
+     already siloed by status — so this is closer to a plain Jira/Trello swimlane than to what was
+     reverted there. Went through two smaller, lower-risk steps first (a card title swap, then a
+     "Sort: Project" option) before landing here once the smaller versions were confirmed not
+     enough — grouping was asked for explicitly, twice, after seeing those.
+     - `groupTasksByProject(list)` clusters an *already-sorted* column's cards without
+       reordering them — a project's group appears wherever its first (best-sorted) card would
+       have anyway, and cards keep their relative order within the group. So the "Sort: Focus /
+       Priority / Deadline / Project" dropdown still controls order — which group comes first,
+       and card order within a group — it just no longer controls *whether* cards cluster, which
+       now happens unconditionally regardless of sort mode.
+     - **A group only gets a header when it has 2+ cards.** A single-task project renders as a
+       plain card with no wrapper — a header naming the one project it's already showing (see
+       below) would be pure redundancy, and was the exact "clutter on every single-task column"
+       risk flagged before building this.
+     - **`taskCardHtml(t, showProjectOnCard)`'s second parameter decides whether the card repeats
+       the project name or leans on the group header instead.** Grouped cards (`showProjectOnCard:
+       false`) show only the task name, bold; singleton cards (`showProjectOnCard: true`) show
+       both — project bold, task muted underneath, same field-swap reasoning as before this
+       change existed (task names are often near-identical within a project — "Create webinar
+       assets_2 Sep" vs "_3 Sep" — and unreadable without that context, but there's no group
+       header to supply it for a lone card). `renderFocus`'s Focus-of-the-Day cards are
+       unaffected either way — a narrower, always-just-this-person's-work strip that wasn't part
+       of this request.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
@@ -326,13 +334,21 @@ to bottom:
          `oldStatus` as a plain value, not an old-task object, specifically so a brand-new task
          saved with `status: 'Done'` on first creation (no old task to diff against) still counts
          as "entering Done" — `oldStatus` is `null` in that case, and `null !== 'Done'` is true.
-     - **Card pulse**: the Done column gets a subtle emerald tint (header + background, distinct
-       from the neutral zinc of every other column), and a card that just moved into Done gets a
-       one-shot pulse animation (`task-just-completed` / `task-complete-pop`). The pulse flag
-       (`justCompletedIds`, id → timestamp, TTL ~3.5s) is set **eagerly in `updateTaskStatus`
-       before the Firestore write goes out**, not inside its `.then()` — the `onSnapshot`-driven
-       re-render that actually paints the card in its new column can land before the write's own
-       promise resolves, and setting the flag too late means the pulse silently never shows.
+     - **Card pulse**: a card that just moved into Done gets a one-shot pulse animation
+       (`task-just-completed` / `task-complete-pop`). The pulse flag (`justCompletedIds`, id →
+       timestamp, TTL ~3.5s) is set **eagerly in `statusTransitionEffects` before the Firestore
+       write goes out**, not inside a `.then()` — the `onSnapshot`-driven re-render that actually
+       paints the card in its new column can land before the write's own promise resolves, and
+       setting the flag too late means the pulse silently never shows.
+       - **The green "this is done" signal lives on the card (`taskCardHtml`'s `cardBg`), not the
+         column.** It briefly lived on the column too (an emerald tint on the Done column's
+         header/background) — reverted after feedback that tinting the whole column on top of
+         already-green cards was too much at once. A Done card now gets an actual background
+         wash (`bg-emerald-50 dark:bg-emerald-500/10`), not just the thin `border-l-4` accent
+         every priority already carries, so the signal is visible on the card itself regardless
+         of which column/grouping layout is on screen. The Done column's header keeps its small
+         emerald "N today" pill (a status readout, not a column-wide tint) and its neutral zinc
+         background/border, same as every other column.
      - **"N today" badge**: the Done column header shows a count of tasks with `completedAt` on
        today's local date (`completedTodayCount`, via the existing `localDateOf` helper — not a
        raw UTC slice, for the same reason `localDateOf` exists elsewhere). It bounces

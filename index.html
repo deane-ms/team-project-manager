@@ -3062,7 +3062,29 @@
   /* =========================================================
      RENDER: BOARD
   ========================================================= */
-  function taskCardHtml(t) {
+  // Clusters an already-sorted column's cards by project, without reordering them -- a project's
+  // group appears wherever its first (highest-sorted) card would have anyway, and cards keep
+  // their existing relative order within the group. Deliberately not a re-run of the Gantt's
+  // project-grouping revert (see renderProjects's openCount note / commit db57071): that grouped
+  // a *chronological* row list, where clustering breaks the "who's doing what at the same time"
+  // read a Gantt exists for. A Kanban column has no such axis -- it's already siloed by status --
+  // so grouping same-project cards together here is closer to a plain Jira/Trello swimlane than
+  // to what failed there.
+  function groupTasksByProject(list) {
+    var order = [], byProject = {};
+    list.forEach(function (t) {
+      var key = t.project || '';
+      if (!byProject[key]) { byProject[key] = []; order.push(key); }
+      byProject[key].push(t);
+    });
+    return order.map(function (key) { return { project: key, tasks: byProject[key] }; });
+  }
+
+  // showProjectOnCard is false only when a group header above the card already names the
+  // project -- repeating it on every card in a 3-4-card stack was the exact clutter this whole
+  // change exists to remove. Singleton (ungrouped) cards keep showing both, since there's no
+  // header for them to lean on.
+  function taskCardHtml(t, showProjectOnCard) {
     var isDone = t.status === 'Done';
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
     var urgency = dueUrgency(t);
@@ -3076,9 +3098,22 @@
     var chipClass = 'flex items-center gap-1 text-xs text-zinc-900 dark:text-white';
 
     var justCompleted = !!justCompletedIds[t.id];
+    // Done cards get an actual green wash, not just the thin left-border accent every other
+    // priority already gets -- the column itself went back to neutral (see renderBoard), so the
+    // "this is done" signal now lives on the card, where it's visible regardless of which column
+    // layout/grouping is on screen.
+    var cardBg = isDone
+      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-800/40'
+      : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700';
+    var titleHtml = showProjectOnCard
+      ? '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.project) + '</p>' +
+        '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-3 line-clamp-1">' + escapeHtml(t.name) + '</p>'
+      // Grouped: the project header above already named it, so the card leads with the task
+      // itself -- otherwise every card in a stack repeated the same project name for nothing.
+      : '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-3 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>';
 
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + cardBg + ' border border-l-4 ' + pm.border + ' rounded-xl shadow-card p-3.5 cursor-pointer group hover:shadow-pop transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
         '<div class="flex items-start justify-between gap-2 mb-2">' +
           '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
           '<div class="flex items-center gap-0.5">' +
@@ -3088,8 +3123,7 @@
             '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
-        '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.project) + '</p>' +
-        '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-3 line-clamp-1">' + escapeHtml(t.name) + '</p>' +
+        titleHtml +
         '<div class="flex items-center justify-between text-xs mb-3">' +
           '<span class="flex items-center gap-1 ' + dateClass + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
           (overdue ? '<span class="text-xs font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
@@ -3128,15 +3162,28 @@
     container.innerHTML = STATUSES.map(function (status) {
       var isDoneCol = status === 'Done';
       var items = sortTasksForDisplay(filtered.filter(function (t) { return t.status === status; }));
+      // Column background reverted to the same neutral zinc every column already used -- the
+      // "this is done" signal moved to the card itself (see taskCardHtml's cardBg), so tinting
+      // the whole column on top of that read as too much at once.
       var cardsHtml = items.length
-        ? items.map(taskCardHtml).join('')
+        ? groupTasksByProject(items).map(function (g) {
+            var single = g.tasks.length === 1;
+            var cardsForGroup = g.tasks.map(function (t) { return taskCardHtml(t, single); }).join('');
+            if (single) return cardsForGroup;
+            return (
+              '<div class="flex flex-col gap-1.5">' +
+                '<div class="flex items-center gap-1.5 px-1">' +
+                  '<span class="w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-500 shrink-0"></span>' +
+                  '<span class="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(g.project) + '</span>' +
+                '</div>' +
+                '<div class="flex flex-col gap-2 pl-2.5 border-l-2 border-zinc-200 dark:border-zinc-700">' + cardsForGroup + '</div>' +
+              '</div>'
+            );
+          }).join('')
         : '<div class="text-xs text-zinc-400 dark:text-zinc-600 text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks here</div>';
-      var colColorClass = isDoneCol
-        ? 'bg-emerald-50/60 dark:bg-emerald-500/[0.04] border border-emerald-200/60 dark:border-emerald-800/40'
-        : 'bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700';
 
       return (
-        '<div class="flex flex-col rounded-xl ' + colColorClass + ' min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
+        '<div class="flex flex-col rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700 min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
           '<div class="flex items-center justify-between px-3.5 py-3">' +
             '<div class="flex items-center gap-2">' +
               '<h3 class="text-base font-bold text-zinc-700 dark:text-zinc-200">' + (STATUS_LABELS[status] || status) + '</h3>' +
@@ -4532,7 +4579,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T08:21:47Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T08:36:39Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
