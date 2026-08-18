@@ -222,6 +222,20 @@ to bottom:
      billable time. A project is "Completed" purely by every one of its tasks having `archivedAt`
      set (`activeCount === 0`), not by task `status` — a project can be all-`Done` and still show
      as Ongoing until someone (or `checkProjectDeadlinePopups`, below) actually archives them.
+     - **`openCount` (active *and* not `Done`) is tracked separately from `activeCount` (active,
+       regardless of status) specifically so the card header doesn't lie by omission.** It used to
+       show an unqualified "N active tasks" even when every one of those tasks was already
+       `Done` — reading as a contradiction next to task rows that literally said "Completed"
+       right below it (reported as "why is this project still in Ongoing?" against a project
+       whose only task showed Completed). `projectCardHtml` now picks the label based on
+       `openCount` vs `activeCount`: genuinely open work still reads "N active tasks"; a project
+       where `openCount === 0 && activeCount > 0` reads "All N tasks done" instead, in emerald,
+       plus a **`.project-archive-btn`** ("Ready to archive") that calls the existing
+       `archiveProjectTasks` directly via `confirmArchiveProject` — same confirm copy and same
+       archive call as `promptProjectReadyToComplete`, just reachable any time every task is
+       Done rather than gated on the project's deadline having passed, and not part of the
+       once-per-session popup queue. Delegated on `#projects-grid` alongside the two existing
+       deadline handlers, same reasoning (innerHTML gets replaced on every snapshot).
    - Checklist items support drag-to-reorder (native HTML5 DnD) in `renderChecklistEditor`.
    - `checkProjectDeadlinePopups()` (called after every `tasks` `onSnapshot`, guarded by
      `projectPopupShown` so each qualifying project only prompts once per session) nudges a
@@ -296,12 +310,26 @@ to bottom:
      - **Whole-project celebration**: reserved for the one case worth an actual toast — every
        active task in a project now `Done`. `updateTaskStatus` checks this synchronously against
        the current `tasks` state before the write (same reasoning as the pulse flag), but only
-       fires `celebrateProjectComplete` — a new `'celebrate'` `showToast` type, sparkle icon,
-       longer 5.2s dwell — after the write actually succeeds, so a failed write can't produce a
-       false "project complete" toast. This is deliberately independent of
+       fires `celebrateProjectComplete` — a new `'celebrate'` `showToast` type (sparkle icon,
+       longer 5.2s dwell) plus `spawnConfetti()`, an actual falling-confetti burst, not just a
+       distinct-looking toast — after the write actually succeeds, so a failed write can't
+       produce a false "project complete" celebration. This is deliberately independent of
        `checkProjectDeadlinePopups`'s existing archive-prompt, which is gated on the project's
        *deadline* having passed, not on the moment every task actually finishes — both can fire
        for the same project, at different times, for different reasons.
+       - `spawnConfetti()` spawns 28 `.confetti-piece` divs (on-brand palette — orange wordmark,
+         emerald Done, plus the amber/violet already used for overtime/due-soon — not a generic
+         rainbow), each animated via CSS custom properties (`--confetti-rot`/`--confetti-drift`)
+         set per-element so one shared `@keyframes confetti-fall` can still give every piece a
+         different fall rotation/drift, then removed via `setTimeout`.
+         **`removeConfettiPiece(el)` is a named, parameterized closure factory, not an inline
+         `function () { piece.remove(); }` inside the loop** — `var piece` is one shared binding
+         across all 28 loop iterations, so an inline closure would have every timeout firing
+         against whichever piece the loop landed on *last*, leaking the other 27 permanently.
+         Checks `prefers-reduced-motion` itself and skips creating any elements at all rather
+         than the CSS-level `animation: none` override used for the pulse/bounce above — a
+         confetti piece that can't fall is just a stray colored rectangle sitting on screen for
+         two seconds, which reads as a bug, not a design choice.
      - All the new CSS animations respect `prefers-reduced-motion` (no existing animation in this
        app did before this — Flowboard didn't have the guard the sibling apps already use, until
        now).

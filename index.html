@@ -122,6 +122,21 @@
     .task-just-completed, .done-today-bounce { animation: none; }
   }
 
+  /* Whole-project celebration -- see spawnConfetti/celebrateProjectComplete. No reduced-motion
+     CSS override here on purpose: unlike the pulse/bounce above, a confetti piece with its fall
+     animation switched off would just be a stray colored rectangle sitting on screen for two
+     seconds, which reads as a rendering bug, not a design choice. spawnConfetti() checks
+     prefers-reduced-motion itself and skips creating the elements entirely instead. */
+  .confetti-piece {
+    position: fixed; top: -12px; width: 8px; height: 14px; border-radius: 2px;
+    pointer-events: none; z-index: 90;
+    animation-name: confetti-fall; animation-timing-function: ease-in; animation-fill-mode: forwards;
+  }
+  @keyframes confetti-fall {
+    0% { transform: translateY(-10px) translateX(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) translateX(var(--confetti-drift, 0px)) rotate(var(--confetti-rot, 480deg)); opacity: 0; }
+  }
+
   .gantt-bar { transition: filter 0.15s ease; }
   .gantt-bar:hover { filter: brightness(0.95); }
 
@@ -2297,11 +2312,18 @@
   // only needed for projects that have no deadline yet -- once one is set the field shows anyway.
   var projectDeadlineEditing = null;
 
-  // All three handlers are delegated: renderProjects() replaces the grid's innerHTML on every
+  // All handlers here are delegated: renderProjects() replaces the grid's innerHTML on every
   // snapshot, so anything bound directly to a card would be thrown away.
   var projectsGrid = document.getElementById('projects-grid');
 
   projectsGrid.addEventListener('click', function (e) {
+    var archiveBtn = e.target.closest('.project-archive-btn');
+    if (archiveBtn) {
+      var name = archiveBtn.getAttribute('data-project');
+      var count = tasks.filter(function (t) { return t.project === name && !t.archivedAt; }).length;
+      confirmArchiveProject(name, count);
+      return;
+    }
     var addBtn = e.target.closest('.project-deadline-add');
     if (!addBtn) return;
     projectDeadlineEditing = addBtn.getAttribute('data-project');
@@ -2593,6 +2615,37 @@
   // moment instead of becoming background noise on a busy shared board.
   function celebrateProjectComplete(projectName) {
     showToast('"' + projectName + '" complete — every task is done', 'celebrate');
+    spawnConfetti();
+  }
+
+  // On-brand palette (orange wordmark, emerald Done, plus the amber/violet already used for
+  // overtime/due-soon elsewhere) rather than a generic rainbow burst.
+  var CONFETTI_COLORS = ['#ff4e20', '#10b981', '#f59e0b', '#8b5cf6', '#38bdf8'];
+
+  function removeConfettiPiece(el) {
+    // Named + parameterized rather than an inline closure inside the loop below: a `var`
+    // declared per-iteration is still one shared binding across all iterations, so an inline
+    // `function () { piece.remove(); }` would have every timeout removing whichever piece the
+    // loop happened to land on last, leaking the rest of them permanently.
+    return function () { if (el.parentNode) el.parentNode.removeChild(el); };
+  }
+
+  function spawnConfetti() {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (var i = 0; i < 28; i++) {
+      var piece = document.createElement('div');
+      piece.className = 'confetti-piece';
+      var duration = 1.4 + Math.random() * 0.9;
+      var delay = Math.random() * 0.25;
+      piece.style.left = (Math.random() * 100) + 'vw';
+      piece.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+      piece.style.animationDuration = duration + 's';
+      piece.style.animationDelay = delay + 's';
+      piece.style.setProperty('--confetti-rot', (180 + Math.random() * 540) + 'deg');
+      piece.style.setProperty('--confetti-drift', ((Math.random() - 0.5) * 140) + 'px');
+      document.body.appendChild(piece);
+      setTimeout(removeConfettiPiece(piece), (duration + delay) * 1000 + 150);
+    }
   }
 
   /* =========================================================
@@ -2723,6 +2776,25 @@
         }).finally(done);
       },
       { tone: 'question', confirmText: 'Mark complete', cancelText: 'Not yet', onCancel: done }
+    );
+  }
+
+  // Button-triggered counterpart to promptProjectReadyToComplete above -- same confirm copy and
+  // same archiveProjectTasks call, but reachable any time every active task is Done (the
+  // "Ready to archive" button on a project card), not gated on the project's deadline having
+  // passed and not part of the once-per-session popup queue.
+  function confirmArchiveProject(name, count) {
+    openConfirm(
+      'Archive "' + name + '"?',
+      'Every task is done. Archive all ' + count + ' task' + (count === 1 ? '' : 's') + ' to move this project into Completed? Nothing is deleted -- archived tasks can be restored any time.',
+      function () {
+        archiveProjectTasks(name).then(function (n) {
+          showToast('Archived ' + n + ' task' + (n === 1 ? '' : 's') + ' -- "' + name + '" moved to Completed', 'success');
+        }).catch(function (err) {
+          showToast('Could not archive project tasks: ' + err.message, 'error');
+        });
+      },
+      { tone: 'question', confirmText: 'Archive', cancelText: 'Not yet' }
     );
   }
 
@@ -3475,16 +3547,32 @@
         '</div>';
     }
 
+    // Distinguishes "still being worked on" from "finished but nobody's archived it yet" --
+    // the latter only ever applies to an Ongoing card (a Completed card has activeCount 0, so
+    // openCount is trivially 0 too and this branch never fires for it).
+    var readyToArchive = p.activeCount > 0 && p.openCount === 0;
+    var taskCountLabel = readyToArchive
+      ? '<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">All ' + p.activeCount + ' task' + (p.activeCount === 1 ? '' : 's') + ' done</span>'
+      : (p.openCount === p.activeCount
+        ? '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>'
+        : '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.openCount + ' active, ' + (p.activeCount - p.openCount) + ' done</span>');
+
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
         '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
           '<div class="min-w-0 flex-1">' +
             '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
             '<div class="flex items-center gap-1.5 mt-0.5">' +
-              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>' +
+              taskCountLabel +
               badges +
             '</div>' +
             deadlineRow +
+            (readyToArchive
+              ? '<button type="button" class="project-archive-btn text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1.5" ' +
+                'data-project="' + escapeHtml(p.name) + '" title="Archive every task in this project and move it to Completed">' +
+                svgIcon('archive', 'w-3 h-3') + 'Ready to archive' +
+              '</button>'
+              : '') +
           '</div>' +
           '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
         '</div>' +
@@ -3511,8 +3599,13 @@
       var overtimeMinutes = mine.reduce(function (sum, t) { return sum + taskOvertimeMinutes(t); }, 0);
       // "Active" here means "not archived" -- a project only counts as fully wrapped up
       // (Completed, below) once every one of its tasks has actually been archived, not just
-      // moved to the Done column.
+      // moved to the Done column. openCount narrows that further to tasks that are ALSO not
+      // yet Done, so the card can tell "3 people still working on this" apart from "everyone's
+      // done, it's just sitting here unarchived" -- the latter used to render as an unqualified
+      // "N active tasks" label sitting right above rows that literally said "Completed", which
+      // read as a contradiction even though it wasn't one.
       var activeCount = mine.filter(function (t) { return !t.archivedAt; }).length;
+      var openCount = mine.filter(function (t) { return !t.archivedAt && t.status !== 'Done'; }).length;
       var rows = mine.slice().sort(function (a, b) { return taskTimeMinutes(b) - taskTimeMinutes(a); });
       // Real stored timestamps, not the project *name* text -- some project names embed a
       // date-like prefix as a team naming convention (e.g. "260702[Google]..."), but that's
@@ -3530,7 +3623,8 @@
       var lastArchivedAt = archivedTimes.length ? Math.max.apply(null, archivedTimes) : null;
       return {
         name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes,
-        overtimeMinutes: overtimeMinutes, activeCount: activeCount, nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt
+        overtimeMinutes: overtimeMinutes, activeCount: activeCount, openCount: openCount,
+        nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt
       };
     });
 
@@ -4400,7 +4494,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T07:47:41Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T08:02:30Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
