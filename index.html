@@ -2435,14 +2435,19 @@
     var isEditing = !!editingTaskId;
     var oldTask = isEditing ? tasks.find(function (x) { return x.id === editingTaskId; }) : null;
     var id = isEditing ? editingTaskId : uid();
-    var taskData = {
+    // Same completion effects (completedAt, card pulse, whole-project celebration) as dragging a
+    // card to Done on the Board -- this is the other way a task's status changes, and it used to
+    // skip all of it since this save goes through setDoc, not updateTaskStatus. A brand-new task
+    // saved with status Done straight away counts as "entering Done" too (oldStatus is null).
+    var statusEffect = statusTransitionEffects(id, project, oldTask ? oldTask.status : null, status);
+    var taskData = Object.assign({
       name: name, project: project, assignee: assignee, priority: priority,
       status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
       checklist: currentChecklist,
       timeEntries: currentTimeEntries,
       dependsOn: currentDependsOn,
       updatedAt: new Date().toISOString()
-    };
+    }, statusEffect.patch);
     if (!isEditing) {
       taskData.createdAt = taskData.updatedAt;
       taskData.comments = [];
@@ -2469,6 +2474,7 @@
         logActivity('task_created', 'Added task "' + name + '"');
         notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
       }
+      if (statusEffect.willFinishProject) celebrateProjectComplete(statusEffect.projectName);
       closeTaskModal();
     }).catch(function (err) {
       showToast('Could not save this task: ' + err.message, 'error');
@@ -2595,32 +2601,48 @@
     });
   }
 
-  function updateTaskStatus(id, newStatus) {
-    var t = tasks.find(function (x) { return x.id === id; });
-    if (!t || t.status === newStatus) return;
-    var enteringDone = newStatus === 'Done' && t.status !== 'Done';
-    var leavingDone = t.status === 'Done' && newStatus !== 'Done';
+  // Shared by updateTaskStatus (Board drag-and-drop) and the task-modal save handler -- both
+  // are ways a task's status can change to/from Done, and both need the exact same completion
+  // effects (completedAt stamp, card pulse, and the whole-project celebration when this was the
+  // project's last open task). This used to live only inside updateTaskStatus, so changing a
+  // task's status via the modal's Status dropdown + Save silently skipped all of it -- no
+  // completedAt, no pulse, no confetti -- since that path writes through a completely separate
+  // setDoc call, not updateTaskStatus. oldStatus is passed rather than an old-task object so a
+  // brand-new task saved with status Done straight away (no old task to compare against) can
+  // still go through this the same way, treating "didn't exist yet" as "wasn't Done."
+  function statusTransitionEffects(taskId, taskProject, oldStatus, newStatus) {
+    var enteringDone = newStatus === 'Done' && oldStatus !== 'Done';
+    var leavingDone = oldStatus === 'Done' && newStatus !== 'Done';
     // Checked against the current local state, before the write goes out -- this is what
-    // actually finishes the project from the person dragging the card's point of view, not
-    // whatever `tasks` looks like once Firestore round-trips (which can lag this moment).
-    var willFinishProject = enteringDone && t.project &&
-      activeTasks().filter(function (x) { return x.project === t.project && x.id !== id && x.status !== 'Done'; }).length === 0;
+    // actually finishes the project from the person's point of view in the moment, not whatever
+    // `tasks` looks like once Firestore round-trips (which can lag behind this moment).
+    var willFinishProject = enteringDone && taskProject &&
+      activeTasks().filter(function (x) { return x.project === taskProject && x.id !== taskId && x.status !== 'Done'; }).length === 0;
 
     if (enteringDone) {
-      // Set eagerly, not inside the .then() below: the onSnapshot-triggered re-render that
-      // actually paints the card in its new column can land before this write's own promise
-      // resolves, and a flag set too late means the pulse silently never shows.
-      justCompletedIds[id] = Date.now();
-      setTimeout(function () { delete justCompletedIds[id]; }, 3500);
+      // Set eagerly, not inside a .then(): the onSnapshot-triggered re-render that actually
+      // paints the card can land before the caller's own write promise resolves, and a flag
+      // set too late means the pulse silently never shows.
+      justCompletedIds[taskId] = Date.now();
+      setTimeout(function () { delete justCompletedIds[taskId]; }, 3500);
     }
 
-    var patch = { status: newStatus, updatedAt: new Date().toISOString() };
+    var patch = {};
     if (enteringDone) patch.completedAt = new Date().toISOString();
     else if (leavingDone) patch.completedAt = null;   // moved back out -- it isn't "completed" anymore
 
+    return { patch: patch, willFinishProject: willFinishProject, projectName: taskProject };
+  }
+
+  function updateTaskStatus(id, newStatus) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (!t || t.status === newStatus) return;
+    var effect = statusTransitionEffects(id, t.project, t.status, newStatus);
+    var patch = Object.assign({ status: newStatus, updatedAt: new Date().toISOString() }, effect.patch);
+
     updateDoc(doc(tasksCol, id), patch).then(function () {
       logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus));
-      if (willFinishProject) celebrateProjectComplete(t.project);
+      if (effect.willFinishProject) celebrateProjectComplete(effect.projectName);
     }).catch(function (err) {
       showToast('Could not move task: ' + err.message, 'error');
     });
@@ -4510,7 +4532,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T08:14:28Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T08:21:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

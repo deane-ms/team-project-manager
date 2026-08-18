@@ -305,15 +305,27 @@ to bottom:
      rather than emailed/Slacked: no connector for either exists yet, and this needed no new
      integration to ship. Called from `renderAll()` so it stays in sync with every task change
      like every other view.
-   - **Completion motivators** (`renderBoard`, `taskCardHtml`, `updateTaskStatus`) — three small,
-     deliberately-scoped-down pieces addressing "moving a card into Done should feel rewarding,"
-     built after a toast-per-task-move idea was rejected in conversation for fatigue risk on a
-     busy shared board:
-     - A `completedAt` timestamp is now stamped on every task the moment it enters `Done`
-       (`updateTaskStatus`), and cleared if it's moved back out — the first real completion
-       timestamp this app has had (`archivedAt` is a separate, later, manual action). Existing
-       Done tasks from before this shipped simply have no `completedAt` and don't retroactively
-       gain one — same fix-it-forward approach as the checklist item id backfill.
+   - **Completion motivators** (`renderBoard`, `taskCardHtml`, `updateTaskStatus`,
+     `statusTransitionEffects`) — three small, deliberately-scoped-down pieces addressing "moving
+     a card into Done should feel rewarding," built after a toast-per-task-move idea was rejected
+     in conversation for fatigue risk on a busy shared board:
+     - A `completedAt` timestamp is now stamped on every task the moment it enters `Done`, and
+       cleared if it's moved back out — the first real completion timestamp this app has had
+       (`archivedAt` is a separate, later, manual action). Existing Done tasks from before this
+       shipped simply have no `completedAt` and don't retroactively gain one — same fix-it-forward
+       approach as the checklist item id backfill.
+       - **`statusTransitionEffects(taskId, taskProject, oldStatus, newStatus)` is the one place
+         that decides `completedAt`, the pulse flag, and whether a project just finished** — both
+         `updateTaskStatus` (Board drag-and-drop) and the task-modal save handler call it. It
+         didn't start that way: this logic first shipped living directly inside
+         `updateTaskStatus`, so changing a task's Status dropdown in the modal and clicking Save
+         silently skipped all of it (no `completedAt`, no pulse, no confetti) — that path writes
+         through its own `setDoc` call, never through `updateTaskStatus`. Reported directly
+         ("the confetti doesn't appear when status is changed to completed in the card"), fixed by
+         extracting the shared helper rather than duplicating the logic a second time. Takes
+         `oldStatus` as a plain value, not an old-task object, specifically so a brand-new task
+         saved with `status: 'Done'` on first creation (no old task to diff against) still counts
+         as "entering Done" — `oldStatus` is `null` in that case, and `null !== 'Done'` is true.
      - **Card pulse**: the Done column gets a subtle emerald tint (header + background, distinct
        from the neutral zinc of every other column), and a card that just moved into Done gets a
        one-shot pulse animation (`task-just-completed` / `task-complete-pop`). The pulse flag
