@@ -2182,6 +2182,22 @@
     });
   }
 
+  // Only one floating header panel/dropdown -- the notification bell, the digest bell, the user
+  // menu, or any enhanced-select filter/sort menu -- stays open at a time. Opening one used to
+  // leave whichever others were already open just sitting there, stacked on top of each other,
+  // since each panel only ever managed its own hidden/visible state -- reported directly against
+  // a screenshot where the notification panel was open over other content and read as a layout
+  // bug rather than an ordinary dropdown. userMenuPanel/digestPanel/notificationPanel aren't
+  // assigned until further down the file, but referencing them here is safe: `var` hoists them,
+  // and this function body only ever actually runs from a later click, once module init has set
+  // all three.
+  function closeOtherHeaderPanels(exceptPanel) {
+    [userMenuPanel, digestPanel, notificationPanel].forEach(function (p) {
+      if (p && p !== exceptPanel) p.classList.add('hidden');
+    });
+    closeOtherEnhancedSelectMenus(null);
+  }
+
   document.addEventListener('click', function (e) {
     var hit = allEnhancedSelects.find(function (entry) { return entry.wrapper.contains(e.target); });
     closeOtherEnhancedSelectMenus(hit ? hit.wrapper : null);
@@ -2246,6 +2262,7 @@
 
     function openMenu() {
       closeOtherEnhancedSelectMenus(wrapper);
+      closeOtherHeaderPanels(null);
       menu.classList.remove('hidden');
       trigger.setAttribute('aria-expanded', 'true');
       var list = items();
@@ -3080,10 +3097,10 @@
     return order.map(function (key) { return { project: key, tasks: byProject[key] }; });
   }
 
-  // showProjectOnCard is false only when a group header above the card already names the
-  // project -- repeating it on every card in a 3-4-card stack was the exact clutter this whole
-  // change exists to remove. Singleton (ungrouped) cards keep showing both, since there's no
-  // header for them to lean on.
+  // showProjectOnCard is false for every card after the first in a same-project run (see
+  // renderBoard) -- the first card already named the project, so repeating it on every card in
+  // a 3-4-card stack was the exact clutter this exists to remove. A singleton "run" of one card
+  // is always its own first card, so it keeps showing both.
   function taskCardHtml(t, showProjectOnCard) {
     var isDone = t.status === 'Done';
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
@@ -3105,11 +3122,16 @@
     var cardBg = isDone
       ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-800/40'
       : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700';
+    // The task line used to be text-xs/zinc-400 sitting right under the title with almost no
+    // gap, which read as a caption stuck to the title rather than a second distinct piece of
+    // information -- bumped a size/weight step up (still clearly secondary to the bold project
+    // title) and given real breathing room (mt-1) instead of just mb-1 on the line above it.
     var titleHtml = showProjectOnCard
-      ? '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.project) + '</p>' +
-        '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-3 line-clamp-1">' + escapeHtml(t.name) + '</p>'
-      // Grouped: the project header above already named it, so the card leads with the task
-      // itself -- otherwise every card in a stack repeated the same project name for nothing.
+      ? '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1.5 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.project) + '</p>' +
+        '<p class="text-sm font-medium text-zinc-500 dark:text-zinc-400 mt-1 mb-3 line-clamp-1">' + escapeHtml(t.name) + '</p>'
+      // First card of a same-project group already carries the project name (see renderBoard) --
+      // repeating it on every card in the run was the exact clutter this exists to avoid, so the
+      // rest of the group leads with the task itself, same bold treatment the project gets above.
       : '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-3 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>';
 
     return (
@@ -3165,20 +3187,17 @@
       // Column background reverted to the same neutral zinc every column already used -- the
       // "this is done" signal moved to the card itself (see taskCardHtml's cardBg), so tinting
       // the whole column on top of that read as too much at once.
+      // Grouping is nothing but tighter spacing plus "only the first card in a run names the
+      // project" -- no header, no indent, no border. A dot/label/left-border treatment was tried
+      // first and reported as clutter precisely because it's a visual motif that exists nowhere
+      // else on a card; every card here still looks exactly like an ordinary one. The wrapper div
+      // itself carries no visible styling -- it exists only to give a same-project run its own
+      // smaller gap (gap-1.5) distinct from the column's normal card-to-card gap (gap-2.5, on
+      // data-column-body below), which is what actually reads as "these belong together."
       var cardsHtml = items.length
         ? groupTasksByProject(items).map(function (g) {
-            var single = g.tasks.length === 1;
-            var cardsForGroup = g.tasks.map(function (t) { return taskCardHtml(t, single); }).join('');
-            if (single) return cardsForGroup;
-            return (
-              '<div class="flex flex-col gap-1.5">' +
-                '<div class="flex items-center gap-1.5 px-1">' +
-                  '<span class="w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-500 shrink-0"></span>' +
-                  '<span class="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(g.project) + '</span>' +
-                '</div>' +
-                '<div class="flex flex-col gap-2 pl-2.5 border-l-2 border-zinc-200 dark:border-zinc-700">' + cardsForGroup + '</div>' +
-              '</div>'
-            );
+            var cardsForGroup = g.tasks.map(function (t, i) { return taskCardHtml(t, i === 0); }).join('');
+            return g.tasks.length > 1 ? '<div class="flex flex-col gap-1.5">' + cardsForGroup + '</div>' : cardsForGroup;
           }).join('')
         : '<div class="text-xs text-zinc-400 dark:text-zinc-600 text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks here</div>';
 
@@ -4358,6 +4377,7 @@
   var userMenuTrigger = document.getElementById('user-menu-trigger');
   userMenuTrigger.addEventListener('click', function (e) {
     e.stopPropagation();
+    closeOtherHeaderPanels(userMenuPanel);
     userMenuPanel.classList.toggle('hidden');
   });
   document.addEventListener('click', function (e) {
@@ -4486,6 +4506,7 @@
   var btnDigest = document.getElementById('btn-digest');
   btnDigest.addEventListener('click', function (e) {
     e.stopPropagation();
+    closeOtherHeaderPanels(digestPanel);
     digestPanel.classList.toggle('hidden');
   });
   document.addEventListener('click', function (e) {
@@ -4498,6 +4519,7 @@
   var btnNotifications = document.getElementById('btn-notifications');
   btnNotifications.addEventListener('click', function (e) {
     e.stopPropagation();
+    closeOtherHeaderPanels(notificationPanel);
     notificationPanel.classList.toggle('hidden');
   });
   document.addEventListener('click', function (e) {
@@ -4579,7 +4601,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-18T08:36:39Z";
+  var CURRENT_BUILD_VERSION = "2026-08-18T08:53:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

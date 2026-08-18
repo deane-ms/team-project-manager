@@ -163,6 +163,17 @@ to bottom:
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
 5. **Modal + UI helpers** — task modal, checklist editor, time-entry editor, "enhanced select"
    dropdown widget, mention autocomplete menu.
+   - **`closeOtherHeaderPanels(exceptPanel)` enforces one floating panel/dropdown open at a
+     time** — the notification bell, digest bell, user menu, and every "enhanced select"
+     filter/sort menu each used to manage only their own hidden/visible state independently, so
+     two could genuinely be open and stacked on top of each other at once (reported directly
+     against a screenshot: "notification or drop down panels can only open one at a time"). Each
+     trigger now calls it (passing itself as the exception) before toggling its own visibility,
+     and `enhanceSelect`'s `openMenu()` calls it too (passing `null`, closing everything). Defined
+     early, next to `closeOtherEnhancedSelectMenus`, even though `userMenuPanel`/`digestPanel`/
+     `notificationPanel` aren't assigned until much further down the file — safe, since `var`
+     hoists them and the function body only actually runs from a later click, well after module
+     init has set all three.
    - `setFieldError(inputEl, message)` walks *up* from the input looking for the field's
      `.field-error` `<p>`, rather than only checking the input's immediate parent. Fields wrapped
      in a `.relative` div for an overlaid icon (Project) keep their `.field-error` outside that
@@ -231,19 +242,27 @@ to bottom:
        Priority / Deadline / Project" dropdown still controls order — which group comes first,
        and card order within a group — it just no longer controls *whether* cards cluster, which
        now happens unconditionally regardless of sort mode.
-     - **A group only gets a header when it has 2+ cards.** A single-task project renders as a
-       plain card with no wrapper — a header naming the one project it's already showing (see
-       below) would be pure redundancy, and was the exact "clutter on every single-task column"
-       risk flagged before building this.
-     - **`taskCardHtml(t, showProjectOnCard)`'s second parameter decides whether the card repeats
-       the project name or leans on the group header instead.** Grouped cards (`showProjectOnCard:
-       false`) show only the task name, bold; singleton cards (`showProjectOnCard: true`) show
-       both — project bold, task muted underneath, same field-swap reasoning as before this
-       change existed (task names are often near-identical within a project — "Create webinar
-       assets_2 Sep" vs "_3 Sep" — and unreadable without that context, but there's no group
-       header to supply it for a lone card). `renderFocus`'s Focus-of-the-Day cards are
-       unaffected either way — a narrower, always-just-this-person's-work strip that wasn't part
-       of this request.
+     - **No header, no indent, no border on a group — a dot/uppercase-label/left-border version
+       was tried first and reported back as clutter.** The reason: it was a visual motif that
+       existed nowhere else on a card, so it read as a new, separate UI element rather than an
+       extension of the existing card design. What ships now is invisible structurally — a group
+       is just its cards, in a plain wrapper `<div>` with a smaller `gap-1.5` (vs. the column's
+       normal `gap-2.5`) so a same-project run visibly sits tighter together than the surrounding
+       cards, with no styling of its own.
+     - **`taskCardHtml(t, showProjectOnCard)`'s second parameter is true only for the *first* card
+       in a same-project run** (`renderBoard` passes `i === 0` per group), not "true for every
+       singleton" — a run of one card is trivially its own first card, so nothing changes for
+       those. Every card after the first in a multi-card run shows only the task name, bold, in
+       the same slot the project name would have occupied — repeating the project on every card
+       in a 3-4-card stack was the actual clutter, not the grouping/clustering itself.
+     - **The task line under a shown project name got a legibility pass too** (`text-xs` →
+       `text-sm font-medium`, plus real `mt-1` spacing instead of relying on the title's `mb-1`
+       alone) — the original swap moved which field was bold but left the secondary line small,
+       low-contrast, and visually stuck to the title above it with almost no gap, which read as a
+       caption rather than a second distinct piece of information. Reported directly ("still in
+       grey and small text... no separation between it and the project title").
+       `renderFocus`'s Focus-of-the-Day cards are unaffected by any of this — a narrower,
+       always-just-this-person's-work strip that wasn't part of this request.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
