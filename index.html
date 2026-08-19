@@ -96,8 +96,29 @@
   .disclosure-chevron { transition: transform 0.15s; }
   details[open] > summary .disclosure-chevron { transform: rotate(90deg); }
 
-  .modal-backdrop { background: rgba(24, 24, 27,0.55); backdrop-filter: blur(2px); }
+  /* Open transitions only -- modals/panels close via an instant `hidden` toggle (many call sites:
+     backdrop click, Escape, Cancel, outside-click), so an exit animation would need every one of
+     those to delay adding `hidden` by the animation's duration instead of just adding a class.
+     An abrupt close reads far less jarring than an abrupt open, so that asymmetry is deliberate,
+     not a shortcut -- see the confirm/completion-motivator animations below for why the same
+     reasoning didn't apply there (those already had to coordinate with an async Firestore write,
+     so the extra bookkeeping was already unavoidable). Animating open needs no JS at all: a CSS
+     `animation` on an element restarts on its own whenever that element goes from `display:none`
+     to displayed, so adding a permanent class here is enough -- no toggling required.
+     Reduced-motion guard: only the `-in` classes are silenced below; `.modal-backdrop`'s
+     background/blur (not animated) and the completion motivators' final "settled" state are
+     unaffected either way, so nothing looks broken with motion off, just instant instead of eased. */
+  .modal-backdrop { background: rgba(24, 24, 27,0.55); backdrop-filter: blur(2px); animation: modal-backdrop-fade 0.15s ease-out; }
   .dark .modal-backdrop { background: rgba(9, 9, 11, 0.75); }
+  @keyframes modal-backdrop-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes modal-pop-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+  .modal-pop-in { animation: modal-pop-in 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
+
+  @keyframes panel-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .panel-pop-in { animation: panel-pop-in 0.14s ease-out; }
+
+  @keyframes checklist-check-pop { from { background-color: rgba(16, 185, 129, 0.2); } to { background-color: transparent; } }
+  .checklist-just-checked { animation: checklist-check-pop 0.5s ease-out; }
 
   @keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
   .toast-anim { animation: toast-in 0.18s ease-out; }
@@ -119,7 +140,8 @@
   }
   .done-today-bounce { animation: done-today-bounce 0.4s ease-out; }
   @media (prefers-reduced-motion: reduce) {
-    .task-just-completed, .done-today-bounce { animation: none; }
+    .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
+    .checklist-just-checked { animation: none; }
   }
 
   /* Whole-project celebration -- see spawnConfetti/celebrateProjectComplete. No reduced-motion
@@ -230,7 +252,7 @@
             </button>
           </div>
           <!-- Same "positioned relative to the whole icons row" reasoning as #notification-panel below. -->
-          <div id="digest-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(22rem,calc(100vw-2rem))] max-h-[28rem] overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop">
+          <div id="digest-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(22rem,calc(100vw-2rem))] max-h-[28rem] overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
             <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
               <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">This Week</span>
               <span class="text-xs text-zinc-400 dark:text-zinc-500">Your tasks only</span>
@@ -246,7 +268,7 @@
           <!-- Positioned relative to the whole icons row (not notification-bell-wrap) so it
                can't render off-screen when the row wraps and the bell isn't at the true
                right edge -- see the same reasoning on #user-menu-panel below. -->
-          <div id="notification-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop">
+          <div id="notification-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
             <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
               <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
               <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
@@ -265,7 +287,7 @@
                the chip's own (narrow, off-right) box could render partly off-screen to the
                left. Anchoring to the full row -- which is itself right-aligned via
                justify-end/ml-auto above -- keeps it on-screen regardless of chip position. -->
-          <div id="user-menu-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm">
+          <div id="user-menu-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm panel-pop-in">
             <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
               <span id="theme-toggle-label">Switch to dark mode</span>
@@ -506,7 +528,7 @@
 
 <!-- ============ TASK MODAL ============ -->
 <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
-  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">
     <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
       <h3 id="task-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Add Task</h3>
       <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
@@ -644,7 +666,7 @@
         <div class="flex items-end gap-2">
           <div class="relative flex-1">
             <textarea id="task-comment-input" rows="2" placeholder="Add a comment… (type @ to mention someone)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
-            <div id="mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1"></div>
+            <div id="mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
           </div>
           <button type="button" id="task-comment-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
@@ -664,7 +686,7 @@
 
 <!-- ============ CONFIRM MODAL ============ -->
 <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
-  <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden modal-pop-in">
     <div class="p-5">
       <div id="confirm-icon-wrap" class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
         <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -1088,6 +1110,10 @@
   // just went UP, not on every unrelated board re-render.
   var justCompletedIds = {};
   var lastDoneTodayCount = null;
+
+  // Same pattern as justCompletedIds above, scoped to checklist item ids instead of task ids --
+  // a brief background flash on a checklist row the moment it's ticked done, purely decorative.
+  var justCheckedItemIds = {};
 
   var filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
 
@@ -1769,7 +1795,7 @@
           var editingLink = checklistLinkEditIndex === i;
           var editingText = checklistTextEditIndex === i;
           var itemMinutes = checklistItemMinutes(item.id);
-          return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50" data-checklist-i="' + i + '">' +
+          return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '">' +
             '<div class="flex items-center gap-2 px-2 py-1.5">' +
               '<span draggable="true" data-checklist-drag-handle data-checklist-i="' + i + '" title="Drag to reorder" aria-label="Drag to reorder" class="hidden sm:flex shrink-0 w-4 h-4 items-center justify-center text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
               '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="brand-checkbox checklist-toggle w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 shrink-0 cursor-pointer">' +
@@ -1856,7 +1882,14 @@
     var checkbox = e.target.closest('.checklist-toggle');
     if (checkbox) {
       var item = currentChecklist[parseInt(checkbox.dataset.checklistI, 10)];
-      if (item) item.done = checkbox.checked;
+      if (item) {
+        var justChecked = checkbox.checked && !item.done;
+        item.done = checkbox.checked;
+        if (justChecked && item.id) {
+          justCheckedItemIds[item.id] = true;
+          setTimeout(function () { delete justCheckedItemIds[item.id]; }, 500);
+        }
+      }
       renderChecklistEditor();
     }
   });
@@ -2239,7 +2272,7 @@
     var menu = document.createElement('div');
     menu.id = menuId;
     menu.setAttribute('role', 'listbox');
-    menu.className = 'absolute left-0 mt-1 z-20 hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto';
+    menu.className = 'absolute left-0 mt-1 z-20 hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
     wrapper.appendChild(menu);
 
     var entry = { wrapper: wrapper, menu: menu, trigger: trigger };
@@ -4585,7 +4618,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-19T10:40:34Z";
+  var CURRENT_BUILD_VERSION = "2026-08-19T14:54:29Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

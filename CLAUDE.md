@@ -443,6 +443,29 @@ to bottom:
      ever checked the signed-in user's own name — not necessarily who the task was actually being
      logged against. A manual toggle is more predictable, at the cost of the automatic nudge that
      used to catch it even when nobody was thinking about it.
+   - **General UI polish pass** — modals (task/confirm), every header dropdown (notification,
+     digest, user menu, mention autocomplete, and every "enhanced select" filter/sort menu), and
+     checklist items ticking done all got a subtle open/check animation, on top of the completion
+     motivators above. Requested directly ("subtle animations that make the UI more pleasant to
+     use") after noticing most of the app was otherwise instant on/off.
+     - **Open-only, deliberately.** Closing still goes through a plain `hidden` toggle everywhere
+       (backdrop click, Escape, Cancel, outside-click — many call sites per modal/panel). Adding a
+       matching exit animation would mean every one of those delaying `classList.add('hidden')`
+       by the animation's duration instead of adding it immediately, which is real extra
+       bookkeeping repeated at every close site for comparatively little payoff — an abrupt close
+       reads far less jarring than an abrupt open. `.modal-backdrop`/`.modal-pop-in`/
+       `.panel-pop-in` all lean on a browser behavior that needs zero JS either way: a CSS
+       `animation` on an element restarts on its own whenever that element's `display` flips from
+       `none` to visible, so a permanent class on the modal/panel markup is enough — the same
+       `[hidden] { display: none !important }` rule that already governs every toggle in this app
+       is what makes this work.
+     - **`justCheckedItemIds`** (checklist item id → `true`, TTL 500ms) is the same eager-flag
+       pattern as `justCompletedIds` for the Board card pulse, scoped to checklist items instead
+       of tasks: set in the `.checklist-toggle` change handler the moment an item goes from
+       not-done to done, read by `renderChecklistEditor()` to add `.checklist-just-checked` (a
+       brief green background flash) to that row on its next render.
+     - All the new animation classes are covered by the existing
+       `@media (prefers-reduced-motion: reduce)` block alongside the completion motivators.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
