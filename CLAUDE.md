@@ -466,6 +466,43 @@ to bottom:
        brief green background flash) to that row on its next render.
      - All the new animation classes are covered by the existing
        `@media (prefers-reduced-motion: reduce)` block alongside the completion motivators.
+   - **Second polish pass** — drag-and-drop, button presses, and the notification bell, added
+     after the first pass was well received and asked to be extended:
+     - **Dragging a card/checklist item** now has a smooth lift instead of an instant opacity
+       snap (`.task-card.dragging` gains `transform: scale(1.02)` + a drop shadow;
+       `.checklist-item-row.dragging` gets the same shadow treatment). `.task-card` already
+       carried Tailwind's bare `transition` class from earlier work, so this needed no new
+       transition rule; `.checklist-item-row` didn't, so it got one added explicitly. The Board
+       column's drop-target highlight (`.col-drop-target`) also gained a `background-color`
+       transition on `[data-column]` for the same reason — only the color is transitioned, not
+       the outline, since `outline-style`/`width` don't animate reliably across browsers and the
+       color fade alone already carries most of the visible effect.
+     - **`button:not(:disabled):active { filter: brightness(0.9); }`** is global press feedback,
+       deliberately using `filter` instead of `transform`. Flowboard doesn't have a shared
+       `.btn`/`.icon-btn` class anywhere (unlike the sibling apps) — every button is raw Tailwind
+       utilities — so a single global rule was the only way to cover all of them without editing
+       every button's markup. `transform` was ruled out specifically because several buttons
+       already use it for their own hover effect (e.g. the Focus-of-the-Day cards'
+       `hover:-translate-y-0.5`), and a global `:active` transform would have silently replaced
+       those instead of composing with them; `filter` composites independently, so it can't
+       collide. Also deliberately *not* wrapped in its own `transition` rule — most buttons
+       already carry Tailwind's bare `transition` class, whose default `transition-property` list
+       already includes `filter`, so adding one here risked overwriting whatever properties an
+       individual button's existing `transition` was actually covering (a bare CSS `transition`
+       shorthand fully replaces the list, it doesn't merge with what's already declared).
+     - **`nudgeNotificationBell()`** shakes `#btn-notifications` once per snapshot when a new
+       *unread* notification actually lands via the `notifications` `onSnapshot` listener —
+       same `notifListenerReady`-gated "added after the first snapshot" detection
+       `fireDesktopNotification` already uses (see the comment there on why a ready-flag, not a
+       timestamp comparison), called once per snapshot rather than once per new doc so a batch of
+       several notifications (e.g. one comment mentioning three people) doesn't restart the shake
+       repeatedly. Fires regardless of the desktop-notification opt-in, so it's the one new-
+       activity cue everyone gets. The bell button is a persistent DOM node (never recreated),
+       so this is a plain `classList` add/remove-after-timeout rather than the render-time flag
+       pattern `justCompletedIds`/`justCheckedItemIds` use — no render pass needed to pick it up.
+       The remove → forced reflow (`void btn.offsetWidth`) → re-add sequence lets the animation
+       restart cleanly if a second notification arrives mid-shake, instead of the class-already-
+       present no-op that a bare re-add would otherwise be.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.

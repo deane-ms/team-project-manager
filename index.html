@@ -81,12 +81,40 @@
   [data-view]{ display: none; }
   [data-view].active-view{ display: block; }
 
-  .task-card.dragging { opacity: 0.4; }
+  /* .task-card already carries Tailwind's bare `transition` class at creation (both the Board
+     row and the checklist-drag row do not, see below), so transform/opacity/box-shadow changes
+     on .dragging animate smoothly with no extra transition rule needed here. */
+  .task-card.dragging { opacity: 0.55; transform: scale(1.02); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25); }
+  /* [data-column] (the column wrapper) has no Tailwind `transition` class of its own, unlike
+     .task-card, so the drop-target highlight needs an explicit one to fade in/out instead of
+     snapping on/off. Only background-color is transitioned -- outline-style/width don't animate
+     reliably across browsers, and the color fade alone already does most of the visual work. */
+  [data-column] { transition: background-color 0.15s ease; }
   .col-drop-target { background-color: rgba(99, 102, 241, 0.06); outline: 2px dashed #a5b4fc; outline-offset: -4px; }
   .dark .col-drop-target { background-color: rgba(99, 102, 241, 0.1); outline-color: #4f46e5; }
-  .checklist-item-row.dragging { opacity: 0.4; }
+  .checklist-item-row { transition: opacity 0.15s ease, box-shadow 0.15s ease; }
+  .checklist-item-row.dragging { opacity: 0.5; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
   .checklist-item-row.drag-over { outline: 2px dashed #a5b4fc; outline-offset: -2px; }
   .dark .checklist-item-row.drag-over { outline-color: #4f46e5; }
+
+  /* Global press feedback -- filter, not transform, deliberately: several buttons already use
+     transform for their own hover effect (e.g. the Focus-of-the-Day cards' hover:-translate-y-0.5),
+     and a global `:active { transform: scale() }` would silently replace those instead of
+     combining with them. filter composites independently of transform, so this can't collide with
+     anything. Most buttons already carry Tailwind's bare `transition` class (which includes
+     filter in its default transition-property list), so this animates smoothly wherever that's
+     present and applies instantly (still visible, just not eased) everywhere else -- no risk of
+     stomping on an existing `transition` declaration by adding one of our own here. */
+  button:not(:disabled):active { filter: brightness(0.9); }
+
+  @keyframes bell-nudge {
+    0%, 100% { transform: rotate(0deg); }
+    20% { transform: rotate(-12deg); }
+    40% { transform: rotate(10deg); }
+    60% { transform: rotate(-6deg); }
+    80% { transform: rotate(3deg); }
+  }
+  .bell-nudge { animation: bell-nudge 0.5s ease-in-out; }
 
   /* Completed-projects disclosure -- hide the native <summary> marker (two different
      mechanisms needed for cross-browser: list-style for Firefox/Chromium, the pseudo-element
@@ -141,7 +169,7 @@
   .done-today-bounce { animation: done-today-bounce 0.4s ease-out; }
   @media (prefers-reduced-motion: reduce) {
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
-    .checklist-just-checked { animation: none; }
+    .checklist-just-checked, .bell-nudge { animation: none; }
   }
 
   /* Whole-project celebration -- see spawnConfetti/celebrateProjectComplete. No reduced-motion
@@ -794,6 +822,22 @@
       if (t) openTaskModal(t);
       n.close();
     };
+  }
+
+  // A small in-app attention cue for the same "new unread notification" moment fireDesktopNotification
+  // handles -- fires regardless of desktop-notification opt-in, so it's the one signal everyone gets.
+  // Toggled directly on the persistent bell button rather than baked into a re-rendered class list
+  // (like justCompletedIds/justCheckedItemIds elsewhere): the bell element itself is never
+  // recreated, so a plain classList add/remove-after-timeout works without needing a render pass
+  // to pick up a flag. The remove-then-reflow-then-add sequence lets the animation restart cleanly
+  // if a second notification arrives while the first shake is still playing.
+  function nudgeNotificationBell() {
+    var btn = document.getElementById('btn-notifications');
+    if (!btn) return;
+    btn.classList.remove('bell-nudge');
+    void btn.offsetWidth;
+    btn.classList.add('bell-nudge');
+    setTimeout(function () { btn.classList.remove('bell-nudge'); }, 600);
   }
 
   /* =========================================================
@@ -4437,12 +4481,18 @@
         // time and silently swallowed the popup while the in-app bell (no such check) still
         // updated fine. A ready-flag needs no clock at all.
         if (notifListenerReady) {
+          var gotNewUnread = false;
           snap.docChanges().forEach(function (change) {
             if (change.type !== 'added') return;
             var data = Object.assign({ id: change.doc.id }, change.doc.data());
             if (data.read) return;
             fireDesktopNotification(data);
+            gotNewUnread = true;
           });
+          // Once per snapshot, not once per new doc -- several notifications can land in the
+          // same batch (e.g. one comment mentioning three people), and restarting the shake
+          // animation mid-flight for each one is wasted work for something purely decorative.
+          if (gotNewUnread) nudgeNotificationBell();
         }
         notifListenerReady = true;
         renderNotificationBell();
@@ -4618,7 +4668,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-19T14:54:29Z";
+  var CURRENT_BUILD_VERSION = "2026-08-19T15:04:59Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
