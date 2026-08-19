@@ -254,15 +254,18 @@ to bottom:
        feedback about grouped and ungrouped cards looking inconsistent: there's no longer a
        second look to be inconsistent with.
      - **`boardTaskRowHtml(t)`** is a compact two-line row (task name; then a priority/status dot,
-       assignee, deadline with a calendar icon, and an OVERDUE/DUE TODAY/DUE TOMORROW badge when
-       relevant), not a shrunken version of the old full task-card. Checklist/time/comment counts
-       and the Drive-link shortcut stay dropped — reachable by opening the task (`data-open-task`,
-       unchanged). **Edit/Archive/Delete icon buttons shipped removed, then came back** — their
-       first removal was reported as a real usability loss ("icons and buttons are missing now,
-       compromising on usability"), not just fewer badges: those are core actions people expect to
-       reach without opening the full modal first, unlike the info-only counts/link that stayed
-       cut. Row padding also went `py-2.5` → `py-3` and the metadata line's top margin `mt-0.5` →
-       `mt-1` after the same feedback called the rows "too cramp." The gap *between* project
+       assignee, deadline with a calendar icon, logged time, and an OVERDUE/DUE TODAY/DUE TOMORROW
+       badge when relevant), not a shrunken version of the old full task-card. Checklist/comment
+       counts and the Drive-link shortcut stay dropped — reachable by opening the task
+       (`data-open-task`, unchanged). Time logged (`taskTimeMinutes(t)`, clock icon +
+       `formatDuration`) came back after its removal was reported directly ("the time or hrs are
+       missing where it was there originally") — only shown when non-zero, same as the old card's
+       conditional. **Edit/Archive/Delete icon buttons shipped removed, then came back too** —
+       their first removal was reported as a real usability loss ("icons and buttons are missing
+       now, compromising on usability"), not just fewer badges: those are core actions people
+       expect to reach without opening the full modal first, unlike the purely-informational
+       counts/link that stayed cut. Row padding also went `py-2.5` → `py-3` and the metadata
+       line's top margin `mt-0.5` → `mt-1` after the same feedback called the rows "too cramp." The gap *between* project
        cards in a column (`data-column-body`'s own `gap-*`) went `gap-2.5` → `gap-4` on a
        follow-up "space out the cards more" — a separate axis from the in-row padding above; both
        needed their own pass. The project title itself went `text-sm` → `text-base` (matching the
