@@ -281,6 +281,15 @@ to bottom:
        the avatar+assignee pair is now wrapped in its own flex span so they stay visually paired
        as one unit as the surrounding gap grows, and the `·` separator between assignee and date
        was dropped — redundant once real spacing does that job instead.
+       **The metadata line is now two clusters, not one flat strip** — avatar+assignee first, a
+       1px vertical divider (`w-px h-3 bg-zinc-200 dark:border-zinc-700`), then priority badge /
+       deadline / logged time / urgency badges. It used to lead with the priority badge sitting
+       directly next to the avatar with only the row's normal `gap-2` between them — two similarly
+       compact, colorful elements with nothing to tell them apart, which read as one cluttered
+       blob rather than two distinct facts (reported against a screenshot: "separate the name and
+       the priority badge"). Grouping "who" and "what" into their own clusters with an explicit
+       divider was chosen over just adding more raw spacing, since spacing alone doesn't establish
+       that these are two *different kinds* of information the way a divider does.
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span
