@@ -295,6 +295,18 @@ to bottom:
        structural instead of width-dependent, which is the thing a divider on a wrapping line
        can't do; the divider is gone with it, since separate rows already say "different kinds of
        information." The second row keeps `flex-wrap` purely as a narrow-column fallback.
+       **The two meta lines span the full card width; only the task name shares a line with the
+       Edit/Archive/Delete buttons.** The row was originally one horizontal flex — dot, a
+       `min-w-0 flex-1` text column, then the button cluster — so every line inside that text
+       column, meta lines included, was ~100px narrower than the card, even though the buttons are
+       24px tall and the space beside the meta lines was empty. At a 4-column (`xl:grid-cols-4`)
+       board that shortfall was enough to push logged time onto its own line anyway, defeating the
+       stacking above — reported as "why are the times here in a separate line?" So the row is now
+       `flex flex-col`: a top line (dot + name + buttons) and the meta block below it, indented
+       `pl-[18px]` (the dot's `w-2` + the top line's `gap-2.5`) so it aligns under the name with
+       the dot still alone on the left edge for a column-wide priority scan. Reclaiming that width
+       was preferred over shrinking the badge/date/time type, which would have bought less room
+       and cost legibility.
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span

@@ -3193,15 +3193,28 @@
     var rowBg = isDone ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-white dark:bg-zinc-800';
 
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex items-start gap-2.5 px-3.5 py-3 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
-        '<span class="w-2 h-2 rounded-full mt-2 shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
-        '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-          // Two stacked meta rows, not one wrapping strip: who (avatar+name) on its own line,
-          // then what (priority/deadline/time/urgency) together on the next. They used to share
-          // a single flex-wrap row separated by a divider, but at real board-column widths that
-          // strip wrapped mid-cluster -- the badge landing next to the name and the date/time
-          // orphaned below -- so the break point is now fixed instead of width-dependent.
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex flex-col px-3.5 py-3 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
+        // The action buttons share a line with the task name only. They used to sit in a column
+        // beside the entire row, which squeezed the meta lines under them into ~100px less width
+        // than the card actually has, for nothing: the buttons are 24px tall and everything below
+        // them was empty space. That squeeze is what pushed logged time onto a line of its own.
+        '<div class="flex items-center gap-2.5">' +
+          '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
+          '<p class="min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<div class="flex items-center gap-0.5 shrink-0">' +
+            '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
+            '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+            (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
+            '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
+          '</div>' +
+        '</div>' +
+        // Two stacked meta lines, not one wrapping strip: who (avatar+name) on its own line, then
+        // what (priority/deadline/time/urgency) together on the next. They used to share a single
+        // flex-wrap line split by a divider, but at real board-column widths it wrapped
+        // mid-cluster -- badge beside the name, date/time orphaned below -- so the break point is
+        // structural now instead of width-dependent. pl-[18px] indents them under the task name
+        // (the dot's w-2 plus the top line's gap-2.5), leaving the dot alone on the left edge.
+        '<div class="pl-[18px]">' +
           '<div class="flex items-center gap-1.5 mt-1.5">' +
             '<span class="w-4 h-4 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
@@ -3213,12 +3226,6 @@
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
             (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
           '</div>' +
-        '</div>' +
-        '<div class="flex items-center gap-0.5 shrink-0">' +
-          '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
-          '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
-          (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
-          '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
         '</div>' +
       '</div>'
     );
