@@ -253,9 +253,10 @@ to bottom:
        task or five. That "always the same treatment" is what actually resolved the repeated
        feedback about grouped and ungrouped cards looking inconsistent: there's no longer a
        second look to be inconsistent with.
-     - **`boardTaskRowHtml(t)`** is a compact two-line row (task name; then a priority/status dot,
-       assignee, deadline with a calendar icon, logged time, and an OVERDUE/DUE TODAY/DUE TOMORROW
-       badge when relevant), not a shrunken version of the old full task-card. Checklist/comment
+     - **`boardTaskRowHtml(t)`** is a compact three-line row (task name; then assignee; then a
+       priority/status badge, deadline with a calendar icon, logged time, and an OVERDUE/DUE
+       TODAY/DUE TOMORROW badge when relevant — plus a priority dot on the row's left edge),
+       not a shrunken version of the old full task-card. Checklist/comment
        counts and the Drive-link shortcut stay dropped — reachable by opening the task
        (`data-open-task`, unchanged). Time logged (`taskTimeMinutes(t)`, clock icon +
        `formatDuration`) came back after its removal was reported directly ("the time or hrs are
@@ -281,15 +282,19 @@ to bottom:
        the avatar+assignee pair is now wrapped in its own flex span so they stay visually paired
        as one unit as the surrounding gap grows, and the `·` separator between assignee and date
        was dropped — redundant once real spacing does that job instead.
-       **The metadata line is now two clusters, not one flat strip** — avatar+assignee first, a
-       1px vertical divider (`w-px h-3 bg-zinc-200 dark:border-zinc-700`), then priority badge /
-       deadline / logged time / urgency badges. It used to lead with the priority badge sitting
-       directly next to the avatar with only the row's normal `gap-2` between them — two similarly
-       compact, colorful elements with nothing to tell them apart, which read as one cluttered
-       blob rather than two distinct facts (reported against a screenshot: "separate the name and
-       the priority badge"). Grouping "who" and "what" into their own clusters with an explicit
-       divider was chosen over just adding more raw spacing, since spacing alone doesn't establish
-       that these are two *different kinds* of information the way a divider does.
+       **The metadata is now two stacked rows, not one wrapping strip** — avatar+assignee on its
+       own line, then priority badge / deadline / logged time / urgency badges together on the
+       next. Before that it led with the priority badge sitting directly next to the avatar with
+       only the row's normal `gap-2` between them — two similarly compact, colorful elements with
+       nothing to tell them apart, which read as one cluttered blob rather than two distinct facts
+       (reported against a screenshot: "separate the name and the priority badge"). The first fix
+       kept them on one `flex-wrap` line split by a 1px vertical divider, but at real board-column
+       widths that line wrapped *mid-cluster* — the badge landing beside the name and the date/time
+       orphaned below — so the same screenshot came back with "put the priority badge, date and
+       time in one row, the name on a row on its own." Two explicit rows make the break point
+       structural instead of width-dependent, which is the thing a divider on a wrapping line
+       can't do; the divider is gone with it, since separate rows already say "different kinds of
+       information." The second row keeps `flex-wrap` purely as a narrow-column fallback.
        Still carries `class="task-card"` and `data-task-id` despite being visually a row now, so
        `attachBoardDnD`'s existing `.task-card` drag wiring and CSS (`.dragging`,
        `.task-just-completed`) keep working unchanged — only the inner grip span

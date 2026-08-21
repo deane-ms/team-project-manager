@@ -3197,16 +3197,16 @@
         '<span class="w-2 h-2 rounded-full mt-2 shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-          // Two visually distinct clusters, not one flat strip: who (avatar+name), a divider,
-          // then what (priority/deadline/time/urgency). Badge and avatar used to sit right next
-          // to each other with barely a gap, which read as one cluttered blob rather than two
-          // separate pieces of information -- reported directly against a screenshot.
+          // Two stacked meta rows, not one wrapping strip: who (avatar+name) on its own line,
+          // then what (priority/deadline/time/urgency) together on the next. They used to share
+          // a single flex-wrap row separated by a divider, but at real board-column widths that
+          // strip wrapped mid-cluster -- the badge landing next to the name and the date/time
+          // orphaned below -- so the break point is now fixed instead of width-dependent.
+          '<div class="flex items-center gap-1.5 mt-1.5">' +
+            '<span class="w-4 h-4 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
+          '</div>' +
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
-            '<span class="flex items-center gap-1.5">' +
-              '<span class="w-4 h-4 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
-              '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
-            '</span>' +
-            '<span class="w-px h-3 bg-zinc-200 dark:bg-zinc-700 shrink-0"></span>' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
             '<span class="flex items-center gap-1 text-xs ' + dateClass + '">' + svgIcon('calendar', 'w-3 h-3') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
             (timeMinutes ? '<span class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3 h-3') + formatDuration(timeMinutes) + '</span>' : '') +
