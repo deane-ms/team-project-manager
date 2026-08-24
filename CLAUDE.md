@@ -159,6 +159,12 @@ to bottom:
        (`#task-form`, `overflow-y-auto`), immediately before the fixed Delete/Cancel/Save footer,
        so a taller comments pane doesn't push any other field further out of view — it only
        changes how much of the conversation shows before the log's own inner scrollbar kicks in.
+     - **The task modal itself also went wider** — `max-w-2xl` (42rem) → `max-w-5xl` (64rem, ~50%
+       wider), requested directly right after the taller comments log. Uses Tailwind's standard
+       scale rather than an arbitrary `max-w-[...]` value; `5xl` lands within ~2% of an exact 50%
+       increase, close enough that a named step reads better than a bespoke number. No other
+       layout change needed — the modal's own `p-2 sm:p-4` outer padding and the form's existing
+       `sm:grid-cols-2` field pairs already respond to the wider container correctly on their own.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
      `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the
