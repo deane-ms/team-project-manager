@@ -1669,7 +1669,13 @@
       deadline: document.getElementById('task-deadline').value,
       driveLink: document.getElementById('task-drive').value,
       checklist: currentChecklist,
-      timeEntries: currentTimeEntries
+      timeEntries: currentTimeEntries,
+      // A typed-but-not-yet-Added comment previously fell straight through this whole mechanism:
+      // comments write to Firestore immediately on Add, not through this snapshot/Save flow, so
+      // an in-progress draft looked identical to "no changes" and vanished silently on Cancel.
+      // openTaskModal clears this field before capturing the baseline, so a fresh open always
+      // starts at '' here.
+      commentDraft: document.getElementById('task-comment-input').value
     });
   }
 
@@ -2563,6 +2569,27 @@
 
   taskForm.addEventListener('submit', function (e) {
     e.preventDefault();
+    // Comments write straight to Firestore on their own the moment Add is clicked -- Save never
+    // touches them -- so a draft sitting in the box unclicked would otherwise just vanish the
+    // instant this save closes the modal, with no warning at all (the same gap Cancel/backdrop/
+    // Escape had before commentDraft was added to taskFormSnapshot). Save gets its own explicit
+    // check rather than reusing that snapshot comparison, since here the answer isn't "discard or
+    // keep editing" -- it's "discard the draft specifically, or go click Add first."
+    var draftComment = document.getElementById('task-comment-input').value.trim();
+    if (draftComment) {
+      var draftSnippet = draftComment.length > 60 ? draftComment.slice(0, 60) + '…' : draftComment;
+      openConfirm(
+        'Save without sending this comment?',
+        'You started typing a comment ("' + draftSnippet + '") but never clicked Add. Saving now will lose it.',
+        function () { commitTaskSave(); },
+        { tone: 'question', confirmText: 'Save without it', cancelText: 'Go back' }
+      );
+      return;
+    }
+    commitTaskSave();
+  });
+
+  function commitTaskSave() {
     clearFieldErrors();
 
     var nameEl = document.getElementById('task-name');
@@ -2649,7 +2676,7 @@
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Task';
     });
-  });
+  }
 
   var mentionState = null;
   var mentionInput = document.getElementById('task-comment-input');
@@ -4775,7 +4802,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-24T03:52:37Z";
+  var CURRENT_BUILD_VERSION = "2026-08-24T04:02:55Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

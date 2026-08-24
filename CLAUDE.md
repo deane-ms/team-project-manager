@@ -228,6 +228,24 @@ to bottom:
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
 5. **Modal + UI helpers** — task modal, checklist editor, time-entry editor, "enhanced select"
    dropdown widget, mention autocomplete menu.
+   - **A typed-but-unsent comment used to vanish silently on Cancel *or* Save** — reported
+     directly. Root cause: comments write straight to Firestore the instant Add is clicked (their
+     own `arrayUnion`/full-array-rewrite calls, entirely separate from the task-form save flow),
+     so a draft still sitting in `#task-comment-input` was invisible to both exit paths.
+     - **Cancel/backdrop/Escape/X** already ran every close through `taskModalHasUnsavedChanges()`
+       (`taskFormSnapshot()` vs. `formBaseline`, captured at `openTaskModal` time) before an
+       explicit "Discard changes?" `openConfirm` — that mechanism just never looked at the comment
+       box. Added `commentDraft: document.getElementById('task-comment-input').value` to the
+       snapshot and the gap closes for free; `openTaskModal` already clears that field before
+       capturing `formBaseline`, so a fresh open always starts at `''` there.
+     - **Save had no equivalent check of any kind.** The task-form `submit` handler's body is now
+       `commitTaskSave()`, a named function instead of the listener's own anonymous callback, so
+       it can be invoked either immediately (no draft) or from an `openConfirm` callback ("Save
+       without sending this comment?" / Save without it / Go back) when
+       `#task-comment-input` has trimmed text. Deliberately a separate check from the
+       Cancel-side snapshot comparison, not a reuse of it — the correct framing here isn't
+       "discard everything or keep editing," it's "discard the draft specifically, or go click
+       Add first," which needs its own copy naming the comment.
    - **`closeOtherHeaderPanels(exceptPanel)` enforces one floating panel/dropdown open at a
      time** — the notification bell, digest bell, user menu, and every "enhanced select"
      filter/sort menu each used to manage only their own hidden/visible state independently, so
