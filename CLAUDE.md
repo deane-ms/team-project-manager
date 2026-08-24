@@ -100,6 +100,59 @@ to bottom:
      an arbitrary word. The sibling Content Hub has the identical pair
      (`parseMentions`/`enrichFeedbackText`) and the same constant; all four were fixed together, so
      a change to one needs the same change in the other three.
+   - **Comment replies actually thread now** (`renderCommentsLog`, `backfillCommentThreading`,
+     `inferReplyTarget`) — reported directly ("why are the replies to comments not just below the
+     comment itself?"). Root cause: clicking Reply never created a real reply. It just prefilled
+     the new-comment box with `"@Author "` and, once sent, that landed as an ordinary comment
+     appended to the same flat array — visually indistinguishable from a top-level comment except
+     for the mention text, so there was no actual parent/child relationship for anything to render
+     nested from.
+     - **Comments still store as a flat array, always appended via `arrayUnion`** — that's
+       deliberate and unchanged, since a full reorder would mean rewriting the whole array on
+       every add instead of an atomic append, reopening exactly the race-on-concurrent-comment
+       risk `arrayUnion` exists to avoid. Threading is purely a render-time concern:
+       `renderCommentsLog` walks each comment's new `replyTo` (a parent comment's `id`) into a
+       tree and renders replies nested (indented, left-bordered) directly under their parent. A
+       `replyTo` pointing at an id no longer present (parent removed) falls back to rendering as a
+       top-level comment rather than vanishing or throwing.
+     - **New replies get a real `replyTo`, not another guess.** `task-comment-add-btn`'s handler
+       now assigns every comment a `uid()` id and, via `inferReplyTarget`, resolves `replyTo`
+       against the task's current comments at send time — same function the backfill below uses,
+       so live replies and migrated old ones can never drift into different logic.
+     - **`backfillCommentThreading(comments)` migrates existing data** — assigns a stable `id` to
+       any comment that doesn't have one (same fix-it-forward pattern as the checklist item id
+       backfill above it), then infers `replyTo` for comments predating this field via
+       `inferReplyTarget`'s heuristic: a comment counts as a reply only when its text *starts with*
+       `"@Name "` — exactly what the Reply button always inserted — resolving to the most recent
+       *earlier* comment by that name. This can't be certain (a manually-typed leading mention
+       with no reply intent looks identical after the fact), but it's the best inference available
+       for data written before replies were tracked as a real field.
+     - **Unlike the checklist backfill, this can't just live in memory until the task's next
+       unrelated Save.** Comments write straight to Firestore on their own (`arrayUnion` on add, a
+       full-array rewrite on remove via `removeCommentAt`) — never through the task-form save
+       payload — so nothing else would ever persist a purely in-memory fix. `openTaskModal` runs
+       the backfill and, only if it actually changed anything, writes the result back via
+       `updateDoc` immediately (skips the write for tasks that need no fix, which is most of them
+       once this has rolled out). This is how "apply it to existing entries" actually happens:
+       progressively, the next time each task with old un-threaded replies gets opened by anyone
+       on the team — not a one-time bulk migration script, since there's no service-account/admin
+       Firestore access set up for this app to run one from outside the browser (see "Scheduled
+       cloud routines" in the parent `Claude Projects/CLAUDE.md`) and no other durable place for a
+       migration to run except through a real signed-in session.
+     - The live-refresh path (the `tasks` `onSnapshot` handler re-rendering an already-open task's
+       comments when someone else edits it) also runs `backfillCommentThreading` before rendering,
+       not just `openTaskModal` — otherwise the moment `openTaskModal`'s own backfill write
+       round-trips back through that same listener would flash the log flat/unthreaded for a beat
+       before self-correcting.
+     - **`sanitizeImportedComments` preserves `id`/`replyTo`** (generating a fresh id if one's
+       missing or invalid, same as the backfill) instead of reconstructing every comment as bare
+       `{text, date, author}` — otherwise an export/import round-trip would silently flatten every
+       reply thread back into a plain list, same reasoning as why `dependsOn` survives that path.
+     - **The Suggestions tab's replies are a different, already-correct shape and needed no fix**:
+       one flat `replies` array *per suggestion post* (`suggestion-reply-add-btn`,
+       `data-suggestion-id`), always rendered directly under that one suggestion — there's no
+       "reply to a specific earlier reply" concept there at all, so nothing was ever ambiguous
+       about where a reply belongs.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
      `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the

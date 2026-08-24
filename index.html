@@ -913,6 +913,42 @@
     return mentioned;
   }
 
+  // A comment counts as a reply only when its text starts with "@Name " -- exactly what the
+  // Reply button inserts -- not merely containing that mention somewhere. Can't distinguish that
+  // from someone manually typing a leading mention with no intent to reply, so this is a
+  // best-effort inference, not a certainty; that's unavoidable for data written before replies
+  // were tracked as a real field. Always resolves to the MOST RECENT earlier comment by that
+  // name, since that's the one someone hitting Reply on their comment would actually be on.
+  function inferReplyTarget(priorComments, text) {
+    var mentioned = parseMentions(text);
+    var leadName = mentioned.find(function (name) {
+      return new RegExp('^@' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s', 'i').test(text);
+    });
+    if (!leadName) return null;
+    for (var i = priorComments.length - 1; i >= 0; i--) {
+      if (priorComments[i].author === leadName && priorComments[i].id) return priorComments[i].id;
+    }
+    return null;
+  }
+
+  // Backfills a stable id onto every comment (same fix-it-forward pattern as the checklist item
+  // id backfill below), then infers replyTo for any comment that doesn't have one yet. Unlike
+  // that backfill, this can't just live in memory until the next unrelated Save -- comments write
+  // straight to Firestore on their own (arrayUnion on add, a full rewrite on remove), never
+  // through the task-form save payload, so nothing else would ever persist it. openTaskModal
+  // writes the result back explicitly instead.
+  function backfillCommentThreading(comments) {
+    var withIds = (comments || []).map(function (c) {
+      return c.id ? c : Object.assign({}, c, { id: uid() });
+    });
+    withIds.forEach(function (c, i) {
+      if (c.replyTo || !c.text) return;
+      var target = inferReplyTarget(withIds.slice(0, i), c.text);
+      if (target) c.replyTo = target;
+    });
+    return withIds;
+  }
+
   function notifyOnComment(text, task) {
     var user = auth.currentUser;
     var myName = user ? (user.displayName || user.email) : null;
@@ -1701,7 +1737,17 @@
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
     document.getElementById('task-comments-section').classList.toggle('hidden', !task);
     document.getElementById('task-comment-input').value = '';
-    if (task) renderCommentsLog(task.comments, document.getElementById('task-comments-log'));
+    if (task) {
+      var backfilledComments = backfillCommentThreading(task.comments);
+      // Only write back if the backfill actually changed something -- most tasks opened after
+      // this shipped need no fix at all, and there's no reason to touch Firestore on every open.
+      if (JSON.stringify(backfilledComments) !== JSON.stringify(task.comments || [])) {
+        updateDoc(doc(tasksCol, task.id), { comments: backfilledComments }).catch(function (e) {
+          console.error('Could not persist comment id/thread backfill', e);
+        });
+      }
+      renderCommentsLog(backfilledComments, document.getElementById('task-comments-log'));
+    }
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
@@ -2027,11 +2073,32 @@
     if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); }
   });
 
+  // Comments stay a flat array in storage -- always appended via arrayUnion for atomic,
+  // race-free adds (a full reorder would mean rewriting the whole array instead, reopening the
+  // exact race that pattern exists to avoid) -- so threading only ever happens here, at render
+  // time, by walking replyTo references into a tree. A reply whose parent was since removed
+  // (replyTo points at an id no longer in the list) falls back to rendering as a top-level
+  // comment rather than vanishing or throwing.
   function renderCommentsLog(comments, logEl) {
     var list = comments || [];
-    logEl.innerHTML = list.length
-      ? list.map(function (c, i) {
-          return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
+    var byId = {};
+    list.forEach(function (c) { if (c.id) byId[c.id] = c; });
+    var childrenOf = {};
+    var roots = [];
+    list.forEach(function (c) {
+      if (c.replyTo && byId[c.replyTo]) {
+        (childrenOf[c.replyTo] = childrenOf[c.replyTo] || []).push(c);
+      } else {
+        roots.push(c);
+      }
+    });
+
+    function commentNode(c, depth) {
+      var i = list.indexOf(c);
+      var kids = childrenOf[c.id] || [];
+      return (
+        '<div class="' + (depth > 0 ? 'ml-4 mt-2 pl-3 border-l-2 border-zinc-200 dark:border-zinc-700' : '') + '">' +
+          '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
             '<div class="flex items-center gap-1.5 mb-1">' +
               '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
               '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(c.date)) + ', ' + formatTimeOnly(c.date) + '</span>' +
@@ -2041,8 +2108,14 @@
               '</div>' +
             '</div>' +
             '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + enrichCommentText(c.text) + '</p>' +
-          '</div>';
-        }).join('')
+          '</div>' +
+          kids.map(function (k) { return commentNode(k, depth + 1); }).join('') +
+        '</div>'
+      );
+    }
+
+    logEl.innerHTML = list.length
+      ? roots.map(function (c) { return commentNode(c, 0); }).join('')
       : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet.</p>';
   }
 
@@ -2631,8 +2704,16 @@
     if (!text || !editingTaskId) return;
     var t = tasks.find(function (x) { return x.id === editingTaskId; });
     var user = auth.currentUser;
+    // Real replyTo, not another heuristic guess -- resolved against this task's current
+    // comments (already backfilled with ids by openTaskModal) the moment this specific comment
+    // is sent, same inferReplyTarget the old-data backfill uses so the two never drift apart.
+    var newComment = {
+      id: uid(), text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null
+    };
+    var replyTo = inferReplyTarget(t ? (t.comments || []) : [], text);
+    if (replyTo) newComment.replyTo = replyTo;
     updateDoc(doc(tasksCol, editingTaskId), {
-      comments: arrayUnion({ text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null })
+      comments: arrayUnion(newComment)
     }).then(function () {
       input.value = '';
       closeMentionMenu();
@@ -4313,7 +4394,17 @@
     if (!Array.isArray(list)) return [];
     return list.map(function (c) {
       var date = c && c.date && !isNaN(new Date(c.date).getTime()) ? c.date : new Date().toISOString();
-      return { text: String((c && c.text) || '').slice(0, 2000), date: date, author: (c && c.author) ? String(c.author) : null };
+      // id/replyTo preserved so an export/import round-trip doesn't silently flatten reply
+      // threads back into a plain list -- same reasoning as dependsOn's import sanitizer. A
+      // missing/invalid id gets a fresh one rather than being dropped, same as backfillCommentThreading;
+      // replyTo is kept as-is if present since renderCommentsLog already falls back to a root
+      // comment for any dangling reference, so nothing here needs to validate it points anywhere.
+      var out = {
+        id: (c && typeof c.id === 'string' && c.id) ? c.id : uid(),
+        text: String((c && c.text) || '').slice(0, 2000), date: date, author: (c && c.author) ? String(c.author) : null
+      };
+      if (c && typeof c.replyTo === 'string' && c.replyTo) out.replyTo = c.replyTo;
+      return out;
     }).filter(function (c) { return c.text; });
   }
 
@@ -4526,7 +4617,11 @@
           closeTaskModal();
           showToast('This task was deleted by another team member', 'info');
         } else {
-          renderCommentsLog(freshTask.comments, document.getElementById('task-comments-log'));
+          // Backfilled here too, not just in openTaskModal -- this fires on every live update
+          // to the open task, including the moment openTaskModal's own backfill write round-trips
+          // back through this same listener, so rendering the raw (possibly still-unbackfilled)
+          // data would otherwise flash flat/unthreaded for a beat before self-correcting.
+          renderCommentsLog(backfillCommentThreading(freshTask.comments), document.getElementById('task-comments-log'));
         }
       }
       renderAll();
@@ -4680,7 +4775,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-20T02:34:29Z";
+  var CURRENT_BUILD_VERSION = "2026-08-24T03:29:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
