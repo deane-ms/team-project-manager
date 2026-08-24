@@ -153,6 +153,12 @@ to bottom:
        `data-suggestion-id`), always rendered directly under that one suggestion — there's no
        "reply to a specific earlier reply" concept there at all, so nothing was ever ambiguous
        about where a reply belongs.
+     - **`#task-comments-log`'s `max-h-40` (160px) was reported as too cramped once threading
+       made the log taller** — bumped to `max-h-96` (384px). Safe to grow generously: Comments is
+       the last section in the task modal's own internally-scrolling form
+       (`#task-form`, `overflow-y-auto`), immediately before the fixed Delete/Cancel/Save footer,
+       so a taller comments pane doesn't push any other field further out of view — it only
+       changes how much of the conversation shows before the log's own inner scrollbar kicks in.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
      `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the
