@@ -1140,12 +1140,28 @@
 
   var AVATAR_PALETTE = ['bg-brand-500', 'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-teal-500'];
 
-  // A separate, softer-weight palette (400 instead of avatarColor's 500) for project identity on
-  // the Gantt -- same name-hash trick as avatarColor, but a project's color and a person's color
-  // need to stay visually distinct concepts even though both are "a consistent color per name."
-  // Reusing AVATAR_PALETTE verbatim would let a project and an assignee land on the identical
-  // swatch by coincidence, which reads as "these are related" when they aren't.
-  var PROJECT_PALETTE = ['bg-brand-400', 'bg-rose-400', 'bg-amber-400', 'bg-emerald-400', 'bg-sky-400', 'bg-violet-400', 'bg-fuchsia-400', 'bg-teal-400'];
+  // Same soft-badge shape as PRIORITY_META/DONE_META/READY_FOR_REVIEW_META's `.badge` classes --
+  // deliberately full class strings (bg + text + ring, not a bare `bg-*-400`), because a bare
+  // color swatch next to the existing priority dot on a Gantt row read as two unlabeled marks
+  // with no way to tell which is which (reported directly: "not immediately intuitive"). Putting
+  // the same color ON the project name's own badge/pill instead ties the color straight to
+  // readable text, matching a pattern already used everywhere else in this app for exactly this
+  // purpose. Hues here (orange/teal/indigo/fuchsia/cyan/lime/pink/violet) are deliberately none of
+  // rose/amber/sky/emerald/purple -- those already mean High/Medium/Low/Done/Ready-for-review
+  // elsewhere, and a project coincidentally landing on one of those would read as a false status
+  // signal. Same name-hash trick as avatarColor, kept as its own function/palette (not reused
+  // verbatim from AVATAR_PALETTE) so a project and a person can never coincidentally share a
+  // color and read as "these are related" when they aren't.
+  var PROJECT_BADGE_PALETTE = [
+    'bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-200 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-500/25',
+    'bg-teal-100 text-teal-700 ring-1 ring-inset ring-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:ring-teal-500/25',
+    'bg-indigo-100 text-indigo-700 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/25',
+    'bg-fuchsia-100 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200 dark:bg-fuchsia-500/10 dark:text-fuchsia-300 dark:ring-fuchsia-500/25',
+    'bg-cyan-100 text-cyan-700 ring-1 ring-inset ring-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/25',
+    'bg-lime-100 text-lime-700 ring-1 ring-inset ring-lime-200 dark:bg-lime-500/10 dark:text-lime-300 dark:ring-lime-500/25',
+    'bg-pink-100 text-pink-700 ring-1 ring-inset ring-pink-200 dark:bg-pink-500/10 dark:text-pink-300 dark:ring-pink-500/25',
+    'bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25'
+  ];
 
   /* =========================================================
      ICONS -- inline monotone SVG, matching content-hub-firebase.html's
@@ -1409,16 +1425,17 @@
     return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
   }
 
-  // Same hash, PROJECT_PALETTE instead of AVATAR_PALETTE -- lets the Gantt's flat, chronologically
-  // sorted task list still make same-project rows visually obvious (a color stripe on the sticky
-  // label column) WITHOUT clustering rows by project, which was tried once already (project
-  // header rows + summary bars) and reverted for breaking the chart's actual job: seeing who's
-  // doing what at the same time across the whole team. Don't re-add row grouping; this is the
-  // alternative that keeps chronological order intact.
+  // Same hash, PROJECT_BADGE_PALETTE instead of AVATAR_PALETTE -- lets the Gantt's flat,
+  // chronologically sorted task list still make same-project rows visually obvious (a colored
+  // badge around the project name on the sticky label column) WITHOUT clustering rows by
+  // project, which was tried once already (project header rows + summary bars) and reverted for
+  // breaking the chart's actual job: seeing who's doing what at the same time across the whole
+  // team. Don't re-add row grouping; this is the alternative that keeps chronological order
+  // intact.
   function projectColor(name) {
     var hash = 0;
     for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-    return PROJECT_PALETTE[hash % PROJECT_PALETTE.length];
+    return PROJECT_BADGE_PALETTE[hash % PROJECT_BADGE_PALETTE.length];
   }
 
   function normalizeUrl(url) {
@@ -3684,15 +3701,16 @@
       // near the frozen edge. z-20 is unambiguously above both the line (15) and the
       // unpositioned bars (auto/0), and still can't collide with the month/day headers
       // (z-10), which occupy the header rows only and never overlap this per-task-row cell.
-      // The project stripe (projectColor) is a separate signal from the pm.dot beside it --
-      // stripe = "which project", dot = "priority/status" -- so same-project rows are scannable
-      // down this flat, chronologically sorted list without clustering rows by project (see the
-      // comment on projectColor for why that's deliberately not how this works instead).
+      // The project's color lives ON its name (a badge/pill, same soft-badge shape as every
+      // other status badge in this app) rather than as a separate unlabeled swatch next to the
+      // priority dot -- an earlier version used a plain color bar here and it wasn't intuitive
+      // which mark meant what (reported directly). This way the color is attached straight to
+      // the readable text it identifies; the dot alone still means priority/status, same as it
+      // always has everywhere else in the app.
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
-        '<span class="w-1 self-stretch rounded-full shrink-0 ' + projectColor(t.project) + '" title="' + escapeHtml(t.project) + '"></span>' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
-          '<p class="text-sm font-semibold text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.project) + '</p>' +
+          '<p class="min-w-0 mb-0.5"><span class="inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-xs font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
         '</div>' +
       '</div>';
@@ -5038,7 +5056,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-27T06:32:25Z";
+  var CURRENT_BUILD_VERSION = "2026-08-27T08:52:27Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

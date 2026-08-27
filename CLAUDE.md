@@ -746,12 +746,22 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     - **Project identity and deadline pile-ups were later addressed without touching row order or
       grouping** (`projectColor`, `computeGanttDeadlineStacks`) — a comparison against TeamGantt
       found it doesn't group rows by project either (project color there is manual/optional, not
-      automatic), which confirmed the flat list here isn't a compromise to fix later. Each row's
-      sticky label now gets a full-height color stripe (`projectColor(t.project)`, a
-      `PROJECT_PALETTE` name-hash exactly like `avatarColor`, kept as a separate palette so a
-      project and a person can never coincidentally read as "the same color means the same
-      thing") ahead of the existing priority/status dot -- stripe = which project, dot = priority,
-      two distinct signals rather than clustering rows together.
+      automatic), which confirmed the flat list here isn't a compromise to fix later.
+      - `projectColor(t.project)` **also went through two designs.** The first gave each row a
+        plain color bar/swatch next to the existing priority dot -- shipped, then reported back
+        as "not immediately intuitive": two unlabeled colored marks sitting side by side with no
+        way to tell which one meant what. Rebuilt so the color lives ON the project name itself,
+        as a badge/pill (`PROJECT_BADGE_PALETTE`, the exact same soft `bg-*-100 text-*-700 ring-*`
+        shape as `PRIORITY_META`/`DONE_META`/`READY_FOR_REVIEW_META`'s `.badge` classes, not a
+        bare `bg-*-400` swatch) -- the color is now attached directly to the readable text it
+        identifies instead of being a separate mark to memorize. Same name-hash trick as
+        `avatarColor`, kept as its own palette so a project and a person never coincidentally
+        share a color. Palette hues (orange/teal/indigo/fuchsia/cyan/lime/pink/violet)
+        deliberately exclude rose/amber/sky/emerald/purple, since those already mean
+        High/Medium/Low/Done/Ready-for-review elsewhere and a project landing on one of those by
+        coincidence would read as a false status signal. The priority dot stays exactly where and
+        what it always was -- two distinct signals (a colored tag = which project, a plain dot =
+        priority/status), not two competing swatches.
       - `computeGanttDeadlineStacks(list)` **went through two designs.** The first flagged any
         two of one assignee's plotted (non-`Done`) tasks whose *date ranges* overlapped at all --
         shipped, then reported back as not actually useful: one person working across several
