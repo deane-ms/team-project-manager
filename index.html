@@ -178,7 +178,7 @@
      seconds, which reads as a rendering bug, not a design choice. spawnConfetti() checks
      prefers-reduced-motion itself and skips creating the elements entirely instead. */
   .confetti-piece {
-    position: fixed; top: -12px; width: 8px; height: 14px; border-radius: 2px;
+    position: fixed; top: -12px; width: var(--confetti-w, 8px); height: var(--confetti-h, 14px); border-radius: 2px;
     pointer-events: none; z-index: 90;
     animation-name: confetti-fall; animation-timing-function: ease-in; animation-fill-mode: forwards;
   }
@@ -2669,6 +2669,7 @@
         notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
       }
       if (statusEffect.willFinishProject) celebrateProjectComplete(statusEffect.projectName);
+      else if (statusEffect.enteringDone) spawnConfetti();
       closeTaskModal();
     }).catch(function (err) {
       showToast('Could not save this task: ' + err.message, 'error');
@@ -2833,7 +2834,7 @@
     if (enteringDone) patch.completedAt = new Date().toISOString();
     else if (leavingDone) patch.completedAt = null;   // moved back out -- it isn't "completed" anymore
 
-    return { patch: patch, willFinishProject: willFinishProject, projectName: taskProject };
+    return { patch: patch, enteringDone: enteringDone, willFinishProject: willFinishProject, projectName: taskProject };
   }
 
   function updateTaskStatus(id, newStatus) {
@@ -2845,14 +2846,18 @@
     updateDoc(doc(tasksCol, id), patch).then(function () {
       logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus));
       if (effect.willFinishProject) celebrateProjectComplete(effect.projectName);
+      else if (effect.enteringDone) spawnConfetti();
     }).catch(function (err) {
       showToast('Could not move task: ' + err.message, 'error');
     });
   }
 
-  // The one case that still gets an explicit toast -- reserved for finishing a whole project
-  // (every active task in it now Done), not for every single card move, so it stays a real
-  // moment instead of becoming background noise on a busy shared board.
+  // The explicit toast is reserved for finishing a whole project (every active task in it now
+  // Done), not for every single card move, so it stays a real moment instead of becoming
+  // background noise on a busy shared board -- but the confetti burst itself now fires on every
+  // single task completion (see the enteringDone branches at both call sites above/below), not
+  // just this one. Reported directly ("have it per task") after confetti originally only fired
+  // on whole-project completion.
   function celebrateProjectComplete(projectName) {
     showToast('"' + projectName + '" complete — every task is done', 'celebrate');
     spawnConfetti();
@@ -2872,17 +2877,23 @@
 
   function spawnConfetti() {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    for (var i = 0; i < 28; i++) {
+    // 90 pieces (up from 28) with per-piece size variance, not just color/fall variance --
+    // the flat 28-at-one-size burst read as sparse/underwhelming even though every piece was
+    // animating correctly, since a fixed 8x14px rectangle repeated identically doesn't read as
+    // "confetti" the way a mix of small flecks and bigger ribbons does. Reported directly.
+    for (var i = 0; i < 90; i++) {
       var piece = document.createElement('div');
       piece.className = 'confetti-piece';
-      var duration = 1.4 + Math.random() * 0.9;
-      var delay = Math.random() * 0.25;
+      var duration = 1.3 + Math.random() * 1.1;
+      var delay = Math.random() * 0.4;
       piece.style.left = (Math.random() * 100) + 'vw';
       piece.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
       piece.style.animationDuration = duration + 's';
       piece.style.animationDelay = delay + 's';
+      piece.style.setProperty('--confetti-w', (5 + Math.random() * 8) + 'px');
+      piece.style.setProperty('--confetti-h', (8 + Math.random() * 12) + 'px');
       piece.style.setProperty('--confetti-rot', (180 + Math.random() * 540) + 'deg');
-      piece.style.setProperty('--confetti-drift', ((Math.random() - 0.5) * 140) + 'px');
+      piece.style.setProperty('--confetti-drift', ((Math.random() - 0.5) * 200) + 'px');
       document.body.appendChild(piece);
       setTimeout(removeConfettiPiece(piece), (duration + delay) * 1000 + 150);
     }
@@ -4802,7 +4813,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-24T04:02:55Z";
+  var CURRENT_BUILD_VERSION = "2026-08-27T03:15:45Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

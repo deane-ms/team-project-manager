@@ -513,25 +513,38 @@ to bottom:
        (`done-today-bounce`) only on the render where the count just increased
        (`lastDoneTodayCount`, module-scoped) — not on page load, and not on an unrelated re-render
        from someone else's edit landing via `onSnapshot`.
-     - **Whole-project celebration**: reserved for the one case worth an actual toast — every
-       active task in a project now `Done`. `updateTaskStatus` checks this synchronously against
-       the current `tasks` state before the write (same reasoning as the pulse flag), but only
-       fires `celebrateProjectComplete` — a new `'celebrate'` `showToast` type (sparkle icon,
-       longer 5.2s dwell) plus `spawnConfetti()`, an actual falling-confetti burst, not just a
-       distinct-looking toast — after the write actually succeeds, so a failed write can't
-       produce a false "project complete" celebration. This is deliberately independent of
+     - **Confetti fires on every single task completion**, not just whole-project completion —
+       `statusTransitionEffects` returns `enteringDone` alongside `willFinishProject`, and both
+       call sites (`updateTaskStatus` for Board drag-and-drop, `commitTaskSave` for the modal)
+       call bare `spawnConfetti()` whenever a task enters `Done` and isn't the project-finishing
+       task. Originally confetti was scoped to whole-project completion only; reported directly
+       ("have it per task") as too rare to feel like a reward for everyday task completion.
+     - **Whole-project celebration** stays a separate, rarer case worth an actual toast — every
+       active task in a project now `Done`. `updateTaskStatus`/`commitTaskSave` check this
+       synchronously against the current `tasks` state before the write (same reasoning as the
+       pulse flag), and fire `celebrateProjectComplete` instead of the bare per-task confetti —
+       a new `'celebrate'` `showToast` type (sparkle icon, longer 5.2s dwell) plus its own
+       `spawnConfetti()` call, so a failed write can't produce a false "project complete"
+       celebration (the `if (willFinishProject) ... else if (enteringDone) ...` branching at both
+       call sites means a project-finishing task gets the special toast+confetti, never a double
+       burst of confetti on top of it). This is deliberately independent of
        `checkProjectDeadlinePopups`'s existing archive-prompt, which is gated on the project's
        *deadline* having passed, not on the moment every task actually finishes — both can fire
        for the same project, at different times, for different reasons.
-       - `spawnConfetti()` spawns 28 `.confetti-piece` divs (on-brand palette — orange wordmark,
-         emerald Done, plus the amber/violet already used for overtime/due-soon — not a generic
-         rainbow), each animated via CSS custom properties (`--confetti-rot`/`--confetti-drift`)
-         set per-element so one shared `@keyframes confetti-fall` can still give every piece a
-         different fall rotation/drift, then removed via `setTimeout`.
+       - `spawnConfetti()` spawns 90 `.confetti-piece` divs (bumped up from an original 28, which
+         read as sparse/underwhelming once per-task completion made the burst a far more frequent
+         sight — reported directly). On-brand palette (orange wordmark, emerald Done, plus the
+         amber/violet already used for overtime/due-soon — not a generic rainbow), each piece
+         animated via CSS custom properties set per-element (`--confetti-rot`/`--confetti-drift`
+         for fall rotation/drift, `--confetti-w`/`--confetti-h` for a randomized size between
+         small flecks and bigger ribbons — a fixed 8×14px rectangle repeated 28 times is what
+         made the original burst read as flat/sparse even though every piece animated correctly)
+         so one shared `@keyframes confetti-fall` and one shared `.confetti-piece` rule still
+         give every piece its own look, then removed via `setTimeout`.
          **`removeConfettiPiece(el)` is a named, parameterized closure factory, not an inline
          `function () { piece.remove(); }` inside the loop** — `var piece` is one shared binding
-         across all 28 loop iterations, so an inline closure would have every timeout firing
-         against whichever piece the loop landed on *last*, leaking the other 27 permanently.
+         across all 90 loop iterations, so an inline closure would have every timeout firing
+         against whichever piece the loop landed on *last*, leaking the rest permanently.
          Checks `prefers-reduced-motion` itself and skips creating any elements at all rather
          than the CSS-level `animation: none` override used for the pulse/bounce above — a
          confetti piece that can't fall is just a stray colored rectangle sitting on screen for
