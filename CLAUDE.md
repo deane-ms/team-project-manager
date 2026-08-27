@@ -660,15 +660,41 @@ of truth for all views (no per-view derived state persisted).
 
 ### Firestore data model
 
-Three top-level collections, all flat (see `firestore.rules` for the actual access boundary — the
+Four top-level collections, all flat (see `firestore.rules` for the actual access boundary — the
 client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 
-- **`tasks`** — one doc per task, client-generated IDs (`uid()`, not Firestore auto-IDs). Fields:
-  name, project, priority, status, start/deadline dates, assignee, Drive link, checklist, comments,
-  time entries, plus a vestigial `dependsOn` (array of task ids — no editor, round-tripped only;
-  see "Task dependencies were removed" above). Shared read/write for any
+- **`tasks`** — one doc per *active* task, client-generated IDs (`uid()`, not Firestore auto-IDs).
+  Fields: name, project, priority, status, start/deadline dates, assignee, Drive link, checklist,
+  comments, time entries, plus a vestigial `dependsOn` (array of task ids — no editor,
+  round-tripped only; see "Task dependencies were removed" above). Shared read/write for any
   `@mediashock.com.sg` account — the whole team edits the same board by design, so there's no
   per-task ownership check.
+  - **Archived tasks live in a separate `archivedTasks` collection, not in `tasks` with a flag.**
+    `tasksCol` is loaded via one unfiltered `onSnapshot` on every single session — every tab open,
+    reload, or reconnect re-downloads the *entire* collection — and archiving used to just stamp
+    `archivedAt` on the same doc rather than actually removing it, so that read cost only ever
+    grew, forever, regardless of how much work was still actually active. `archiveTask`/
+    `unarchiveTask`/`archiveCompletedTasks`/`archiveProjectTasks` now all move a task between the
+    two collections (a `set` on the destination + a `delete` on the source in the same
+    `writeBatch`, so it's atomic — never duplicated or lost, even if the batch fails partway).
+    `archivedTasksCol` is loaded lazily (`ensureArchivedTasksListener`), only by the two views that
+    actually read archived data (Projects, Archived) — Board/Gantt/Calendar/Focus/People never
+    attach it, so most sessions never pay for it at all. Export and Import both force it to load
+    first (`withArchivedTasksReady`) regardless of which views were opened this session, since
+    both need the complete picture (an export missing archived history, or an import's
+    "replace everything" delete leaving archived tasks behind, would both be silent data bugs).
+    Reported directly ("how many users can PM accommodate to?" → Firestore's free-tier daily read
+    quota, driven by `tasks` growing forever since nothing was ever removed from it).
+    - **`migrateLegacyArchivedTasks`** is a one-time fix-it-forward migration (same pattern as the
+      checklist-id and comment-threading backfills elsewhere in this file) for tasks archived
+      before this split shipped — they still carry an `archivedAt` stamp but were never moved out
+      of `tasks`. Whoever's session sees one of these in a `tasks` snapshot moves it, the same
+      way `archiveTask` now does. No "already migrated" flag needed: once a doc is deleted from
+      `tasksCol` it stops appearing in future snapshots, so this is self-limiting and safe to
+      delete once nobody sees it fire in practice for a while.
+    - Both collections use the exact same document shape and the same client-generated id, so a
+      restore (`unarchiveTask`) is just the reverse move — the doc's Firestore id never changes
+      across an archive/restore round-trip.
   - Each **checklist item** carries its own `uid()`-generated `id` (backfilled on load for older
     tasks saved before this existed — see the `.map()` over `task.checklist` in `openTaskModal`,
     same "fix it forward" pattern as `upsertUserDirectory` in the sibling Content Hub app), so a

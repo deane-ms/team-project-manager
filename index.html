@@ -775,6 +775,16 @@
 
   var tasksCol = collection(db, "tasks");
   var unsubTasks = null;
+  // Archived tasks live in their own collection, not just an archivedAt flag inside `tasks` --
+  // see the big comment above the ARCHIVE section below for why. `tasks` only holds active work
+  // going forward, and `archivedTasks` is loaded lazily (ensureArchivedTasksListener), not as
+  // part of every session's startup listeners, since nothing on Board/Gantt/Calendar/Focus/People
+  // ever needs archived data -- only the Projects and Archived tabs do.
+  var archivedTasksCol = collection(db, "archivedTasks");
+  var unsubArchivedTasks = null;
+  var archivedTasks = [];
+  var archivedTasksReady = false;
+  var archivedTasksReadyWaiters = [];
   var activityCol = collection(db, "activity");
   var activityQuery = query(activityCol, orderBy("at", "desc"), limit(50));
   var unsubActivity = null;
@@ -2900,18 +2910,24 @@
   }
 
   /* =========================================================
-     BULK REPLACE (import + "load sample tasks") -- deletes every task
-     currently on the shared board and writes the new set, chunked into
-     batches of <=500 ops (Firestore's per-batch limit). Sequential
-     batches are not atomic with each other, but realistic board sizes
-     fit in a single batch, so this only matters as a defensive fallback.
+     BULK REPLACE (import) -- deletes every task currently on the shared
+     board (both tasksCol and archivedTasksCol) and writes the new set,
+     chunked into batches of <=500 ops (Firestore's per-batch limit).
+     Sequential batches are not atomic with each other, but realistic
+     board sizes fit in a single batch, so this only matters as a
+     defensive fallback. Callers must have already loaded archivedTasks
+     (ensureArchivedTasksListener + wait for its first snapshot) before
+     calling this, or the delete half would miss every archived task and
+     leave them behind after an import that was meant to replace
+     everything -- see the import handler below for where that happens.
   ========================================================= */
   function replaceAllTasks(newTasks) {
-    var ops = tasks.map(function (t) { return { type: 'delete', id: t.id }; });
+    var ops = tasks.map(function (t) { return { type: 'delete', col: tasksCol, id: t.id }; })
+      .concat(archivedTasks.map(function (t) { return { type: 'delete', col: archivedTasksCol, id: t.id }; }));
     newTasks.forEach(function (t) {
       var data = Object.assign({}, t);
       delete data.id;
-      ops.push({ type: 'set', id: t.id, data: data });
+      ops.push({ type: 'set', col: t.archivedAt ? archivedTasksCol : tasksCol, id: t.id, data: data });
     });
 
     var chunks = [];
@@ -2922,8 +2938,8 @@
       chain = chain.then(function () {
         var batch = writeBatch(db);
         chunk.forEach(function (op) {
-          if (op.type === 'delete') batch.delete(doc(tasksCol, op.id));
-          else batch.set(doc(tasksCol, op.id), op.data, { merge: true });
+          if (op.type === 'delete') batch.delete(doc(op.col, op.id));
+          else batch.set(doc(op.col, op.id), op.data, { merge: true });
         });
         return batch.commit();
       });
@@ -2941,21 +2957,48 @@
      forever otherwise. This is a manual, explicit action (not an
      automatic time-based sweep) since silently removing shared team
      data on a timer is the kind of thing that's easy to regret.
-     Archived tasks are never deleted -- they get an archivedAt stamp,
-     are excluded from every active view via activeTasks(), and stay
+     Archived tasks are never deleted -- they move to their own
+     `archivedTasks` collection (see archivedTasksCol above), and stay
      visible (and restorable) in the Archived view.
+
+     This used to be a flag flip (archivedAt stamped on the same doc,
+     still sitting in `tasks`) rather than a real move. The problem:
+     `tasks` is loaded via one unfiltered onSnapshot(tasksCol) on every
+     single session -- every tab open, reload, or reconnect re-downloads
+     the *entire* collection, and archived tasks are never deleted, so
+     that read cost only ever grew, forever, regardless of how many
+     tasks were actually still active. Moving archived tasks to their
+     own collection keeps the live `tasks` listener bounded by current
+     work; `archivedTasksCol` is loaded lazily instead (see
+     ensureArchivedTasksListener), only by the two views that actually
+     need archived data (Projects, Archived), so most sessions never
+     pay for it at all. Reported directly ("how many users can PM
+     accommodate to?").
+
+     Each move is a set-then-delete pair in the SAME writeBatch, so it's
+     atomic -- a task can never end up duplicated in both collections or
+     vanish from both, even if the batch fails partway through committing
+     (Firestore batches commit all-or-nothing). That doubles the op count
+     per task versus the old single `update`, so bulk moves chunk at 250
+     tasks (500 ops) instead of 500, to stay under Firestore's per-batch
+     op limit.
   ========================================================= */
   function archiveCompletedTasks() {
     var toArchive = activeTasks().filter(function (t) { return t.status === 'Done'; });
     if (!toArchive.length) return Promise.resolve(0);
     var now = new Date().toISOString();
     var chunks = [];
-    for (var i = 0; i < toArchive.length; i += 500) chunks.push(toArchive.slice(i, i + 500));
+    for (var i = 0; i < toArchive.length; i += 250) chunks.push(toArchive.slice(i, i + 250));
     var chain = Promise.resolve();
     chunks.forEach(function (chunk) {
       chain = chain.then(function () {
         var batch = writeBatch(db);
-        chunk.forEach(function (t) { batch.update(doc(tasksCol, t.id), { archivedAt: now }); });
+        chunk.forEach(function (t) {
+          var data = Object.assign({}, t, { archivedAt: now });
+          delete data.id;
+          batch.set(doc(archivedTasksCol, t.id), data);
+          batch.delete(doc(tasksCol, t.id));
+        });
         return batch.commit();
       });
     });
@@ -2974,12 +3017,17 @@
     if (!toArchive.length) return Promise.resolve(0);
     var now = new Date().toISOString();
     var chunks = [];
-    for (var i = 0; i < toArchive.length; i += 500) chunks.push(toArchive.slice(i, i + 500));
+    for (var i = 0; i < toArchive.length; i += 250) chunks.push(toArchive.slice(i, i + 250));
     var chain = Promise.resolve();
     chunks.forEach(function (chunk) {
       chain = chain.then(function () {
         var batch = writeBatch(db);
-        chunk.forEach(function (t) { batch.update(doc(tasksCol, t.id), { archivedAt: now }); });
+        chunk.forEach(function (t) {
+          var data = Object.assign({}, t, { archivedAt: now });
+          delete data.id;
+          batch.set(doc(archivedTasksCol, t.id), data);
+          batch.delete(doc(tasksCol, t.id));
+        });
         return batch.commit();
       });
     });
@@ -3101,19 +3149,34 @@
 
   function archiveTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
-    updateDoc(doc(tasksCol, id), { archivedAt: new Date().toISOString() }).then(function () {
+    if (!t) return;
+    var data = Object.assign({}, t, { archivedAt: new Date().toISOString() });
+    delete data.id;
+    var batch = writeBatch(db);
+    batch.set(doc(archivedTasksCol, id), data);
+    batch.delete(doc(tasksCol, id));
+    batch.commit().then(function () {
       showToast('Task archived', 'success');
-      logActivity('task_archived', 'Archived "' + (t ? t.name : id) + '"');
+      logActivity('task_archived', 'Archived "' + t.name + '"');
     }).catch(function (err) {
       showToast('Could not archive task: ' + err.message, 'error');
     });
   }
 
+  // Only ever called from the Archived view, so archivedTasks (not tasks) is where this task
+  // actually lives right now -- ensureArchivedTasksListener has always already run by the time
+  // someone can see a Restore button to click.
   function unarchiveTask(id) {
-    var t = tasks.find(function (x) { return x.id === id; });
-    updateDoc(doc(tasksCol, id), { archivedAt: null }).then(function () {
+    var t = archivedTasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    var data = Object.assign({}, t, { archivedAt: null });
+    delete data.id;
+    var batch = writeBatch(db);
+    batch.set(doc(tasksCol, id), data);
+    batch.delete(doc(archivedTasksCol, id));
+    batch.commit().then(function () {
       showToast('Task restored', 'success');
-      logActivity('task_unarchived', 'Restored "' + (t ? t.name : id) + '" from the archive');
+      logActivity('task_unarchived', 'Restored "' + t.name + '" from the archive');
     }).catch(function (err) {
       showToast('Could not restore task: ' + err.message, 'error');
     });
@@ -3775,9 +3838,14 @@
   }
 
   /* =========================================================
-     RENDER: PROJECTS (time rollup) -- sources from the full `tasks`
-     array rather than activeTasks(), since archived tasks' logged
-     time should still count toward a project's historical total.
+     RENDER: PROJECTS (time rollup) -- sources from tasks.concat(archivedTasks)
+     rather than activeTasks(), since archived tasks' logged time (and their
+     project's existence at all, once every one of its tasks is archived)
+     should still count toward a project's historical total. This is also
+     why renderCurrentSecondaryView calls ensureArchivedTasksListener before
+     renderProjects -- archivedTasks starts empty until that listener's
+     first snapshot lands, so Completed can briefly under-report on first
+     visit to this tab in a session.
   ========================================================= */
   function projectTaskRowHtml(t) {
     var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
@@ -3879,8 +3947,9 @@
 
   function renderProjects() {
     var container = document.getElementById('projects-grid');
+    var allTasks = tasks.concat(archivedTasks);
     var projectNames = {};
-    tasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
+    allTasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
     var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); });
 
     if (!names.length) {
@@ -3889,7 +3958,7 @@
     }
 
     var summaries = names.map(function (name) {
-      var mine = tasks.filter(function (t) { return t.project === name; });
+      var mine = allTasks.filter(function (t) { return t.project === name; });
       var totalMinutes = mine.reduce(function (sum, t) { return sum + taskTimeMinutes(t); }, 0);
       var billableMinutes = mine.reduce(function (sum, t) { return sum + taskBillableMinutes(t); }, 0);
       var overtimeMinutes = mine.reduce(function (sum, t) { return sum + taskOvertimeMinutes(t); }, 0);
@@ -4175,7 +4244,7 @@
   ========================================================= */
   function renderArchived() {
     var container = document.getElementById('archived-list');
-    var archived = tasks.filter(function (t) { return t.archivedAt; })
+    var archived = archivedTasks.slice()
       .sort(function (a, b) { return new Date(b.archivedAt) - new Date(a.archivedAt); });
     if (!archived.length) {
       container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No archived tasks.</p>';
@@ -4356,10 +4425,15 @@
     if (currentView === 'gantt') renderGantt();
     if (currentView === 'calendar') renderCalendar();
     if (currentView === 'people') renderPeople();
-    if (currentView === 'projects') renderProjects();
+    // These two are the only views that read archivedTasks -- attaching its listener here,
+    // right before rendering, means most sessions (anyone who sticks to Board/Gantt/Calendar/
+    // Focus/People) never load it at all. The first render after switching in can briefly show
+    // stale/empty archived data (0 completed projects, an empty Archived list) until this
+    // listener's first snapshot lands and calls this function again.
+    if (currentView === 'projects') { ensureArchivedTasksListener(); renderProjects(); }
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
-    if (currentView === 'archived') renderArchived();
+    if (currentView === 'archived') { ensureArchivedTasksListener(); renderArchived(); }
   }
 
   var debouncedRender = debounce(function () { renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); }, 150);
@@ -4402,23 +4476,29 @@
      EXPORT / IMPORT
   ========================================================= */
   document.getElementById('btn-export').addEventListener('click', function () {
-    var payload = {
-      app: 'Flowboard',
-      exportedAt: new Date().toISOString(),
-      version: 1,
-      tasks: tasks
-    };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    var stamp = toDateInputValue(new Date());
-    a.href = url;
-    a.download = 'flowboard-export-' + stamp + '.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast('Dashboard exported as JSON', 'success');
+    // Archived tasks live in a separate collection now and aren't loaded by default -- without
+    // this, exporting from a tab that only ever used Board would silently produce a file missing
+    // every archived task. First export in a session pays a brief one-time fetch for this; every
+    // export after that in the same session is instant since archivedTasksReady stays true.
+    withArchivedTasksReady(function () {
+      var payload = {
+        app: 'Flowboard',
+        exportedAt: new Date().toISOString(),
+        version: 1,
+        tasks: tasks.concat(archivedTasks)
+      };
+      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var stamp = toDateInputValue(new Date());
+      a.href = url;
+      a.download = 'flowboard-export-' + stamp + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Dashboard exported as JSON', 'success');
+    });
   });
 
   function sanitizeImportedChecklist(list) {
@@ -4504,19 +4584,24 @@
 
         pendingImportData = cleaned;
         var importCount = cleaned.length;
-        openConfirm(
-          'Import ' + importCount + ' task' + (importCount === 1 ? '' : 's') + '?',
-          'This will replace the entire shared board for the whole team (' + tasks.length + ' task' + (tasks.length === 1 ? '' : 's') + ') with the contents of this file. Anything anyone changes at the exact same moment could be lost. Export first if you want a backup.',
-          function () {
-            replaceAllTasks(pendingImportData).then(function () {
-              showToast('Imported ' + importCount + ' tasks', 'success');
-              logActivity('board_imported', 'Imported ' + importCount + ' tasks, replacing the board');
-              pendingImportData = null;
-            }).catch(function (err) {
-              showToast('Import failed: ' + err.message, 'error');
-            });
-          }
-        );
+        // Needs archivedTasks loaded before the count in this dialog (and replaceAllTasks'
+        // delete-everything pass, once confirmed) can be accurate -- see withArchivedTasksReady.
+        withArchivedTasksReady(function () {
+          var currentCount = tasks.length + archivedTasks.length;
+          openConfirm(
+            'Import ' + importCount + ' task' + (importCount === 1 ? '' : 's') + '?',
+            'This will replace the entire shared board for the whole team (' + currentCount + ' task' + (currentCount === 1 ? '' : 's') + ') with the contents of this file. Anything anyone changes at the exact same moment could be lost. Export first if you want a backup.',
+            function () {
+              replaceAllTasks(pendingImportData).then(function () {
+                showToast('Imported ' + importCount + ' tasks', 'success');
+                logActivity('board_imported', 'Imported ' + importCount + ' tasks, replacing the board');
+                pendingImportData = null;
+              }).catch(function (err) {
+                showToast('Import failed: ' + err.message, 'error');
+              });
+            }
+          );
+        });
       } catch (err) {
         showToast('Import failed: ' + err.message, 'error');
       } finally {
@@ -4603,6 +4688,66 @@
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
     if (unsubSuggestions) { unsubSuggestions(); unsubSuggestions = null; }
     if (unsubProjects) { unsubProjects(); unsubProjects = null; }
+    if (unsubArchivedTasks) { unsubArchivedTasks(); unsubArchivedTasks = null; }
+    archivedTasks = [];
+    archivedTasksReady = false;
+    archivedTasksReadyWaiters = [];
+  }
+
+  // One-time fix-it-forward migration for tasks archived before this collection split shipped
+  // (they still have an archivedAt stamp but never got moved out of `tasks`, since archiveTask
+  // used to just flip that flag in place). Whoever's session happens to see one of these in a
+  // `tasks` snapshot moves it to archivedTasksCol and deletes it from tasksCol -- same set-then-
+  // delete pair archiveTask itself now does. Self-limiting with no "already migrated" flag
+  // needed: once a doc is deleted from tasksCol it simply stops appearing in future snapshots,
+  // so this naturally stops finding anything once the whole backlog has moved once. Safe if two
+  // tabs race on the same doc -- `set` with an explicit id and `delete` on an already-deleted doc
+  // are both idempotent, so at worst the same data gets written twice, never duplicated or lost.
+  // Safe to delete this function entirely once nobody sees it fire in practice for a while.
+  function migrateLegacyArchivedTasks(rawTasks) {
+    var legacy = rawTasks.filter(function (t) { return t.archivedAt; });
+    if (!legacy.length) return;
+    var batch = writeBatch(db);
+    legacy.forEach(function (t) {
+      var data = Object.assign({}, t);
+      delete data.id;
+      batch.set(doc(archivedTasksCol, t.id), data);
+      batch.delete(doc(tasksCol, t.id));
+    });
+    batch.commit().catch(function (err) {
+      console.error('legacy archived-task migration failed', err);
+    });
+  }
+
+  // Attached lazily, not from startListeners -- Board/Gantt/Calendar/Focus/People never read
+  // archivedTasks, so most sessions never open Projects or Archived and never pay this read cost
+  // at all. Once started it stays live for the rest of the session (same always-on shape as the
+  // other listeners), rather than tearing down every time you switch away from those two tabs.
+  function ensureArchivedTasksListener() {
+    if (unsubArchivedTasks) return;
+    unsubArchivedTasks = onSnapshot(archivedTasksCol, function (snap) {
+      archivedTasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      if (!archivedTasksReady) {
+        archivedTasksReady = true;
+        var waiters = archivedTasksReadyWaiters;
+        archivedTasksReadyWaiters = [];
+        waiters.forEach(function (fn) { fn(); });
+      }
+      renderCurrentSecondaryView();
+    }, function (err) {
+      showToast('Archived tasks aren\'t loading: ' + err.message, 'error');
+    });
+  }
+
+  // Export and Import both need the complete picture (active + archived), even if nobody in
+  // this session has ever opened Projects or Archived -- without this, an export taken from a
+  // tab that only ever used Board would silently miss every archived task, and an import's
+  // "replace the board" delete would leave every archived task behind instead of actually
+  // replacing everything as promised.
+  function withArchivedTasksReady(cb) {
+    ensureArchivedTasksListener();
+    if (archivedTasksReady) cb();
+    else archivedTasksReadyWaiters.push(cb);
   }
 
   function startListeners() {
@@ -4649,6 +4794,7 @@
     unsubTasks = onSnapshot(tasksCol, function (snap) {
       var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
       tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      migrateLegacyArchivedTasks(tasks);
       if (modalOpenId) {
         var freshTask = tasks.find(function (t) { return t.id === modalOpenId; });
         if (!freshTask) {
@@ -4813,7 +4959,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-27T03:15:45Z";
+  var CURRENT_BUILD_VERSION = "2026-08-27T03:44:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

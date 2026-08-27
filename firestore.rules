@@ -32,6 +32,14 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // Archived tasks moved to their own collection (see the comment above ARCHIVE in
+    // index.html) so the live `tasks` listener every session pays for stays bounded by current
+    // work instead of growing forever. Same shared-board access model as tasks -- archiving/
+    // restoring a task is a plain move between the two collections, so both need identical rules.
+    match /archivedTasks/{taskId} {
+      allow read, write: if isMediashock();
+    }
+
     match /activity/{activityId} {
       allow read, write: if isMediashock();
     }
