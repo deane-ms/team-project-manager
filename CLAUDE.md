@@ -743,6 +743,23 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     in practice on the real board. `renderGantt` is back to a flat, start-date-ordered task list and
     is byte-identical to its pre-change version. The project deadline lives in the Projects tab only.
     Don't re-add Gantt grouping without asking first.
+    - **Project identity and double-booking were later addressed without touching row order or
+      grouping** (`projectColor`, `computeGanttConflicts`) — a comparison against TeamGantt found
+      it doesn't group rows by project either (project color there is manual/optional, not
+      automatic), which confirmed the flat list here isn't a compromise to fix later. Each row's
+      sticky label now gets a full-height color stripe (`projectColor(t.project)`, a
+      `PROJECT_PALETTE` name-hash exactly like `avatarColor`, kept as a separate palette so a
+      project and a person can never coincidentally read as "the same color means the same
+      thing") ahead of the existing priority/status dot -- stripe = which project, dot = priority,
+      two distinct signals rather than clustering rows together. `computeGanttConflicts(list)`
+      separately flags when one assignee has two plotted (non-`Done`) tasks whose date ranges
+      overlap -- a real scheduling conflict, distinct from anything priority/status communicates
+      -- with an amber `!` badge on the bar's top-left corner (top-right is already the overdue
+      dot; different corner and shape so the two warnings don't blur into each other), a
+      `#gantt-conflict-note` count next to the existing `#gantt-hidden-note`, and the specific
+      conflicting task name(s) named in the bar's tooltip. TeamGantt's own equivalent
+      (Workloads heat-map) lives in a separate report, not on the chart itself, and its own users
+      have publicly asked for an on-chart version that doesn't exist yet -- this is that.
 - **`activity`** — append-only log (`logActivity`), queried as latest 50 by `at desc`.
 - **`notifications`** — per-recipient; unlike the other two collections this one *does* restrict
   read/update/delete to the addressed recipient (matched against `request.auth.token.name` or
