@@ -481,9 +481,9 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-purple-400"></span>Ready for review</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
-            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Double-booked</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Deadline stack</span>
             <span id="gantt-hidden-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
-            <span id="gantt-conflict-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an assignee and overlap in time -- one person is scheduled on both at once."></span>
+            <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an assignee and a deadline -- more than one thing is due from the same person on the same day."></span>
             <button type="button" id="gantt-progress-toggle" title="Show/hide checklist progress on the bars" class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
               <span>Progress</span>
@@ -1308,36 +1308,38 @@
     return Math.round((done / items.length) * 100);
   }
 
-  // Double-booking detection for the Gantt -- one person with two overlapping date ranges is a
-  // real scheduling conflict, distinct from anything priority/status already communicates. Scoped
-  // to whatever's already plotted there (rows passed in already have both dates and passed the
-  // active filters), not the whole board, so this only ever flags what's actually visible.
-  // Skips Done tasks -- a finished task's old time slot isn't a conflict anyone still needs to
-  // resolve. O(n^2) within each assignee's own task list, which is always small in practice.
-  // Returns taskId -> array of the other task(s) it overlaps with, not just a boolean, so the
-  // bar's tooltip can name exactly what it's double-booked against instead of a bare warning.
-  function computeGanttConflicts(rows) {
+  // Deadline-stacking detection for the Gantt. NOT date-range overlap -- one person working on
+  // several projects' tasks across the same stretch of days is completely normal, just a matter
+  // of them prioritizing what ships first, and flagging that as a "conflict" was reported back
+  // as not actually useful. What's worth a warning is two or more of one person's tasks having
+  // the exact same DEADLINE -- that's a real pile-up, everything landing on their desk due the
+  // same day with no slack to sequence it. Scoped to whatever's already plotted (rows passed in
+  // already have both dates and passed the active filters), not the whole board, so this only
+  // ever flags what's actually visible. Skips Done tasks -- a finished task's old deadline isn't
+  // a pile-up anyone still needs to resolve. Returns taskId -> array of the other task(s) sharing
+  // its deadline, not just a boolean, so the bar's tooltip can name exactly what's stacked on top
+  // of it instead of a bare warning.
+  function computeGanttDeadlineStacks(rows) {
     var byAssignee = {};
     rows.forEach(function (t) {
       if (t.status === 'Done' || !t.assignee) return;
       (byAssignee[t.assignee] = byAssignee[t.assignee] || []).push(t);
     });
-    var conflicts = {};
+    var stacks = {};
     Object.keys(byAssignee).forEach(function (name) {
-      var arr = byAssignee[name];
-      for (var i = 0; i < arr.length; i++) {
-        for (var j = i + 1; j < arr.length; j++) {
-          var a = arr[i], b = arr[j];
-          var aStart = parseDate(a.startDate).getTime(), aEnd = parseDate(a.deadline).getTime();
-          var bStart = parseDate(b.startDate).getTime(), bEnd = parseDate(b.deadline).getTime();
-          if (aStart <= bEnd && bStart <= aEnd) {
-            (conflicts[a.id] = conflicts[a.id] || []).push(b);
-            (conflicts[b.id] = conflicts[b.id] || []).push(a);
-          }
-        }
-      }
+      var byDeadline = {};
+      byAssignee[name].forEach(function (t) {
+        (byDeadline[t.deadline] = byDeadline[t.deadline] || []).push(t);
+      });
+      Object.keys(byDeadline).forEach(function (deadline) {
+        var group = byDeadline[deadline];
+        if (group.length < 2) return;
+        group.forEach(function (t) {
+          stacks[t.id] = group.filter(function (other) { return other.id !== t.id; });
+        });
+      });
     });
-    return conflicts;
+    return stacks;
   }
 
   function formatDuration(totalMinutes) {
@@ -3592,14 +3594,14 @@
 
     list = list.slice().sort(function (a, b) { return parseDate(a.startDate) - parseDate(b.startDate); });
 
-    var conflicts = computeGanttConflicts(list);
-    var conflictCount = Object.keys(conflicts).length;
-    var conflictNote = document.getElementById('gantt-conflict-note');
-    if (conflictCount > 0) {
-      conflictNote.textContent = conflictCount + ' task' + (conflictCount === 1 ? '' : 's') + ' double-booked';
-      conflictNote.classList.remove('hidden');
+    var deadlineStacks = computeGanttDeadlineStacks(list);
+    var stackCount = Object.keys(deadlineStacks).length;
+    var stackNote = document.getElementById('gantt-stack-note');
+    if (stackCount > 0) {
+      stackNote.textContent = stackCount + ' task' + (stackCount === 1 ? '' : 's') + ' sharing a stacked deadline';
+      stackNote.classList.remove('hidden');
     } else {
-      conflictNote.classList.add('hidden');
+      stackNote.classList.add('hidden');
     }
 
     var today = todayMidnight();
@@ -3672,7 +3674,7 @@
       var pm = t.status === 'Done' ? DONE_META : (isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium));
       var rowIdx = r + 3;
       var overdue = dueUrgency(t).overdue;
-      var rowConflicts = conflicts[t.id] || [];
+      var rowStacked = deadlineStacks[t.id] || [];
 
       // z-20, matching the corner cell -- this column and the corner cell are the same
       // frozen pane conceptually, so they should share its topmost tier rather than sitting
@@ -3701,12 +3703,12 @@
       var showChecklistProgress = ganttShowProgress && checklistPct !== null;
       var fillPct = showChecklistProgress ? checklistPct : { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
       var checklistDoneCount = showChecklistProgress ? (t.checklist || []).filter(function (i) { return i.done; }).length : 0;
-      var conflictTitle = rowConflicts.length
-        ? ' · Double-booked: ' + t.assignee + ' is also on ' + rowConflicts.map(function (c) { return c.name; }).join(', ') + ' at the same time'
+      var stackTitle = rowStacked.length
+        ? ' · Deadline stack: ' + t.assignee + ' also has ' + rowStacked.map(function (o) { return o.name; }).join(', ') + ' due the same day'
         : '';
 
       html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
-      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (showChecklistProgress ? ' · ' + checklistDoneCount + '/' + t.checklist.length + ' checklist items' : '')) + escapeHtml(conflictTitle) + '" ' +
+      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (showChecklistProgress ? ' · ' + checklistDoneCount + '/' + t.checklist.length + ' checklist items' : '')) + escapeHtml(stackTitle) + '" ' +
         'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
         'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
           '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
@@ -3719,10 +3721,10 @@
           (showChecklistProgress ? '<span class="absolute bottom-0 right-1 text-[9px] font-bold text-zinc-600/80 dark:text-zinc-100/80 pointer-events-none">' + checklistDoneCount + '/' + t.checklist.length + '</span>' : '') +
           (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
           // Opposite corner from the overdue dot (top-left, not top-right) and a different shape
-          // (a badge with a glyph, not a bare dot) -- overdue and double-booked are both real but
-          // unrelated warnings, and two same-shaped colored dots on one small bar would blur
+          // (a badge with a glyph, not a bare dot) -- overdue and a stacked deadline are both real
+          // but unrelated warnings, and two same-shaped colored dots on one small bar would blur
           // together instead of reading as two distinct facts.
-          (rowConflicts.length ? '<span class="absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-800 flex items-center justify-center text-white text-[9px] font-black leading-none pointer-events-none" aria-hidden="true">!</span>' : '') +
+          (rowStacked.length ? '<span class="absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-800 flex items-center justify-center text-white text-[9px] font-black leading-none pointer-events-none" aria-hidden="true">!</span>' : '') +
       '</button>';
       html += '</div>';
     });
@@ -5036,7 +5038,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-27T06:05:47Z";
+  var CURRENT_BUILD_VERSION = "2026-08-27T06:32:25Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
