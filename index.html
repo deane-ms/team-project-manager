@@ -599,8 +599,23 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
-          <input id="task-assignee" list="assignee-suggestions" type="text" required maxlength="60" placeholder="Start typing a name…" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-          <datalist id="assignee-suggestions"></datalist>
+          <!-- A picker over the real team roster, not free text. Typing a name from memory is
+               how "Sarah", "Sarah L" and "sarah lim" became three different people on one
+               board, only one of whom could actually receive a notification. Options are
+               rebuilt from teamRoster() every time the modal opens.
+               `required` deliberately omitted: enhanceSelect() puts the real <select> in
+               sr-only, and the browser refuses to submit a form whose invalid control can't
+               be focused. The check in the submit handler covers it and can point at the
+               visible trigger instead. -->
+          <div class="relative">
+            <select id="task-assignee" class="w-full appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></select>
+            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </div>
+          <!-- The escape hatch for the one case the picker can't serve: assigning work to
+               someone before their first sign-in (a new starter, an intern). Hidden until
+               "Someone else…" is picked, so it is never a second always-visible way to set
+               the same field. -->
+          <input id="task-assignee-other" type="text" maxlength="60" placeholder="Type their name exactly as it appears in Google…" class="hidden w-full mt-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
       </div>
@@ -787,8 +802,38 @@
   var archivedTasks = [];
   var archivedTasksReady = false;
   var archivedTasksReadyWaiters = [];
+  // The team roster: one doc per person, ID'd by their Firebase uid, written on every sign-in.
+  // Everything that needs to know "who is on this team" (the assignee picker, the @mention
+  // roster and its autocomplete) reads teamRoster() below instead of inferring the team from
+  // the board's own tasks, which is what it used to do -- see the comment on teamRoster.
+  var peopleCol = collection(db, "people");
+  var unsubPeople = null;
+  // Not `people`: renderPeople() declares its own local `people` (the task-derived list of who
+  // currently has work), and two same-named lists meaning different things is a trap.
+  var teamPeople = [];
+
+  // Keyed by uid rather than by name so that someone changing their Google display name
+  // updates their existing row instead of appearing twice. merge:true because this fires on
+  // every sign-in and must not clobber fields a later version of this app might add.
+  function registerPresence(user) {
+    if (!user) return;
+    setDoc(doc(peopleCol, user.uid), {
+      name: user.displayName || user.email,
+      email: user.email || '',
+      lastSeen: new Date().toISOString()
+    }, { merge: true }).catch(function (e) {
+      // Not surfaced as a toast: a failure here degrades the roster for *other* people (this
+      // person won't appear in their pickers), but breaks nothing this person can see or act
+      // on, so a toast would be an alarm they can't do anything about.
+      console.error('Failed to register presence', e);
+    });
+  }
+
   var activityCol = collection(db, "activity");
-  var activityQuery = query(activityCol, orderBy("at", "desc"), limit(50));
+  // 50 was several days of history at five people. It is an afternoon at eleven, which quietly
+  // turns the audit trail into a "recently" list. Raised with the Activity view made searchable
+  // in the same pass -- a longer feed is only useful if you can find anything in it.
+  var activityQuery = query(activityCol, orderBy("at", "desc"), limit(200));
   var unsubActivity = null;
   var activityLog = [];
 
@@ -918,7 +963,7 @@
 
   function parseMentions(text) {
     var mentioned = [];
-    uniqueValues('assignee').forEach(function (name) {
+    teamRoster().forEach(function (name) {
       var re = new RegExp('@' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + MENTION_TAIL, 'i');
       if (re.test(text)) mentioned.push(name);
     });
@@ -992,7 +1037,7 @@
   // after another, so a URL that happens to contain "@Name"-shaped text (a query string, a path
   // segment) can't get a stray <span> spliced into its href.
   function enrichCommentText(text) {
-    var names = uniqueValues('assignee').slice().sort(function (a, b) { return b.length - a.length; });
+    var names = teamRoster().slice().sort(function (a, b) { return b.length - a.length; });
     var mentionRe = names.length
       ? new RegExp('@(?:' + names.map(function (name) { return escapeHtml(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')' + MENTION_TAIL, 'gi')
       : null;
@@ -1230,7 +1275,51 @@
   // a brief background flash on a checklist row the moment it's ticked done, purely decorative.
   var justCheckedItemIds = {};
 
-  var filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
+  // Filters survive a reload now. At five people the unfiltered board fit on one screen, so
+  // re-narrowing it every session cost nothing; at eleven it is the first thing everyone does
+  // on every visit. Safe to persist precisely because every active filter already renders as a
+  // visible pill plus a Clear button -- there is no hidden state to be surprised by. Only these
+  // five keys are read back, so a stale or hand-edited value can't inject anything else.
+  var FILTERS_KEY = 'flowboard_filters';
+  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
+
+  function loadFilters() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}');
+      return {
+        search: typeof raw.search === 'string' ? raw.search : '',
+        priority: typeof raw.priority === 'string' ? raw.priority : '',
+        project: typeof raw.project === 'string' ? raw.project : '',
+        assignee: typeof raw.assignee === 'string' ? raw.assignee : '',
+        sortBy: typeof raw.sortBy === 'string' ? raw.sortBy : 'focus'
+      };
+    } catch (e) {
+      return Object.assign({}, DEFAULT_FILTERS);
+    }
+  }
+
+  function persistFilters() {
+    try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch (e) { /* ignore */ }
+  }
+
+  // Drops a restored project/assignee filter that no longer matches anything on the board --
+  // otherwise it stays quietly active, hiding every task, with no pill on screen to explain why
+  // and nothing to click to clear. Called from the `tasks` snapshot handler rather than from a
+  // renderer on purpose: that is the one moment the set of real projects/people actually
+  // changes, and it is the only point at which `tasks` is known to be loaded rather than still
+  // an empty array on first paint.
+  function reconcileFilters() {
+    var changed = false;
+    if (filters.project && uniqueValues('project').indexOf(filters.project) === -1) {
+      filters.project = ''; changed = true;
+    }
+    if (filters.assignee && uniqueValues('assignee').indexOf(filters.assignee) === -1) {
+      filters.assignee = ''; changed = true;
+    }
+    if (changed) persistFilters();
+  }
+
+  var filters = loadFilters();
 
   /* =========================================================
      UTILITIES
@@ -1630,6 +1719,26 @@
     return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
   }
 
+  // Everyone who can be assigned a task or @mentioned: the `people` roster (anyone who has
+  // signed in) UNION every name already sitting on a task.
+  //
+  // The roster half is the point -- uniqueValues('assignee') alone made a person exist only
+  // as a side effect of already having work, so a new joiner could not be assigned anything
+  // or mentioned anywhere until somebody typed their name from memory, and typing it slightly
+  // wrong created a second person who could never receive a notification (notifications are
+  // addressed by display name and matched against the auth token's name in firestore.rules,
+  // so a near-miss is written successfully and then read by nobody).
+  //
+  // The task half still matters and is not legacy cruft: tasks created before this collection
+  // existed carry names with no uid behind them, and dropping those names would silently
+  // reassign the task the next time anyone opened it in the modal.
+  function teamRoster() {
+    var set = {};
+    teamPeople.forEach(function (p) { if (p.name) set[p.name] = true; });
+    uniqueValues('assignee').forEach(function (name) { set[name] = true; });
+    return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
+  }
+
   /* =========================================================
      TOASTS
   ========================================================= */
@@ -1744,7 +1853,7 @@
     return JSON.stringify({
       name: document.getElementById('task-name').value,
       project: document.getElementById('task-project').value,
-      assignee: document.getElementById('task-assignee').value,
+      assignee: currentAssigneeValue(),
       priority: document.getElementById('task-priority').value,
       status: document.getElementById('task-status').value,
       startDate: document.getElementById('task-start').value,
@@ -1779,13 +1888,20 @@
       el.textContent = '';
       el.classList.add('hidden');
     });
-    taskForm.querySelectorAll('input, select').forEach(function (el) {
+    // The trigger buttons are in here too: enhanceSelect() hides the real <select> behind
+    // sr-only, so an enhanced field's error outline lives on its trigger, not on the select.
+    taskForm.querySelectorAll('input, select, button[aria-haspopup="listbox"]').forEach(function (el) {
       el.classList.remove('border-rose-400', 'ring-2', 'ring-rose-200');
     });
   }
 
   function setFieldError(inputEl, message) {
-    inputEl.classList.add('border-rose-400');
+    // An enhanced select is sr-only and therefore invisible -- reddening it would show the user
+    // nothing at all. Its visible half is the trigger button enhanceSelect() inserted alongside.
+    var visibleEl = inputEl.classList.contains('sr-only')
+      ? (inputEl.parentElement.querySelector('button[aria-haspopup="listbox"]') || inputEl)
+      : inputEl;
+    visibleEl.classList.add('border-rose-400');
     // Walk up until we find the field's error <p>, rather than only checking the input's
     // immediate parent -- fields wrapped in a `.relative` div for an overlaid icon (Project)
     // keep their .field-error outside that wrapper, so the old one-level lookup silently
@@ -1810,7 +1926,7 @@
     document.getElementById('task-id').value = task ? task.id : '';
     document.getElementById('task-name').value = task ? task.name : '';
     document.getElementById('task-project').value = task ? task.project : '';
-    document.getElementById('task-assignee').value = task ? task.assignee : '';
+    renderAssigneeOptions(task ? task.assignee : '');
     document.getElementById('task-priority').value = task ? task.priority : 'Medium';
     taskPriorityPill.sync();
     document.getElementById('task-status').value = task ? task.status : 'Pipeline';
@@ -2568,11 +2684,59 @@
   var sortByPill = enhanceSelect('sort-by');
   var taskPriorityPill = enhanceSelect('task-priority');
   var taskStatusPill = enhanceSelect('task-status');
+  var taskAssigneePill = enhanceSelect('task-assignee');
+
+  // Sentinel for the "+ Someone else..." row. Prefixed and suffixed so it can never collide with
+  // a real display name, which is what actually gets stored in task.assignee.
+  var ASSIGNEE_OTHER = '__assignee_other__';
+
+  // Rebuilt on every modal open rather than once at startup, so somebody who signed in for the
+  // first time thirty seconds ago is already pickable without a reload.
+  function renderAssigneeOptions(selected) {
+    var sel = document.getElementById('task-assignee');
+    var roster = teamRoster();
+    // A task's current assignee is always kept selectable even if teamRoster() somehow doesn't
+    // list them. Without this, opening an old task whose assignee is no longer on the roster
+    // would show a blank picker, and saving it -- for any unrelated edit -- would silently
+    // reassign the task out from under them.
+    if (selected && roster.indexOf(selected) === -1) roster.unshift(selected);
+    sel.innerHTML = '<option value="">Select a person…</option>' +
+      roster.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') +
+      '<option value="' + ASSIGNEE_OTHER + '">+ Someone else…</option>';
+    sel.value = selected || '';
+    taskAssigneePill.rebuild();
+    syncAssigneeOther();
+  }
+
+  function syncAssigneeOther() {
+    var isOther = document.getElementById('task-assignee').value === ASSIGNEE_OTHER;
+    var other = document.getElementById('task-assignee-other');
+    other.classList.toggle('hidden', !isOther);
+    // Cleared on the way out so an abandoned "someone else" name can't leak into the next save
+    // after the picker has been switched back to a real person.
+    if (!isOther) other.value = '';
+  }
+
+  // The one place that answers "who is this task assigned to" for both the save handler and the
+  // unsaved-changes snapshot, so the two can't disagree about which of the two inputs is live.
+  function currentAssigneeValue() {
+    var sel = document.getElementById('task-assignee');
+    if (sel.value === ASSIGNEE_OTHER) return document.getElementById('task-assignee-other').value.trim();
+    return sel.value.trim();
+  }
+
+  document.getElementById('task-assignee').addEventListener('change', function () {
+    syncAssigneeOther();
+    if (document.getElementById('task-assignee').value === ASSIGNEE_OTHER) {
+      document.getElementById('task-assignee-other').focus();
+    }
+  });
 
   function populateDatalists() {
-    var assigneeList = document.getElementById('assignee-suggestions');
-    assigneeList.innerHTML = uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">'; }).join('');
-    // Project is free-type now, so it needs the same autocomplete Assignee has -- without it,
+    // Assignee used to have a datalist here too. It's a real picker over the team roster now
+    // (renderAssigneeOptions), so there's nothing left to autocomplete -- you can't mistype a
+    // name you didn't type.
+    // Project is still free-type, so it keeps its autocomplete -- without it,
     // "Acme Rebrand" and "acme rebrand" would quietly become two separate projects everywhere
     // that groups by this field (Projects view, Gantt, People, filters).
     var projectList = document.getElementById('project-suggestions');
@@ -2683,7 +2847,9 @@
 
     var name = nameEl.value.trim();
     var project = projectEl.value.trim();
-    var assignee = assigneeEl.value.trim();
+    // Not assigneeEl.value: the picker's "+ Someone else..." row keeps the real name in the
+    // adjacent text input, and currentAssigneeValue() is what knows which of the two is live.
+    var assignee = currentAssigneeValue();
     var priority = document.getElementById('task-priority').value;
     var status = document.getElementById('task-status').value;
     var startDate = startEl.value || toDateInputValue(todayMidnight());
@@ -2772,7 +2938,7 @@
 
   function renderMentionMenu() {
     var q = mentionState.query.toLowerCase();
-    var matches = uniqueValues('assignee').filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; }).slice(0, 5);
+    var matches = teamRoster().filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; }).slice(0, 5);
     if (!matches.length) { mentionMenu.classList.add('hidden'); return; }
     mentionMenu.innerHTML = matches.map(function (n) {
       return '<button type="button" class="mention-option w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/60 flex items-center gap-2" data-name="' + escapeHtml(n) + '">' +
@@ -4182,13 +4348,25 @@
 
   function renderActivityFeed() {
     var container = document.getElementById('activity-feed');
-    if (!activityLog.length) {
-      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No activity yet.</p>';
+    // Its own match rather than applyFilters(): an activity row isn't a task, and the only two
+    // things it shows are the summary line and who did it. The priority/project/assignee filters
+    // are deliberately ignored here -- they describe tasks, and silently applying them to a log
+    // of "X renamed Y" entries would hide rows for reasons the row itself never displays.
+    var q = filters.search.trim().toLowerCase();
+    var feed = q
+      ? activityLog.filter(function (a) {
+          return ((a.summary || '') + ' ' + (a.user || '')).toLowerCase().indexOf(q) !== -1;
+        })
+      : activityLog;
+    if (!feed.length) {
+      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
+        (q ? 'No activity matches “' + escapeHtml(filters.search.trim()) + '”.' : 'No activity yet.') +
+        '</p>';
       return;
     }
     var html = '';
     var lastGroup = null;
-    activityLog.forEach(function (a) {
+    feed.forEach(function (a) {
       var d = new Date(a.at);
       var groupKey = isNaN(d.getTime()) ? 'unknown' : d.toDateString();
       if (groupKey !== lastGroup) {
@@ -4373,14 +4551,21 @@
   function renderFilterOptions() {
     var projectSel = document.getElementById('filter-project');
     var assigneeSel = document.getElementById('filter-assignee');
-    var curProject = projectSel.value;
-    var curAssignee = assigneeSel.value;
+    // Source of truth is `filters`, not the select's own value -- on a fresh load the selects
+    // are empty while `filters` may already carry a restored project/assignee, and reading the
+    // select back would quietly discard it.
+    var curProject = filters.project;
+    var curAssignee = filters.assignee;
 
     projectSel.innerHTML = '<option value="">All projects</option>' +
       uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('');
     assigneeSel.innerHTML = '<option value="">Everyone</option>' +
       uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>'; }).join('');
 
+    // Purely display here -- dropping a filter that no longer matches anything is
+    // reconcileFilters()' job, and it runs against real loaded data. Doing it here instead
+    // would clear every persisted filter on the very first render, which happens while `tasks`
+    // is still an empty array waiting on the first snapshot.
     if (uniqueValues('project').indexOf(curProject) !== -1) projectSel.value = curProject;
     if (uniqueValues('assignee').indexOf(curAssignee) !== -1) assigneeSel.value = curAssignee;
     filterProjectPill.rebuild();
@@ -4425,7 +4610,11 @@
   // nothing at all while still looking perfectly usable -- so typing "sizzle" on Archived returned
   // no visible change and read as "there is no such task in the archive", which is not what it
   // meant. Disable it there and say why, rather than leaving it silently inert.
-  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people'];
+  // Activity is in here despite not routing through applyFilters() (it isn't a task list --
+  // renderActivityFeed does its own match on the summary and the person). It joined the list in
+  // the same pass that raised the feed's limit from 50 to 200: a longer history is only useful
+  // if you can find anything in it.
+  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'activity'];
 
   function syncSearchAvailability() {
     var input = document.getElementById('filter-search');
@@ -4433,9 +4622,9 @@
     var searchable = SEARCHABLE_VIEWS.indexOf(currentView) !== -1;
     input.disabled = !searchable;
     input.title = searchable ? '' : 'Search doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView);
-    input.placeholder = searchable
-      ? 'Search tasks, checklists, comments…'
-      : 'Search doesn\'t apply here';
+    input.placeholder = !searchable
+      ? 'Search doesn\'t apply here'
+      : (currentView === 'activity' ? 'Search activity…' : 'Search tasks, checklists, comments…');
     input.classList.toggle('opacity-50', !searchable);
     input.classList.toggle('cursor-not-allowed', !searchable);
   }
@@ -4537,26 +4726,32 @@
 
   document.getElementById('filter-search').addEventListener('input', function (e) {
     filters.search = e.target.value;
+    persistFilters();
     debouncedRender();
   });
   document.getElementById('filter-priority').addEventListener('change', function (e) {
     filters.priority = e.target.value;
+    persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('filter-project').addEventListener('change', function (e) {
     filters.project = e.target.value;
+    persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('filter-assignee').addEventListener('change', function (e) {
     filters.assignee = e.target.value;
+    persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('sort-by').addEventListener('change', function (e) {
     filters.sortBy = e.target.value;
+    persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('btn-clear-filters').addEventListener('click', function () {
-    filters = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
+    filters = Object.assign({}, DEFAULT_FILTERS);
+    persistFilters();
     document.getElementById('sort-by').value = 'focus';
     sortByPill.sync();
     document.getElementById('filter-search').value = '';
@@ -4785,6 +4980,8 @@
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
     if (unsubSuggestions) { unsubSuggestions(); unsubSuggestions = null; }
     if (unsubProjects) { unsubProjects(); unsubProjects = null; }
+    if (unsubPeople) { unsubPeople(); unsubPeople = null; }
+    teamPeople = [];
     if (unsubArchivedTasks) { unsubArchivedTasks(); unsubArchivedTasks = null; }
     archivedTasks = [];
     archivedTasksReady = false;
@@ -4892,6 +5089,9 @@
       var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
       tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       migrateLegacyArchivedTasks(tasks);
+      // Before renderAll below, so the board is never painted once through a filter that is
+      // about to be dropped.
+      reconcileFilters();
       if (modalOpenId) {
         var freshTask = tasks.find(function (t) { return t.id === modalOpenId; });
         if (!freshTask) {
@@ -4909,6 +5109,19 @@
       checkProjectDeadlinePopups();
     }, function (err) {
       showToast('Live sync error: ' + err.message, 'error');
+    });
+    // Tiny collection (one doc per teammate) and it changes only when somebody signs in, so
+    // this rides along with the rest of the startup listeners rather than being lazy-loaded the
+    // way archivedTasks is. Deliberately no renderAll() on change: the roster is read on demand
+    // by teamRoster(), and the one place it's materialised into UI (the assignee picker) rebuilds
+    // itself every time the modal opens.
+    unsubPeople = onSnapshot(peopleCol, function (snap) {
+      teamPeople = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+    }, function (err) {
+      // Same reasoning as registerPresence: a missing roster degrades the assignee picker back
+      // to the names already on the board, which is exactly how this app behaved before the
+      // roster existed -- worth a console line, not an alarm.
+      console.error('people listener error', err);
     });
     unsubActivity = onSnapshot(activityQuery, function (snap) {
       activityLog = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
@@ -5043,6 +5256,9 @@
     var userChipAvatar = document.getElementById('user-chip-avatar');
     userChipAvatar.innerHTML = svgIcon('user', 'w-3.5 h-3.5');
     userChipAvatar.className = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-300';
+    // Before startListeners, so this session's own roster snapshot already includes them -- a
+    // first-time signer-in can assign themselves a task without reloading.
+    registerPresence(user);
     startListeners();
   });
 
@@ -5056,7 +5272,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-27T08:52:27Z";
+  var CURRENT_BUILD_VERSION = "2026-08-31T02:02:36Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -5096,7 +5312,19 @@
   /* =========================================================
      INIT
   ========================================================= */
+  // Pushes the persisted `filters` back into the actual inputs. The project/assignee selects
+  // aren't touched here -- their options don't exist yet at init time; renderFilterOptions()
+  // restores those (and drops any that no longer match a real project/person).
+  function restoreFilterControls() {
+    document.getElementById('filter-search').value = filters.search;
+    document.getElementById('filter-priority').value = filters.priority;
+    filterPriorityPill.sync();
+    document.getElementById('sort-by').value = filters.sortBy;
+    sortByPill.sync();
+  }
+
   function init() {
+    restoreFilterControls();
     syncThemeToggleIcon();
     syncDesktopNotifToggleIcon();
     syncGanttProgressToggle();

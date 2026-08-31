@@ -192,14 +192,38 @@ to bottom:
      handling. Still stored as two separate task fields (`project` + `driveLink`) — `project` is
      the grouping key for Projects/Gantt/People/`filters`, so it has to stay a real name and can
      never become a URL. Existing tasks need no migration.
+   - **Assignee is a picker over the team roster, not a free-text field.** It used to be
+     `<input list="assignee-suggestions">` — you typed a colleague's name from memory and a
+     datalist merely *suggested*, so nothing stopped "Sarah" / "Sarah L" / "sarah lim" becoming
+     three people in the People view, three filter options and three separate workload columns,
+     only one of whom could actually be notified (see `people` in the data model below). It is now
+     a real `<select>` (`renderAssigneeOptions`, run on every `openTaskModal` so someone who
+     signed in thirty seconds ago is already pickable) put through the same `enhanceSelect()`
+     widget as every other dropdown in this app.
+     - **The currently-assigned person is always kept as an option** even if `teamRoster()`
+       somehow doesn't list them. Without that, opening an old task would show a blank picker and
+       saving it — for any unrelated edit — would silently reassign the task out from under them.
+     - **`+ Someone else…` (`ASSIGNEE_OTHER`) is the deliberate escape hatch**, for the one case a
+       roster picker can't serve: assigning work to someone before their first sign-in (a new
+       starter, an intern). It reveals `#task-assignee-other`, which is otherwise hidden, so this
+       is progressive disclosure rather than a second always-visible way to set the same field.
+       `currentAssigneeValue()` is the single place that knows which of the two inputs is live —
+       both the submit handler and `taskFormSnapshot()` call it, so the save path and the
+       unsaved-changes check can't disagree about what the assignee is.
+     - **No `required` attribute on the select.** `enhanceSelect()` puts the real control in
+       `sr-only`, and a browser refuses to submit a form whose invalid control can't be focused —
+       the form would fail silently with no message. The existing check in the submit handler
+       covers it. For the same reason `setFieldError` now redirects its red outline to the
+       enhanced select's *trigger button*, and `clearFieldErrors` clears it from those buttons —
+       reddening an `sr-only` element shows the user nothing.
    - **Chrome's native datalist caret is hidden app-wide.** Any `<input list="...">` whose
      datalist has options gets a solid black ▼ drawn by Chrome *while the field is focused or
      hovered* — a filled UA glyph sitting right beside this app's thin stroked SVG icons, which
      reads as a foreign control. Killed with
      `input[list]::-webkit-calendar-picker-indicator { display: none !important }` in the `<style>`
      block. Scoped to `input[list]` deliberately: `input[type="date"]` uses the *same*
-     pseudo-element for its calendar button and must keep it. Affects Project, Assignee, and the
-     Time Tracking note field. Suggestions still drop down as you type; you just can't click an
+     pseudo-element for its calendar button and must keep it. Affects Project and the Time Tracking note
+     field (Assignee used to be in this list; it's a real select now, see above). Suggestions still drop down as you type; you just can't click an
      arrow to browse them cold.
      - **Testing this needs real Chrome, headed, with the field focused.** Playwright's bundled
        Chromium never draws the caret, headed or not, so a headless run "passes" whether or not
@@ -437,12 +461,39 @@ to bottom:
      `advanceProjectPopupQueue`) so two qualifying projects in the same snapshot don't stomp each
      other's modal state — and both defer entirely while the task modal or another confirm is
      already open, rather than interrupting an edit in progress.
+   - **Filters persist across reloads** (`FILTERS_KEY = 'flowboard_filters'`, `loadFilters`/
+     `persistFilters`/`restoreFilterControls`). Only the five known keys are read back, so a
+     stale or hand-edited `localStorage` value can't inject anything else. Safe to persist
+     precisely *because* every active filter already renders as a visible pill next to a Clear
+     button — there is no hidden state to be surprised by, which is the usual objection to
+     remembering a filter. At five people the unfiltered board fit on one screen and re-narrowing
+     it each session cost nothing; at eleven it's the first thing everyone does on every visit.
+     - **`reconcileFilters()` runs from the `tasks` `onSnapshot` handler, not from a renderer**,
+       and this placement is the whole trick. A restored filter naming a project or person who
+       has since left the board has to be dropped — left active it hides every task with no pill
+       on screen explaining why and nothing to click to clear. But the first `renderAll()` fires
+       at `init()` while `tasks` is still `[]` waiting on the first snapshot, so doing this check
+       in `renderFilterOptions` would clear *every* persisted filter on every load. The snapshot
+       handler is the one moment the set of real projects/people actually changes and the only
+       point at which `tasks` is known to be loaded. `renderFilterOptions` now reads `filters` as
+       its source of truth (not the select's own value, which is empty on a fresh load) and only
+       *displays*.
+     - `restoreFilterControls()` (called first in `init()`) pushes the persisted values back into
+       search/priority/sort only. The project and assignee selects have no options yet at init
+       time; `renderFilterOptions` restores those.
    - `filters.search` (the search box, `#filter-search`) matches name/project/assignee plus
      checklist-item text and comment text (`applyFilters`) — wired into **Board, Gantt, Calendar and
      People**, the four views listed in `SEARCHABLE_VIEWS`. Projects/Activity/Archived/Suggestions
      don't route through it. (An earlier version of this note also excluded Calendar; that stopped
      being true once `renderCalendar` started calling `applyFilters` and the note wasn't updated —
      if you change which views filter, change `SEARCHABLE_VIEWS` and this line together.)
+     - **Activity is searchable too, and it is the one entry in `SEARCHABLE_VIEWS` that does not
+       route through `applyFilters()`.** `renderActivityFeed` runs its own match over the summary
+       line and the person, because an activity row is not a task — the priority/project/assignee
+       filters describe tasks, and silently applying them to a log of "X renamed Y" entries would
+       hide rows for reasons the row itself never displays. `syncSearchAvailability()` swaps the
+       placeholder to "Search activity…" there so the box doesn't promise checklist/comment search
+       it isn't doing on that view.
      - **The box disables itself on the views it doesn't affect.** `syncSearchAvailability()`, called
        from `setView`, sets `disabled`, swaps the placeholder to "Search doesn't apply here", adds a
        tooltip naming the view, and dims it. Previously the box stayed fully enabled everywhere, so
@@ -781,7 +832,37 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         in a separate report, not on the chart itself, and its own users have publicly asked for
         an on-chart version that doesn't exist yet -- this is that, tuned to what this team
         actually finds worth a warning rather than a straight port of TeamGantt's own metric.
-- **`activity`** — append-only log (`logActivity`), queried as latest 50 by `at desc`.
+- **`people`** — the **team roster**: one doc per teammate, **doc ID = their Firebase uid**,
+  `{name, email, lastSeen}`, upserted by `registerPresence(user)` on every sign-in
+  (`onAuthStateChanged`, deliberately *before* `startListeners` so a first-time signer-in is
+  already in their own session's snapshot and can assign themselves a task without reloading).
+  - **Why it exists.** Before it, the only answer to "who is on this team" was inferred from the
+    board itself (`uniqueValues('assignee')`), so a new joiner did not exist to the app until
+    someone hand-typed their name onto a task — they could not be picked, and could not be
+    `@mentioned`. Worse, typing that name slightly wrong created a second, permanent person who
+    could never receive a notification: `notifications.recipient` is a display name matched in
+    `firestore.rules` against `request.auth.token.name`, so a near-miss is written successfully
+    and then read by nobody. Silent, with no error on either side. This became urgent at ~11
+    people; it never bit at 5, where everyone knew everyone's exact display name.
+  - **`teamRoster()`** is the accessor — roster names UNION every name already on a task. The
+    task half is *not* legacy cruft: tasks created before this collection existed carry names
+    with no uid behind them, and dropping them would silently reassign the task the next time
+    anyone opened it. `parseMentions`, `enrichCommentText`, the mention autocomplete and the
+    assignee picker all read this; `renderPeople` and the assignee *filter* deliberately still
+    read `uniqueValues('assignee')`, since those answer "who currently has work," not "who exists."
+  - **Rules are narrower than every other collection here**: read by the whole team, but
+    `create/update` only where `personId == request.auth.uid`, and `delete: if false`. This is
+    the one collection where shared write would be actively harmful — rewriting someone else's
+    `name` silently redirects their notifications. A leaver is handled by not signing in, not by
+    deleting a row their old tasks still reference by name.
+  - The module-level list is `teamPeople`, **not** `people` — `renderPeople()` declares its own
+    local `people` meaning something different (who currently has tasks), and the shadowing was
+    a trap waiting for the next edit.
+- **`activity`** — append-only log (`logActivity`), queried as latest **200** by `at desc`, and
+  searchable from the main search box (see below). Was 50, which is several days of history at
+  five people and about an afternoon at eleven — quietly turning an audit trail into a "recently"
+  list. Raised and made searchable in the same pass: a longer feed is only useful if you can find
+  anything in it.
 - **`notifications`** — per-recipient; unlike the other two collections this one *does* restrict
   read/update/delete to the addressed recipient (matched against `request.auth.token.name` or
   `.email`, since `recipient` is stored as a display name — see comments in `firestore.rules`).

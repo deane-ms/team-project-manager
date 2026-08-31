@@ -75,6 +75,25 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // One doc per teammate, keyed by their Firebase uid, upserted on every sign-in (see
+    // registerPresence in index.html). This is the team roster. Before it existed, the only
+    // answer to "who is on this team" was inferred from the board itself
+    // (uniqueValues('assignee')), so a new joiner was invisible to the assignee picker and the
+    // @mention roster until somebody hand-typed their name onto a task first -- and a typo in
+    // that first hand-typing became a second, permanent, un-notifiable person.
+    //
+    // Readable by the whole team, since it drives everyone's assignee list. Writable only by
+    // the person it describes: the doc ID is their uid, so `personId == request.auth.uid` is
+    // what stops one teammate rewriting another's display name -- which would silently
+    // redirect that person's notifications, since `notifications.recipient` is matched by
+    // name. Delete is denied outright; someone leaving is handled by them no longer signing
+    // in, not by removing a row that their existing tasks still reference by name.
+    match /people/{personId} {
+      allow read: if isMediashock();
+      allow create, update: if isMediashock() && personId == request.auth.uid;
+      allow delete: if false;
+    }
+
     match /notifications/{notifId} {
       allow create: if isMediashock();
       allow read, update, delete: if isMediashock() && isNotificationRecipient(resource.data);
