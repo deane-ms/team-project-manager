@@ -307,13 +307,17 @@ to bottom:
        (`dark:bg-zinc-700/80`, and the weekend/today tints at `/70`, `/40`, `/10`), so bars
        scrolling underneath still showed through as ghost blocks. Every cell in both header rows
        is a solid colour now.
-     - **The frozen row parks below the app header, not at `top: 0`.** The app header is itself
-       `sticky top-0 z-40`, so a Gantt header at `top: 0` freezes *underneath* it and the day
-       numbers disappear behind it as you scroll. `stickyTop` is measured from the real
-       `<header>` each render (its height changes when the nav wraps) and applied as an inline
-       `top` — the day row gets `stickyTop + 32`, one header row down. **There is no resize
-       handler anywhere in this app**, so this recomputes only on the next render, the same
-       pre-existing limitation `dayWidth` has always had.
+     - **Do not give these cells a `top` offset to clear the app's own sticky header.** Tried
+       and reverted the same day. `position: sticky` with `top: 200px` does not mean "stop 200px
+       down once you scroll there" — it means "never come closer than 200px to the scroll
+       container's top edge", which the header satisfies **immediately, before any scrolling**,
+       by dropping 200px down into the middle of the chart and floating over rows 3–4, leaving a
+       blank band where it belonged. Reported from a screenshot within minutes of shipping.
+       `top-0` / `top-8` are correct. The app header (`sticky top-0 z-40`) does still sit above
+       the frozen row when the page scrolls; if that ever needs solving, the fix is to make the
+       chart its own scroll container — `#gantt-wrap` currently sets **no `overflow` at all**, so
+       the page is the scroll container and `scrollWrap.scrollLeft` in the "keep today in view"
+       block is a no-op — not to offset the sticky cells.
    - `renderGantt`: day-column width is capped (`GANTT_MAX_DAY_WIDTH`) so a short date range doesn't
      stretch into oversized solid-color bars; the sticky Task label column needs a higher `z-index`
      than the today-line and day-grid content or bars paint over it (they're normal-flow siblings

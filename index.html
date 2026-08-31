@@ -3921,16 +3921,14 @@
     var availableWidth = wrap.parentElement.clientWidth - GANTT_LABEL_WIDTH;
     var dayWidth = Math.min(GANTT_MAX_DAY_WIDTH, Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays)));
 
-    // The app's own header is sticky at z-40. A Gantt header parked at top:0 therefore freezes
-    // to the viewport's top edge -- which is UNDERNEATH that header -- so the month and day
-    // numbers slide out of sight behind it the moment the page scrolls. Park the frozen row just
-    // below it instead. Measured rather than hardcoded: the app header's height changes when its
-    // nav wraps on a narrow window.
-    // Known limitation: there is no resize handler in this app, so this offset (like dayWidth
-    // above, which has always had the same issue) is only recomputed on the next render.
-    var appHeaderEl = document.querySelector('header');
-    var stickyTop = appHeaderEl ? appHeaderEl.offsetHeight : 0;
-
+    // DO NOT give these sticky header cells a top offset to clear the app's own sticky header.
+    // That was tried and reverted the same day: `position: sticky` with `top: 200px` does not
+    // mean "stop 200px down once you reach it", it means "never come closer than 200px to the
+    // container's top edge" -- which the header satisfies immediately, before any scrolling, by
+    // dropping 200px straight down into the middle of the chart and floating there over rows 3
+    // and 4, with a blank band left where it should have been. Reported from a screenshot.
+    // top-0 / top-8 are correct; if the frozen row ever needs to clear the app header, the fix
+    // is to make the chart its own scroll container, not to offset the sticky cells.
     var html = '';
     html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
 
@@ -3954,7 +3952,7 @@
     // sitting on top of the month and day numbers (reported from a screenshot). Header outranks
     // label now, which is the correct reading anyway: a frozen top row is frozen against
     // everything, including the other frozen edge.
-    html += '<div class="sticky left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="top:' + stickyTop + 'px;grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
+    html += '<div class="sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
 
     // month header row
     var colCursor = 2;
@@ -3962,7 +3960,7 @@
       // Opaque background, not dark:bg-zinc-700/80. Raising the z-index alone was not enough:
       // at 80% the bars scrolling underneath still showed through the header as ghost blocks,
       // which is its own kind of "obstructed". Every cell in these two header rows is solid now.
-      html += '<div class="sticky z-[25] bg-zinc-50 dark:bg-zinc-700 border-b border-zinc-200 dark:border-zinc-700 flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="top:' + stickyTop + 'px;grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      html += '<div class="sticky top-0 z-[25] bg-zinc-50 dark:bg-zinc-700 border-b border-zinc-200 dark:border-zinc-700 flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -3973,9 +3971,9 @@
       // Solid tints for the same reason as the month row above -- the weekend and today tints
       // were the most transparent cells of the lot (/70, /40, /10) and let the most through.
       // The three still read as three distinct days, just without the see-through.
-      html += '<div class="sticky z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
+      html += '<div class="sticky top-8 z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
         (isToday ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400')) +
-        '" style="top:' + (stickyTop + 32) + 'px;grid-column:' + (i + 2) + ';grid-row:2;">' +
+        '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
     });
@@ -5552,7 +5550,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-31T08:00:27Z";
+  var CURRENT_BUILD_VERSION = "2026-08-31T08:34:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
