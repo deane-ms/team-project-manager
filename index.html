@@ -145,6 +145,20 @@
   @keyframes panel-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
   .panel-pop-in { animation: panel-pop-in 0.14s ease-out; }
 
+  /* Personal-leave band on a Gantt row. Deliberately a diagonal hatch rather than a flat tint:
+     the day columns already use flat tints for weekend and for today, so a third flat colour
+     would read as a fourth kind of DAY rather than as "this one person is away". The hatch sits
+     under the task bar (it's emitted before the bar in the same relative container, and neither
+     sets z-index, so DOM order wins) and takes no pointer events, so it can never eat a click
+     meant for the bar on top of it. */
+  .gantt-leave {
+    pointer-events: none;
+    background-image: repeating-linear-gradient(45deg, rgba(113, 113, 122, 0.18) 0 4px, transparent 4px 9px);
+  }
+  .dark .gantt-leave {
+    background-image: repeating-linear-gradient(45deg, rgba(228, 228, 231, 0.16) 0 4px, transparent 4px 9px);
+  }
+
   @keyframes checklist-check-pop { from { background-color: rgba(16, 185, 129, 0.2); } to { background-color: transparent; } }
   .checklist-just-checked { animation: checklist-check-pop 0.5s ease-out; }
 
@@ -484,6 +498,7 @@
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Deadline stack</span>
             <span id="gantt-hidden-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an assignee and a deadline -- more than one thing is due from the same person on the same day."></span>
+            <span id="gantt-leave-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="The deadline falls on a day the assignee is away. The shaded stripes on a row are that person's time off -- set it in the People tab."></span>
             <button type="button" id="gantt-progress-toggle" title="Show/hide checklist progress on the bars" class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
               <span>Progress</span>
@@ -1717,6 +1732,55 @@
     var set = {};
     activeTasks().forEach(function (t) { if (t[field]) set[t[field]] = true; });
     return Object.keys(set).sort(function (a, b) { return a.localeCompare(b); });
+  }
+
+  // Mirrors admins() in firestore.rules. This is UI gating only -- it decides which controls to
+  // offer, NOT who may write; the rules are the boundary. Keep the two lists identical.
+  var ADMIN_EMAILS = ['aiuser@mediashock.com.sg', 'deane@mediashock.com.sg'];
+
+  function isAdminUser() {
+    var u = auth.currentUser;
+    return !!(u && u.email && ADMIN_EMAILS.indexOf(u.email.toLowerCase()) !== -1);
+  }
+
+  /* ---------------------------------------------------------
+     PERSONAL LEAVE
+     Leave lives on the person's roster doc (`people/{uid}.leave`), not on a task, and not as a
+     task status. One person going away affects every task they hold at once, and it says nothing
+     about how any of that work is progressing -- as a status it would have to be set and unset on
+     each of their tasks by hand, and it would corrupt the field that drives overdue badges, Focus
+     of the Day, isReadyForReview and the Done count.
+     Checked against TeamGantt and Monday first: neither reschedules anything around leave.
+     TeamGantt has company-wide holidays only and documents "make a task called Vacation and
+     assign yourself" for individual time off; Monday logs real per-person PTO but it feeds a
+     capacity view, not the bars. So this is a visibility signal too -- it shades the days and
+     names the clash, and a human still decides what to move.
+  --------------------------------------------------------- */
+  function leaveFor(name) {
+    var person = teamPeople.find(function (p) { return p.name === name; });
+    return ((person && person.leave) || []).filter(function (l) { return l && l.start && l.end; });
+  }
+
+  // Plain string comparison, no Date parsing and no timezone helper: both ends are stored as the
+  // `YYYY-MM-DD` an <input type="date"> produces, that format sorts lexicographically, and both
+  // ends of a leave period are inclusive. Same reasoning as computeGanttDeadlineStacks grouping
+  // on the raw t.deadline string.
+  function isOnLeave(name, dateStr) {
+    if (!name || !dateStr) return false;
+    return leaveFor(name).some(function (l) { return dateStr >= l.start && dateStr <= l.end; });
+  }
+
+  // The period a person is away on a given day, so a tooltip can say which one.
+  function leavePeriodOn(name, dateStr) {
+    return leaveFor(name).find(function (l) { return dateStr >= l.start && dateStr <= l.end; }) || null;
+  }
+
+  // Someone is only editable by themselves or an admin -- matching the `people` rule, so the UI
+  // never offers a control whose write would bounce.
+  function canEditLeaveFor(name) {
+    var u = auth.currentUser;
+    var myName = u ? (u.displayName || u.email) : null;
+    return isAdminUser() || (!!myName && myName === name);
   }
 
   // Everyone who can be assigned a task or @mentioned: the `people` roster (anyone who has
@@ -3779,6 +3843,14 @@
       hiddenNote.classList.add('hidden');
     }
 
+    // Both the stacked-deadline and the leave note are computed below, AFTER the early return
+    // just under here -- so without clearing them on this path, a filter change that empties the
+    // chart leaves the previous render's counts sitting on screen, describing tasks that are no
+    // longer drawn. (The hidden-dates note above is already set on every path.) This was a live
+    // bug for the stack note before the leave note joined it.
+    document.getElementById('gantt-stack-note').classList.add('hidden');
+    document.getElementById('gantt-leave-note').classList.add('hidden');
+
     if (list.length === 0) {
       wrap.innerHTML = '<div class="text-sm text-zinc-400 dark:text-zinc-600 text-center py-16 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">' +
         (missingDates > 0
@@ -3798,6 +3870,19 @@
       stackNote.classList.remove('hidden');
     } else {
       stackNote.classList.add('hidden');
+    }
+
+    // Deliberately counts DEADLINES landing inside leave, not date-range overlap. Same lesson
+    // computeGanttDeadlineStacks learned the hard way: a task merely spanning someone's time off
+    // is normal and needs no warning -- they work either side of it. A deadline landing while
+    // they are away is the one that cannot resolve itself.
+    var leaveClashes = list.filter(function (t) { return isOnLeave(t.assignee, t.deadline); });
+    var leaveNote = document.getElementById('gantt-leave-note');
+    if (leaveClashes.length > 0) {
+      leaveNote.textContent = leaveClashes.length + ' deadline' + (leaveClashes.length === 1 ? '' : 's') + ' land while the assignee is away';
+      leaveNote.classList.remove('hidden');
+    } else {
+      leaveNote.classList.add('hidden');
     }
 
     var today = todayMidnight();
@@ -3904,8 +3989,30 @@
         ? ' · Deadline stack: ' + t.assignee + ' also has ' + rowStacked.map(function (o) { return o.name; }).join(', ') + ' due the same day'
         : '';
 
+      // One band per leave period that overlaps the visible range, clamped to it -- not one div
+      // per day, which on a long range would be hundreds of elements saying the same thing.
+      var rowLeaveBands = leaveFor(t.assignee).map(function (l) {
+        var from = parseDate(l.start) < rangeStart ? rangeStart : parseDate(l.start);
+        var to = parseDate(l.end) > rangeEnd ? rangeEnd : parseDate(l.end);
+        if (to < from) return null;
+        return {
+          left: daysBetween(rangeStart, from) * dayWidth,
+          width: (daysBetween(from, to) + 1) * dayWidth,
+          label: t.assignee + ' away ' + formatShortDate(l.start) + ' – ' + formatShortDate(l.end) + (l.note ? ' (' + l.note + ')' : '')
+        };
+      }).filter(Boolean);
+
+      var leaveTitle = isOnLeave(t.assignee, t.deadline)
+        ? ' · Deadline lands while ' + t.assignee + ' is away'
+        : '';
+
       html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
-      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (showChecklistProgress ? ' · ' + checklistDoneCount + '/' + t.checklist.length + ' checklist items' : '')) + escapeHtml(stackTitle) + '" ' +
+      // Emitted before the bar so the bar paints over it -- neither sets a z-index, so DOM order
+      // decides, the same way the day-grid content already sits under the bars.
+      rowLeaveBands.forEach(function (seg) {
+        html += '<div class="gantt-leave absolute inset-y-0" title="' + escapeHtml(seg.label) + '" style="left:' + Math.max(seg.left, 0) + 'px;width:' + seg.width + 'px;"></div>';
+      });
+      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (showChecklistProgress ? ' · ' + checklistDoneCount + '/' + t.checklist.length + ' checklist items' : '')) + escapeHtml(stackTitle) + escapeHtml(leaveTitle) + '" ' +
         'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
         'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
           '<div class="' + pm.bar + ' h-full flex items-center px-2" style="width:' + fillPct + '%;">' +
@@ -4063,6 +4170,71 @@
     );
   }
 
+  // Which person's "add time off" row is currently revealed. Same progressive-disclosure shape as
+  // the Projects tab's deadline field, and for the same reason: an always-visible pair of empty
+  // date boxes on every person card reads as a form you are required to fill in, for a value most
+  // people do not have set at any given moment.
+  var leaveEditingFor = null;
+
+  function personLeaveSectionHtml(name) {
+    var periods = leaveFor(name).slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+    var editable = canEditLeaveFor(name);
+    var hasRosterDoc = !!teamPeople.find(function (p) { return p.name === name; });
+    // Nothing to show and nothing this person can do here -- render no section at all rather
+    // than an empty labelled box on every card.
+    if (!periods.length && !editable) return '';
+
+    var rows = periods.map(function (l) {
+      return '<span class="inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">' +
+        escapeHtml(formatShortDate(l.start) + ' – ' + formatShortDate(l.end)) +
+        (l.note ? '<span class="font-normal opacity-80">' + escapeHtml(l.note) + '</span>' : '') +
+        (editable ? '<button type="button" class="leave-remove opacity-70 hover:opacity-100" data-leave-name="' + escapeHtml(name) + '" data-leave-id="' + escapeHtml(l.id) + '" aria-label="Remove this time off">' + svgIcon('x', 'w-3 h-3') + '</button>' : '') +
+      '</span>';
+    }).join('');
+
+    var editor = '';
+    if (editable && leaveEditingFor === name) {
+      editor =
+        '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">' +
+          '<input type="date" class="leave-start text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
+          '<span class="text-xs text-zinc-400 dark:text-zinc-500">to</span>' +
+          '<input type="date" class="leave-end text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
+          '<input type="text" maxlength="40" placeholder="Reason (optional)" class="leave-note flex-1 min-w-[7rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
+          '<button type="button" class="leave-save text-xs font-semibold px-2 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700" data-leave-name="' + escapeHtml(name) + '">Add</button>' +
+          '<button type="button" class="leave-cancel text-xs font-medium px-2 py-1 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>' +
+        '</div>';
+    } else if (editable) {
+      editor = '<button type="button" class="leave-add-toggle text-xs font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 mt-1"' +
+        (hasRosterDoc ? '' : ' disabled title="' + escapeHtml(name + ' has not signed in yet, so there is no roster entry to attach time off to.') + '"') +
+        ' data-leave-name="' + escapeHtml(name) + '">+ Time off</button>';
+    }
+
+    return '<div class="px-4 py-2.5 border-t border-zinc-100 dark:border-zinc-700">' +
+      '<p class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 mb-1">Time off</p>' +
+      (rows ? '<div class="flex flex-wrap gap-1">' + rows + '</div>' : '<p class="text-xs text-zinc-400 dark:text-zinc-500">None booked.</p>') +
+      editor +
+    '</div>';
+  }
+
+  // Writes the whole array back rather than an arrayUnion/arrayRemove pair -- a person's leave
+  // list is a handful of entries edited by one person at a time, so the simpler full rewrite
+  // costs nothing and keeps add and remove on one code path.
+  function saveLeave(name, periods, summary) {
+    var person = teamPeople.find(function (p) { return p.name === name; });
+    if (!person) { showToast('No roster entry for ' + name + ' yet -- they need to sign in once.', 'error'); return; }
+    updateDoc(doc(peopleCol, person.id), { leave: periods }).then(function () {
+      leaveEditingFor = null;
+      // Logged here, not at the call site: a rules denial or a dropped connection would otherwise
+      // leave an activity entry claiming something happened that never did.
+      if (summary) logActivity('leave_changed', summary);
+      renderAll();
+    }).catch(function (err) {
+      showToast(err && err.code === 'permission-denied'
+        ? 'Only ' + name + ' or an admin can change their time off.'
+        : 'Could not save time off: ' + err.message, 'error');
+    });
+  }
+
   function renderPeople() {
     var filtered = applyFilters(activeTasks());
     var container = document.getElementById('people-grid');
@@ -4091,6 +4263,10 @@
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">All caught up — no active tasks.</p>';
 
       var chips = '';
+      // Away reads before overdue: "3 overdue" means something quite different once you know the
+      // person is not at their desk, so the qualifier has to arrive first.
+      var awayNow = leavePeriodOn(p.name, toDateInputValue(todayMidnight()));
+      if (awayNow) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" title="' + escapeHtml('Away until ' + formatShortDate(awayNow.end) + (awayNow.note ? ' · ' + awayNow.note : '')) + '">Away until ' + escapeHtml(formatShortDate(awayNow.end)) + '</span>';
       if (p.overdue > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
       if (p.high > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">' + p.high + ' high</span>';
 
@@ -4108,10 +4284,63 @@
             '<span class="text-xl font-bold text-zinc-200 dark:text-zinc-600 shrink-0">' + p.active.length + '</span>' +
           '</div>' +
           '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
+          personLeaveSectionHtml(p.name) +
         '</div>'
       );
     }).join('');
   }
+
+  // Delegated on the container, not bound per card -- renderPeople replaces its innerHTML on
+  // every snapshot, same reasoning as the Projects tab's deadline handlers.
+  document.getElementById('people-grid').addEventListener('click', function (e) {
+    var toggle = e.target.closest('.leave-add-toggle');
+    if (toggle) {
+      leaveEditingFor = toggle.getAttribute('data-leave-name');
+      renderPeople();
+      var firstInput = document.querySelector('#people-grid .leave-start');
+      if (firstInput) firstInput.focus();
+      return;
+    }
+
+    if (e.target.closest('.leave-cancel')) {
+      leaveEditingFor = null;
+      renderPeople();
+      return;
+    }
+
+    var removeBtn = e.target.closest('.leave-remove');
+    if (removeBtn) {
+      var rmName = removeBtn.getAttribute('data-leave-name');
+      var rmId = removeBtn.getAttribute('data-leave-id');
+      var removed = leaveFor(rmName).find(function (l) { return l.id === rmId; });
+      saveLeave(rmName, leaveFor(rmName).filter(function (l) { return l.id !== rmId; }),
+        removed ? 'Removed time off for ' + rmName + ': ' + formatShortDate(removed.start) + ' – ' + formatShortDate(removed.end) : null);
+      return;
+    }
+
+    var saveBtn = e.target.closest('.leave-save');
+    if (saveBtn) {
+      var name = saveBtn.getAttribute('data-leave-name');
+      var startEl = document.querySelector('#people-grid .leave-start');
+      var endEl = document.querySelector('#people-grid .leave-end');
+      var noteEl = document.querySelector('#people-grid .leave-note');
+      var start = startEl ? startEl.value : '';
+      var end = endEl ? endEl.value : '';
+      // Toast rather than the task modal's inline setFieldError: these inputs are built by a
+      // renderer that rebuilds on every snapshot, so there is no stable .field-error element to
+      // hang a message on, and the message would be wiped by the next render anyway.
+      if (!start || !end) { showToast('Pick both a start and an end date.', 'error'); return; }
+      if (end < start) { showToast('The end date has to be on or after the start date.', 'error'); return; }
+      var periods = leaveFor(name).concat([{
+        id: uid(),
+        start: start,
+        end: end,
+        note: noteEl ? noteEl.value.trim().slice(0, 40) : ''
+      }]);
+      saveLeave(name, periods, 'Booked time off for ' + name + ': ' + formatShortDate(start) + ' – ' + formatShortDate(end));
+      return;
+    }
+  });
 
   /* =========================================================
      RENDER: PROJECTS (time rollup) -- sources from tasks.concat(archivedTasks)
@@ -4327,7 +4556,8 @@
     task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash',
     task_moved: 'arrowRight', task_comment: 'message',
     board_imported: 'upload', board_seeded: 'download',
-    board_archived: 'download', task_archived: 'download', task_unarchived: 'upload'
+    board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
+    leave_changed: 'calendar'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -4335,6 +4565,9 @@
     task_deleted: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400',
     task_moved: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400',
     task_comment: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
+    // Amber, matching the Away chip on the People card and the Gantt's leave note -- one colour
+    // means "someone is not available" everywhere it appears.
+    leave_changed: 'bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
     board_imported: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     board_seeded: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     board_archived: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
@@ -5130,6 +5363,10 @@
     // itself every time the modal opens.
     unsubPeople = onSnapshot(peopleCol, function (snap) {
       teamPeople = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      // Full re-render: this collection now carries personal leave as well as the roster, and
+      // leave is drawn on the Gantt's rows and the People cards. Cheap -- one doc per teammate,
+      // and it only fires when somebody signs in or edits their time off.
+      renderAll();
     }, function (err) {
       // Same reasoning as registerPresence: a missing roster degrades the assignee picker back
       // to the names already on the board, which is exactly how this app behaved before the
@@ -5285,7 +5522,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-31T04:07:12Z";
+  var CURRENT_BUILD_VERSION = "2026-08-31T07:25:25Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

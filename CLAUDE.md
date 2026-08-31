@@ -879,6 +879,63 @@ site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes
 change, or every read/write against the new collection fails with "Missing or insufficient
 permissions" even though the code and the deployed page are otherwise correct.
 
+### Personal leave (time off)
+
+Leave is stored **on the person's roster doc** — `people/{uid}.leave`, an array of
+`{id, start, end, note}` with both ends inclusive `YYYY-MM-DD` strings — **not on a task, and
+emphatically not as a task status.** That was the first instinct and it's wrong: one person going
+away affects every task they hold at once, and it says nothing about how any of that work is
+progressing, so as a status it would have to be set *and unset* on each of their tasks by hand
+while corrupting the field `dueUrgency`, `focusScore`, `isReadyForReview` and the Done count all
+read.
+
+**Researched against TeamGantt and Monday before building.** Neither reschedules anything around
+leave, which is why this doesn't either:
+- **TeamGantt** has company-wide holidays only. For individual time off its own documentation
+  recommends *"create a task called Vacation and assign yourself to it"* — the workaround above,
+  which is exactly what we avoided. Its Workloads heat map has no concept of a person being away.
+- **Monday** does log real per-person PTO (a Schedules page, separate from holiday schemes) and
+  subtracts it from capacity — but it feeds the **Workload widget**, not the timeline bars, and
+  it's Pro/Enterprise only.
+
+So leave here is a **visibility signal**: it shades the days and names the clash, and a human
+decides what to move.
+
+- **`leaveFor` / `isOnLeave` / `leavePeriodOn`** compare raw `YYYY-MM-DD` strings — no `Date`
+  parsing and no timezone helper, because the format sorts lexicographically. Same reasoning as
+  `computeGanttDeadlineStacks` grouping on the raw `t.deadline` string.
+- **The Gantt warns on a DEADLINE landing inside leave, not on date-range overlap** —
+  `#gantt-leave-note`, alongside the existing hidden/stack notes. This is the same lesson
+  `computeGanttDeadlineStacks` learned by shipping the wrong version first: a task merely
+  *spanning* someone's time off is normal, they work either side of it. A deadline landing while
+  they're away can't resolve itself.
+- **The band is a diagonal hatch (`.gantt-leave`), not a flat tint.** The day columns already use
+  flat tints for weekend and for today; a third flat colour reads as a fourth kind of *day*
+  rather than as "this one person is away". Emitted before the bar in the same relative container
+  so DOM order puts it underneath, with `pointer-events: none` so it can't eat a click meant for
+  the bar. Deliberately **no third badge on the bar** — the top-right overdue dot and top-left
+  amber stack badge already carry two warnings, and CLAUDE.md's own note on that pair says a
+  third would blur them.
+- **Entry is in the People tab**, progressively disclosed behind a quiet `+ Time off` button
+  (`leaveEditingFor`) — same pattern and same reasoning as the Projects tab's deadline field: an
+  always-visible pair of empty date boxes on every person card reads as a form you must fill in,
+  for a value most people don't have set at any moment. Handlers are delegated on `#people-grid`
+  since `renderPeople` replaces its innerHTML.
+- **`canEditLeaveFor`** mirrors the `people` rule — yourself, or an admin. `ADMIN_EMAILS` in
+  index.html is **UI gating only, not the boundary**; keep it identical to `admins()` in
+  `firestore.rules`.
+- **The rules needed no change** — `people` already allowed the owner or an admin to write the
+  whole doc, and `leave` is just another field on it.
+- **Known limits**: (1) someone who has never signed in has no roster doc, so there's nowhere to
+  attach their leave — the `+ Time off` button is disabled with a title saying so; (2) the People
+  tab only lists people with tasks matching the current filters, so you can't book leave for
+  someone with no active work; (3) the roster listener now calls `renderAll()`, so another
+  person signing in mid-edit will clear the date inputs you were typing into.
+- `logActivity` fires **inside `saveLeave`'s success path**, not at the call site, so a rules
+  denial or dropped connection can't log something that never happened. Its own
+  `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour
+  for "someone is not available" everywhere it appears.
+
 ### Who can edit what (ownership rules)
 
 The board was `allow read, write: if isMediashock()` on `tasks` — every teammate could change
