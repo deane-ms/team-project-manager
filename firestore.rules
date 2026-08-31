@@ -4,13 +4,22 @@ service cloud.firestore {
     // request.auth.token.email is the Google-verified claim on the auth token, not
     // anything client-supplied -- this is the actual security boundary. The client-side
     // hd param / isAllowedEmail check in index.html is a UX nicety, not enforcement.
-    // Google OAuth email claims are effectively always lowercase in practice; this regex
-    // does not case-fold, so a non-lowercase claim (unlikely) would pass the client gate
-    // but fail every write with permission-denied.
+    //
+    // The email claim alone is NOT sufficient: Firebase mints a token with whatever email
+    // a provider asserts, and the Email/Password provider lets anyone self-register any
+    // address -- including @mediashock.com.sg -- with no proof they own it. Enabling that
+    // provider in the console is one checkbox, so the provider and the verified flag are
+    // pinned here rather than left to console configuration staying correct forever.
+    //
+    // .lower() closes the case-folding gap: matches() does not case-fold, so without it a
+    // token carrying a non-lowercase email would pass the client gate and then fail every
+    // read and write with an unexplained permission-denied.
     function isMediashock() {
       return request.auth != null
         && request.auth.token.email != null
-        && request.auth.token.email.matches('.*@mediashock[.]com[.]sg$');
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email.lower().matches('.*@mediashock[.]com[.]sg');
     }
 
     // Notifications are addressed to a `recipient` string that the client sets to the
@@ -23,8 +32,9 @@ service cloud.firestore {
     }
 
     // The board is a single shared document set: every signed-in teammate can read/write
-    // every task and every activity-log entry by design (see README: "the whole team edits
-    // one live board together"). Notifications are the one collection that carries
+    // every task by design (see README: "the whole team edits one live board together").
+    // The activity log is the exception -- readable by all, but append-only; see its own
+    // rule below. Notifications are the other collection that carries
     // per-person data (who a comment mentioned/addressed), so they get their own narrower
     // rule below instead of falling under a blanket match -- otherwise anyone could read,
     // mark-read, or delete anyone else's notifications.
@@ -40,8 +50,14 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // The activity log is append-only. Firestore's `write` covers create + update + delete,
+    // so granting it let anyone silently edit or erase the record of what they just did --
+    // an audit trail its own subject can rewrite is not an audit trail. Both apps only ever
+    // create entries (setDoc on an auto-ID doc in logActivity); nothing updates or prunes
+    // them, so denying update/delete outright breaks no existing path.
     match /activity/{activityId} {
-      allow read, write: if isMediashock();
+      allow read, create: if isMediashock();
+      allow update, delete: if false;
     }
 
     // One doc per project, holding the project-level deadline (separate from any task's own
