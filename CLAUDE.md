@@ -293,6 +293,27 @@ to bottom:
    `renderCalendar`, `renderPeople`, `renderProjects`, `renderActivityFeed`, `renderArchived`,
    `renderFocus` ("Focus of the Day"), `renderSuggestions`. `setView`/`renderCurrentSecondaryView`
    switch between them; `renderAll` re-runs the relevant renderer(s) after any data change.
+   - **`renderGantt` stacking tiers** (all below 30, so a sticky Gantt cell can never cover the
+     app header at `z-40` or its notification/user-menu panels at `z-30` — `z-40` vs `z-40` did
+     exactly that once, with the corner cell covering the mobile nav menu):
+     `26` corner · `25` month + day header (the frozen top row) · `20` task label column (the
+     frozen left column) · `15` today line · `0` leave bands then bars.
+     - **The header used to be `z-10`, *below* the label column's `z-20`**, on the reasoning that
+       the two can never overlap because "one owns the header rows, the other owns a task row."
+       That holds only while nothing scrolls. A sticky header travels down over the rows beneath
+       it, and at that moment the task names painted straight over the month and day numbers —
+       reported from a screenshot. A frozen top row has to out-rank the other frozen edge.
+     - **Raising the z-index alone was not enough.** The header cells were semi-transparent
+       (`dark:bg-zinc-700/80`, and the weekend/today tints at `/70`, `/40`, `/10`), so bars
+       scrolling underneath still showed through as ghost blocks. Every cell in both header rows
+       is a solid colour now.
+     - **The frozen row parks below the app header, not at `top: 0`.** The app header is itself
+       `sticky top-0 z-40`, so a Gantt header at `top: 0` freezes *underneath* it and the day
+       numbers disappear behind it as you scroll. `stickyTop` is measured from the real
+       `<header>` each render (its height changes when the nav wraps) and applied as an inline
+       `top` — the day row gets `stickyTop + 32`, one header row down. **There is no resize
+       handler anywhere in this app**, so this recomputes only on the next render, the same
+       pre-existing limitation `dayWidth` has always had.
    - `renderGantt`: day-column width is capped (`GANTT_MAX_DAY_WIDTH`) so a short date range doesn't
      stretch into oversized solid-color bars; the sticky Task label column needs a higher `z-index`
      than the today-line and day-grid content or bars paint over it (they're normal-flow siblings

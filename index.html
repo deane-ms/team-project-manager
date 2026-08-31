@@ -3921,21 +3921,48 @@
     var availableWidth = wrap.parentElement.clientWidth - GANTT_LABEL_WIDTH;
     var dayWidth = Math.min(GANTT_MAX_DAY_WIDTH, Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays)));
 
+    // The app's own header is sticky at z-40. A Gantt header parked at top:0 therefore freezes
+    // to the viewport's top edge -- which is UNDERNEATH that header -- so the month and day
+    // numbers slide out of sight behind it the moment the page scrolls. Park the frozen row just
+    // below it instead. Measured rather than hardcoded: the app header's height changes when its
+    // nav wraps on a narrow window.
+    // Known limitation: there is no resize handler in this app, so this offset (like dayWidth
+    // above, which has always had the same issue) is only recomputed on the next render.
+    var appHeaderEl = document.querySelector('header');
+    var stickyTop = appHeaderEl ? appHeaderEl.offsetHeight : 0;
+
     var html = '';
     html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
 
     // corner cells
-    // z-index tiers here only need to out-rank each other (corner > month/day headers >
-    // row labels) -- kept well below the app header's z-40 (and its notification/user-menu
-    // panels at z-30) so a sticky Gantt cell can never render on top of header UI when both
-    // happen to be visible at once, as z-40 vs z-40 did before (confirmed on a real device:
-    // this "Task" corner cell was winning the stacking tie and covering the mobile nav menu).
-    html += '<div class="sticky top-0 left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
+    //
+    // STACKING TIERS, highest first. Everything here stays below 30 so a sticky Gantt cell can
+    // never render on top of the app's own header (z-40) or its notification/user-menu panels
+    // (z-30) -- z-40 vs z-40 did exactly that once, with this corner cell winning the tie and
+    // covering the mobile nav menu.
+    //
+    //   26  corner cell ...... frozen both ways, so it must out-rank both frozen edges
+    //   25  month + day header  the frozen top row
+    //   20  task label column   the frozen left column
+    //   15  "today" line
+    //    0  leave bands, then task bars (unpositioned; DOM order decides between them)
+    //
+    // The header used to sit at z-10, BELOW the label column's z-20, on the reasoning that the
+    // two "never overlap: one owns the header rows, the other owns a task row". That is true
+    // only while nothing scrolls. A sticky header travels down over the rows beneath it as the
+    // page scrolls, and at that moment the z-20 labels painted straight over it -- task names
+    // sitting on top of the month and day numbers (reported from a screenshot). Header outranks
+    // label now, which is the correct reading anyway: a frozen top row is frozen against
+    // everything, including the other frozen edge.
+    html += '<div class="sticky left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="top:' + stickyTop + 'px;grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
 
     // month header row
     var colCursor = 2;
     monthSpans.forEach(function (m) {
-      html += '<div class="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-700/80 border-b border-zinc-200 dark:border-zinc-700 flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      // Opaque background, not dark:bg-zinc-700/80. Raising the z-index alone was not enough:
+      // at 80% the bars scrolling underneath still showed through the header as ghost blocks,
+      // which is its own kind of "obstructed". Every cell in these two header rows is solid now.
+      html += '<div class="sticky z-[25] bg-zinc-50 dark:bg-zinc-700 border-b border-zinc-200 dark:border-zinc-700 flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="top:' + stickyTop + 'px;grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -3943,9 +3970,12 @@
     days.forEach(function (d, i) {
       var isWeekend = d.getDay() === 0 || d.getDay() === 6;
       var isToday = i === todayIndex;
-      html += '<div class="sticky top-8 z-10 border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
-        (isToday ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100/70 dark:bg-zinc-700/40 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700/80 text-zinc-500 dark:text-zinc-400')) +
-        '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
+      // Solid tints for the same reason as the month row above -- the weekend and today tints
+      // were the most transparent cells of the lot (/70, /40, /10) and let the most through.
+      // The three still read as three distinct days, just without the see-through.
+      html += '<div class="sticky z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
+        (isToday ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400')) +
+        '" style="top:' + (stickyTop + 32) + 'px;grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
     });
@@ -3957,14 +3987,14 @@
       var overdue = dueUrgency(t).overdue;
       var rowStacked = deadlineStacks[t.id] || [];
 
-      // z-20, matching the corner cell -- this column and the corner cell are the same
-      // frozen pane conceptually, so they should share its topmost tier rather than sitting
-      // one rung below it. z-10 (tried first) beat the day-area bars but not the "today"
-      // vertical line, which is deliberately drawn at z-15 so it stays visible on top of
-      // every bar -- that same z-15 let it paint over this column too whenever it scrolled
-      // near the frozen edge. z-20 is unambiguously above both the line (15) and the
-      // unpositioned bars (auto/0), and still can't collide with the month/day headers
-      // (z-10), which occupy the header rows only and never overlap this per-task-row cell.
+      // z-20: above the "today" line (15) and the unpositioned bars (auto/0), below the frozen
+      // top row (25) and the corner (26). See the full tier list at the corner cell above.
+      // z-10 was tried first and beat the bars but not the today line, which is deliberately at
+      // 15 so it stays visible over every bar -- that same 15 then painted over this column
+      // whenever it scrolled near the frozen edge. The later half of this comment used to claim
+      // z-20 "can't collide with the month/day headers, which occupy the header rows only" --
+      // that was wrong, and is what let task names paint over the month and day numbers once
+      // the page scrolled. The header rows now out-rank this column.
       // The project's color lives ON its name (a badge/pill, same soft-badge shape as every
       // other status badge in this app) rather than as a separate unlabeled swatch next to the
       // priority dot -- an earlier version used a plain color bar here and it wasn't intuitive
@@ -5522,7 +5552,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-31T07:25:25Z";
+  var CURRENT_BUILD_VERSION = "2026-08-31T08:00:27Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
