@@ -2920,7 +2920,7 @@
       else if (statusEffect.enteringDone) spawnConfetti();
       closeTaskModal();
     }).catch(function (err) {
-      showToast('Could not save this task: ' + err.message, 'error');
+      showToast('Could not save this task: ' + writeErrorMessage(err, oldTask || { assignee: assignee }), 'error');
     }).finally(function () {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Task';
@@ -3085,6 +3085,19 @@
     return { patch: patch, enteringDone: enteringDone, willFinishProject: willFinishProject, projectName: taskProject };
   }
 
+  // Firestore reports a rules denial as a bare "Missing or insufficient permissions", which
+  // tells the person nothing about what they hit or what they can still do. Task edits are
+  // scoped to the assignee and admins (see firestore.rules), so say that instead -- including
+  // the two things that ARE still open to everyone, so the message reads as a boundary rather
+  // than as the app being broken. Any other error falls through to its real text unchanged.
+  function writeErrorMessage(err, task) {
+    if (!err || err.code !== 'permission-denied') return err ? err.message : 'Unknown error';
+    if (task && task.assignee) {
+      return 'Only ' + task.assignee + ' or an admin can change this task. You can still comment on it and move it between columns.';
+    }
+    return 'You do not have permission to change this. Ask an admin if you need to.';
+  }
+
   function updateTaskStatus(id, newStatus) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t || t.status === newStatus) return;
@@ -3096,7 +3109,7 @@
       if (effect.willFinishProject) celebrateProjectComplete(effect.projectName);
       else if (effect.enteringDone) spawnConfetti();
     }).catch(function (err) {
-      showToast('Could not move task: ' + err.message, 'error');
+      showToast('Could not move task: ' + writeErrorMessage(err, t), 'error');
     });
   }
 
@@ -5272,7 +5285,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-31T02:02:36Z";
+  var CURRENT_BUILD_VERSION = "2026-08-31T04:07:12Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -879,6 +879,48 @@ site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes
 change, or every read/write against the new collection fails with "Missing or insufficient
 permissions" even though the code and the deployed page are otherwise correct.
 
+### Who can edit what (ownership rules)
+
+The board was `allow read, write: if isMediashock()` on `tasks` — every teammate could change
+everything — until the team grew past five. Reads are unchanged (everyone still sees the whole
+board); **writes are now scoped by ownership**:
+
+| | tasks |
+|---|---|
+| **admin** (`admins()` in `firestore.rules`) | anything |
+| **assignee** | anything on their own task |
+| **anyone else** | `comments`, `status`, `completedAt`, `updatedAt` only |
+
+- **The comments carve-out is load-bearing, not a nicety.** Comments live *inside* the task doc
+  (an `arrayUnion` on `comments`), so a plain assignee-only update rule silently disables
+  feedback, `@mentions` and every notification that follows, for everyone except one person per
+  task. Same reason `status`/`completedAt`/`updatedAt` are listed: that trio is exactly what
+  dragging a card between Board columns writes (`updateTaskStatus` + `statusTransitionEffects`).
+  Everything else — including **`assignee` itself** — stays closed, so nobody can reassign a task
+  to themselves and then edit it freely.
+- **Archiving is allowed for everyone; deleting is not.** Both are a `delete` on `tasks/{id}`, so
+  the rule can't tell them apart by operation — it uses
+  `existsAfter(/databases/$(database)/documents/archivedTasks/$(taskId))`, which reports state
+  *after* the batch commits. Archive writes both halves in one `writeBatch`, a bare delete
+  doesn't. This matters beyond neatness: `archiveCompletedTasks` archives the whole team's Done
+  tasks in one atomic batch, and Firestore fails the *entire* batch if a single write is denied,
+  so an assignee-only archive rule would have broken that button for every non-admin.
+- **`isAssignee` matches a display name**, since that's what `tasks.assignee` has always held.
+  So **someone whose Google display name doesn't match the assignee text can't edit their own
+  task.** New tasks are safe (the roster picker writes an exact `people` name); older hand-typed
+  ones may not match and become admin-only until corrected. Admins can write any `people` row,
+  so a wrong display name is fixable without a rules deploy.
+- **Admins are a hardcoded email list in the rules, not a `role` field** — a role in a document
+  is only as safe as the rule guarding that document. Keep `admins()` identical to the sibling
+  Content Hub's copy.
+- `suggestions` delete is now author-or-admin (update stays open — replies are an embedded array,
+  so replying *is* an update to someone else's doc). It was open to everyone only because
+  `write` covers delete.
+- **Client-side, `writeErrorMessage(err, task)`** turns Firestore's bare
+  "Missing or insufficient permissions" into a sentence naming the assignee *and* the two things
+  that are still open to everyone, so a denial reads as a boundary rather than a broken app.
+  Wired into the task-save and move-task handlers.
+
 ### Auth
 
 Google OAuth restricted via `hd` custom param + client-side `isAllowedEmail` check +

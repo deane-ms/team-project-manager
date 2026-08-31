@@ -22,6 +22,48 @@ service cloud.firestore {
         && request.auth.token.email.lower().matches('.*@mediashock[.]com[.]sg');
     }
 
+    // ADMINS. Full edit rights on everything, and the escape hatch for every rule below --
+    // if a lockout happens (see isAssignee), an admin is who unsticks it.
+    //
+    // Hardcoded here rather than read from a `role` field on the `people` doc, deliberately:
+    // a role stored in a document is only as safe as the rule guarding that document, and a
+    // bug there would let someone promote themselves. An email list in the rules file itself
+    // can only be changed by someone who can already deploy rules.
+    //
+    // Compared with .lower() for the same reason isMediashock() does it -- matches() and ==
+    // do not case-fold, and a token carrying a differently-cased email would silently fail
+    // every admin check while looking correct to a human reading it.
+    function admins() {
+      return ['aiuser@mediashock.com.sg', 'deane@mediashock.com.sg'];
+    }
+
+    function isAdmin() {
+      return isMediashock() && request.auth.token.email.lower() in admins();
+    }
+
+    // A task's `assignee` is a DISPLAY NAME, not a uid -- that's what the field has always
+    // held and what every view renders, so this compares against the Google-verified name on
+    // the token, with email as a fallback for accounts that have no displayName set.
+    //
+    // The consequence is worth stating plainly: if someone's Google display name does not
+    // match the assignee text on a task, they cannot edit their own task. New tasks are safe,
+    // because the assignee picker writes an exact name from the `people` roster. OLD tasks
+    // with hand-typed names may not match anything, and become admin-only until the name is
+    // corrected. That is the deliberate trade for not migrating every task to a uid; admins
+    // can always fix an affected task.
+    function isAssignee(data) {
+      return data.assignee != null
+        && (data.assignee == request.auth.token.name
+          || data.assignee == request.auth.token.email);
+    }
+
+    // The set of fields an update actually changes. `diff` compares values, not just presence,
+    // so a client that rewrites the whole document (the task modal does exactly that, via
+    // setDoc merge:true) still only reports the fields whose values really moved.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
     // Notifications are addressed to a `recipient` string that the client sets to the
     // sender's Google displayName (see notifyOnComment in index.html) -- token.name is the
     // Google-verified equivalent on the auth token, so it's the right field to check here
@@ -31,23 +73,71 @@ service cloud.firestore {
         || notifData.recipient == request.auth.token.email;
     }
 
-    // The board is a single shared document set: every signed-in teammate can read/write
-    // every task by design (see README: "the whole team edits one live board together").
-    // The activity log is the exception -- readable by all, but append-only; see its own
-    // rule below. Notifications are the other collection that carries
-    // per-person data (who a comment mentioned/addressed), so they get their own narrower
-    // rule below instead of falling under a blanket match -- otherwise anyone could read,
-    // mark-read, or delete anyone else's notifications.
+    // The board used to be a single shared document set -- every signed-in teammate could
+    // read AND write every task ("the whole team edits one live board together"). That was
+    // right at five people who all knew what each other was doing. It is not right at eleven,
+    // several of whom are client-facing rather than production, so ownership now decides who
+    // can change what. Reads are untouched: everyone still sees the whole board.
+    //
+    // The board is READ-shared and WRITE-scoped. Anyone on the team sees everything; who can
+    // change a task depends on whose task it is.
+    //
+    //   admin     -> anything
+    //   assignee  -> anything on their own task
+    //   everyone  -> comments and status only
+    //
+    // The comments carve-out is not a nicety, it is load-bearing: comments live INSIDE the
+    // task document (an arrayUnion on the `comments` field), so a plain "only the assignee can
+    // update" rule would have silently disabled feedback, @mentions and every notification
+    // that follows from them for everybody except one person per task.
+    //
+    // `status` + `completedAt` + `updatedAt` travel together because that is exactly what
+    // dragging a card between Board columns writes (updateTaskStatus, plus the completedAt
+    // stamp/clear from statusTransitionEffects). Listing them individually rather than
+    // allowing a looser rule keeps everything else -- name, dates, priority, checklist, time
+    // entries, and crucially `assignee` itself -- closed. Nobody can quietly reassign a task
+    // to themselves and then edit it freely.
     match /tasks/{taskId} {
-      allow read, write: if isMediashock();
+      allow read: if isMediashock();
+      allow create: if isMediashock();
+      allow update: if isMediashock() && (
+        isAdmin()
+        || isAssignee(resource.data)
+        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
+      );
+      // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and
+      // deletes it from here. Both halves land in the same batch, so existsAfter() -- which
+      // reports the state after the whole batch commits -- can tell the two apart. That is
+      // what lets anyone archive anyone's finished work (the bulk "Archive completed" button
+      // touches the whole team's tasks in one atomic batch, and Firestore fails the entire
+      // batch if a single write is denied) while a bare, unrecoverable delete stays limited
+      // to the assignee and admins. Costs one extra document read per delete; deletes are rare.
+      allow delete: if isMediashock() && (
+        isAdmin()
+        || isAssignee(resource.data)
+        || existsAfter(/databases/$(database)/documents/archivedTasks/$(taskId))
+      );
     }
 
     // Archived tasks moved to their own collection (see the comment above ARCHIVE in
     // index.html) so the live `tasks` listener every session pays for stays bounded by current
-    // work instead of growing forever. Same shared-board access model as tasks -- archiving/
-    // restoring a task is a plain move between the two collections, so both need identical rules.
+    // work instead of growing forever.
+    //
+    // Mirror of the tasks rule, one direction reversed. Restoring is the same move run
+    // backwards -- write into tasks, delete from here, one batch -- so the same existsAfter()
+    // trick lets anyone restore something out of the archive while a permanent delete from
+    // the archive stays with the assignee and admins. Update is deliberately tighter than on
+    // `tasks`: there is no reason to comment on or re-status an archived task, so nothing
+    // needs the collaborative carve-out here.
     match /archivedTasks/{taskId} {
-      allow read, write: if isMediashock();
+      allow read: if isMediashock();
+      allow create: if isMediashock();
+      allow update: if isMediashock() && (isAdmin() || isAssignee(resource.data));
+      allow delete: if isMediashock() && (
+        isAdmin()
+        || isAssignee(resource.data)
+        || existsAfter(/databases/$(database)/documents/tasks/$(taskId))
+      );
     }
 
     // The activity log is append-only. Firestore's `write` covers create + update + delete,
@@ -72,7 +162,19 @@ service cloud.firestore {
     // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
     // on the doc, not a subcollection, so there's nothing further to scope here).
     match /suggestions/{suggestionId} {
-      allow read, write: if isMediashock();
+      allow read, create: if isMediashock();
+      // Replies live as an embedded array on the suggestion doc, so posting a reply IS an
+      // update to somebody else's document. Update has to stay open to the whole team or the
+      // feedback board stops being a conversation.
+      allow update: if isMediashock();
+      // Removing someone else's suggestion outright is not collaboration, though -- that was
+      // open to everyone purely because `write` covers delete, not because anyone decided it
+      // should be. Author or admin.
+      allow delete: if isMediashock() && (
+        isAdmin()
+        || resource.data.author == request.auth.token.name
+        || resource.data.author == request.auth.token.email
+      );
     }
 
     // One doc per teammate, keyed by their Firebase uid, upserted on every sign-in (see
@@ -90,7 +192,9 @@ service cloud.firestore {
     // in, not by removing a row that their existing tasks still reference by name.
     match /people/{personId} {
       allow read: if isMediashock();
-      allow create, update: if isMediashock() && personId == request.auth.uid;
+      // Admins can also write a roster row, so a wrong display name -- the thing that can lock
+      // someone out of their own tasks under isAssignee above -- is fixable without a deploy.
+      allow create, update: if isMediashock() && (personId == request.auth.uid || isAdmin());
       allow delete: if false;
     }
 
