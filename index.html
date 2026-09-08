@@ -473,75 +473,6 @@
           </button>
         </div>
       </div>
-
-      <!-- Toolbar: search / filters -- view switching lives in the sidebar now. -->
-      <div class="flex flex-wrap items-center gap-2 mt-3">
-        <!-- Mobile-only filters trigger -- previously shared a row with mobile-view-trigger,
-             which no longer exists (the hamburger button above opens the sidebar drawer
-             instead), so this is full-width on its own now. -->
-        <div class="flex sm:hidden items-center gap-2 w-full order-1">
-          <button type="button" id="mobile-filters-trigger" class="flex-1 flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300">
-            <span class="flex items-center gap-1.5">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
-              Filters
-              <span id="mobile-filters-badge" class="hidden text-[10px] font-bold min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-600 text-white items-center justify-center">0</span>
-            </span>
-            <svg id="mobile-filters-chevron" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-          </button>
-        </div>
-
-        <div class="relative w-full sm:flex-1 sm:min-w-[240px] sm:max-w-xs order-2">
-          <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input id="filter-search" type="text" placeholder="Search tasks, checklists, comments…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-        </div>
-
-        <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents order-3">
-        <div class="relative w-full sm:w-auto">
-          <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
-            <option value="">All priorities</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </select>
-          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-        </div>
-        <div class="relative w-full sm:w-auto">
-          <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
-            <option value="">All projects</option>
-          </select>
-          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-        </div>
-        <!-- Checkbox multi-select, not a single-value <select> -- "who's schedule/workload do I
-             want to see" is a subscribe-to-several-people question, not a pick-one one. Built as
-             its own trigger+panel (not enhanceSelect(), which is single-value by design) but
-             registered into the same allEnhancedSelects close-on-outside-click/Escape/other-panel
-             registry so it behaves identically to every other header dropdown without a second
-             set of handlers -- see the registration further down near the other filter wiring. -->
-        <div class="relative w-full sm:w-auto">
-          <button type="button" id="filter-people-trigger" class="w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
-            <span id="filter-people-label" class="truncate">Everyone</span>
-            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-          </button>
-          <div id="filter-people-menu" class="hidden absolute left-0 mt-1 z-20 min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
-            <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-700">
-              <button type="button" id="filter-people-select-all" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Select all</button>
-              <button type="button" id="filter-people-clear" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Clear</button>
-            </div>
-            <div id="filter-people-list" class="py-1"></div>
-          </div>
-        </div>
-        <div class="relative w-full sm:w-auto">
-          <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
-            <option value="focus">Sort: Focus</option>
-            <option value="priority">Sort: Priority</option>
-            <option value="deadline">Sort: Deadline</option>
-            <option value="project">Sort: Project</option>
-          </select>
-          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-        </div>
-        <button id="btn-clear-filters" class="text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
-        </div>
-      </div>
     </div>
   </header>
 
@@ -560,6 +491,91 @@
       </div>
       <div id="focus-list" class="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1"></div>
     </section>
+
+    <!-- ============ TOOLBAR: search / filters ============ -->
+    <!-- Used to share a row with the header's own title/stats, directly under it -- moved here,
+         below Focus of the Day and right-aligned, since that put the busiest, most control-dense
+         row of the page immediately under a stats line already asking for attention (reported
+         directly). Focus of the Day itself is un-gated by data-view (see #focus-section above)
+         and appears above every view, not just Board, so this row now does too -- one shared
+         toolbar, one shared position, on all 8 views. View switching lives in the sidebar, not
+         here. -->
+    <div class="flex flex-wrap items-center gap-2 justify-end">
+      <!-- Mobile-only filters trigger -- previously shared a row with mobile-view-trigger,
+           which no longer exists (the hamburger button above opens the sidebar drawer
+           instead), so this is full-width on its own now. -->
+      <div class="flex sm:hidden items-center gap-2 w-full order-1">
+        <button type="button" id="mobile-filters-trigger" class="flex-1 flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300">
+          <span class="flex items-center gap-1.5">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
+            Filters
+            <span id="mobile-filters-badge" class="hidden text-[10px] font-bold min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-600 text-white items-center justify-center">0</span>
+          </span>
+          <svg id="mobile-filters-chevron" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+      </div>
+
+      <!-- Fixed width, not flex-1/min-w/max-w growth -- in the header, the search box grew to
+           fill whatever room was left on that row. Right-aligned as a compact cluster with the
+           dropdowns, an elastic search box would still try to eat the remaining space on the
+           row instead of hugging the group, so it's sized like the dropdowns beside it now.
+           sm:order-first (not just order-2) because #filters-panel switches to `display:contents`
+           at that breakpoint -- its own order-3 stops applying once it no longer participates in
+           the flex row as a box, so its unwrapped children (priority/project/people/sort/clear)
+           fall back to the default order 0, ahead of anything merely ordered "2". Search has to
+           outrank that with order-first to actually render first, not just be numbered lower. -->
+      <div class="relative w-full sm:w-64 order-2 sm:order-first">
+        <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input id="filter-search" type="text" placeholder="Search tasks, checklists, comments…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+      </div>
+
+      <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents order-3">
+      <div class="relative w-full sm:w-auto">
+        <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <option value="">All priorities</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+        <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+      </div>
+      <div class="relative w-full sm:w-auto">
+        <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <option value="">All projects</option>
+        </select>
+        <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+      </div>
+      <!-- Checkbox multi-select, not a single-value <select> -- "who's schedule/workload do I
+           want to see" is a subscribe-to-several-people question, not a pick-one one. Built as
+           its own trigger+panel (not enhanceSelect(), which is single-value by design) but
+           registered into the same allEnhancedSelects close-on-outside-click/Escape/other-panel
+           registry so it behaves identically to every other header dropdown without a second
+           set of handlers -- see the registration further down near the other filter wiring. -->
+      <div class="relative w-full sm:w-auto">
+        <button type="button" id="filter-people-trigger" class="w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
+          <span id="filter-people-label" class="truncate">Everyone</span>
+          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        <div id="filter-people-menu" class="hidden absolute left-0 mt-1 z-20 min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
+          <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-700">
+            <button type="button" id="filter-people-select-all" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Select all</button>
+            <button type="button" id="filter-people-clear" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Clear</button>
+          </div>
+          <div id="filter-people-list" class="py-1"></div>
+        </div>
+      </div>
+      <div class="relative w-full sm:w-auto">
+        <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
+          <option value="focus">Sort: Focus</option>
+          <option value="priority">Sort: Priority</option>
+          <option value="deadline">Sort: Deadline</option>
+          <option value="project">Sort: Project</option>
+        </select>
+        <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+      </div>
+      <button id="btn-clear-filters" class="text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
+      </div>
+    </div>
 
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" data-view class="active-view flex-1">
@@ -5962,7 +5978,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T09:56:32Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:08:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

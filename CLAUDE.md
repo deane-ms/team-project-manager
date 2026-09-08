@@ -843,6 +843,24 @@ needs revisiting.
     asymmetry native browser tooltips use. Re-verified the real fix with the same isolated
     two-case test before wiring it into this file — both now render the full text outside their
     respective clipped ancestor, escaping correctly in both directions.
+- **Search + the priority/project/people/sort toolbar moved out of `<header>` entirely, into
+  `<main>`, right after `#focus-section`.** It used to share a row with the header's own
+  title/stats, directly under it — reported directly as too much crammed under a line that was
+  already asking for attention. `#focus-section` (Focus of the Day) has no `data-view` gate and
+  already rendered above every view, not just Board, so putting the toolbar right after it gives
+  every one of the 8 views the same shared row in the same place, not something Board-specific.
+  The row is `justify-end` (right-aligned) with `#filter-search` first, then priority/project/
+  people/sort — matching how they read left to right, narrow-to-scoped.
+  - **`order-2` alone wasn't enough to put search first — needed `sm:order-first`.**
+    `#filters-panel` (holding the four dropdowns) is `sm:contents` at that breakpoint, which pulls
+    its children out to become direct flex items of the row *without* inheriting the panel's own
+    `order-3` — they fall back to the default `order: 0`, which beats a merely-numbered `order-2`
+    search box. Order beat this the same reasoning way CSS overflow beat the tooltip fix above:
+    looks correct in the markup, wrong on screen. Caught by actually reading each control's
+    rendered `left` position in a real-DOM Playwright check, not by eyeballing a screenshot.
+  - IDs, event listeners, and the mobile collapsible-filters-trigger pattern (`#mobile-filters-
+    trigger` / `#filters-panel.hidden` toggle) are untouched — nothing in the JS queries these by
+    position or by `header`, so relocating the markup needed no script changes at all.
 
 ### No mock/sample data
 
