@@ -1058,6 +1058,14 @@ decides what to move.
     (start/end/note/Add/Cancel), which still renders below the status content once
     `leaveEditingFor === name` — four inputs plus two buttons don't fit next to a label without
     wrapping badly, so only the toggle moved, not the whole editor.
+  - **`toggleBtn` is a real bordered pill, not plain colored text** — same shape as the Archived
+    view's `Restore` button (`border` + `hover:bg-zinc-50`, not just a hover text-color change).
+    It started as quiet colored text matching `.project-deadline-add`'s style (the Projects tab's
+    own progressive-disclosure button, which stays that way — this change was scoped to Time off
+    only, not applied everywhere that pattern appears) and was reported back as not reading as
+    interactive at all. `disabled:opacity-50 disabled:cursor-not-allowed` covers the
+    not-signed-in-yet disabled state, matching the same utility pair already used on
+    `#task-deadline`.
 - **`canEditLeaveFor`** mirrors the `people` rule — yourself, or an admin. `ADMIN_EMAILS` in
   index.html is **UI gating only, not the boundary**; keep it identical to `admins()` in
   `firestore.rules`.
