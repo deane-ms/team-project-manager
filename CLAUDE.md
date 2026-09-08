@@ -1326,6 +1326,16 @@ to bottom:
        project has one. Re-derived on every `renderChatDetail` (not just when the chat is first
        opened), so editing a task's Drive link while this chat happens to be open updates the
        header live, the same way a new message does.
+       - **Shows the link's actual location, not the word "Project folder"** — reported directly
+         right after ("show the path/location of the folder instead of 'project folder' for the
+         link"). Rebuilt around the exact folder-icon-plus-truncated-URL treatment the task
+         modal's own `#task-drive-open` already uses (`syncDriveLinkButtons`): the `https://`
+         scheme is stripped for display, the anchor truncates with an ellipsis inside a
+         `min-w-0 flex-1` flex row (icon `shrink-0` beside it, same structure as
+         `#task-project-link-row`), and the full URL still lives in `title` for a hover tooltip.
+         `#project-chat-subtitle` itself dropped its own `truncate` class once the inner anchor
+         took over truncation — redundant `white-space: nowrap` on the outer `<p>` had nothing
+         left to do once the flex child was sized to fill it.
      - **"Pinned links"'s label/url/submit row is now hidden until "+ Add" is clicked** —
        reported directly ("this should only appear when clicking 'add'. Move Add button to the
        same row as Pinned links but right aligned"). `#project-chat-link-toggle` sits on the
