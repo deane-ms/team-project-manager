@@ -861,6 +861,28 @@ needs revisiting.
   - IDs, event listeners, and the mobile collapsible-filters-trigger pattern (`#mobile-filters-
     trigger` / `#filters-panel.hidden` toggle) are untouched — nothing in the JS queries these by
     position or by `header`, so relocating the markup needed no script changes at all.
+  - **`#toolbar-row` gets a `border-t` + `pt-4`**, separate from the `gap-6` `<main>` already
+    puts between sections — Focus of the Day and this row are both dense, and ran together
+    without something marking the boundary (reported directly, same message as the header
+    alignment fix below).
+  - **On Activity, Priority/Project/People hide entirely (`filter-priority-wrap` /
+    `filter-project-wrap` / `filter-people-wrap`, toggled by `syncToolbarLayout()`, called
+    alongside `syncSortAvailability()`/`syncSearchAvailability()` from `setView()`) and the row
+    switches from `justify-end` to `justify-center`.** Same reasoning `renderActivityFeed`
+    already gives for skipping `applyFilters()` — those three describe tasks, and Activity isn't
+    a task list — but reported separately once they sat there fully clickable and doing nothing,
+    the same "control present, wired to nothing" gap Sort had. Search and Sort both stay: they
+    actually work on Activity (search filters the log, Sort does Newest/Oldest — see the Sort
+    section above), so only the three inert controls are hidden, not the whole row. Recentering
+    when only two controls remain keeps the row from reading as "most of a toolbar went
+    missing" flush against the right edge.
+- **The header row is a fixed `h-16`, matching the sidebar's own brand-row height exactly** (the
+  `<aside>`'s own `h-16` div), so their bottom borders meet at the same y-position across the
+  full page width. It used to be `py-3` with no explicit height, which happened to render at
+  ~60px against the sidebar's fixed 64px — 4px off, close enough to look accidental rather than
+  intentional, and reported directly from a screenshot as needing to look neater. If either
+  row's content ever needs to grow taller than 64px, both heights need to move together or this
+  drifts out of alignment again.
 
 ### No mock/sample data
 

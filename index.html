@@ -415,8 +415,13 @@
        of needing position:sticky the way it did back when header+main scrolled together as one
        page. -->
   <header class="shrink-0 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-    <div class="px-4 sm:px-6 py-3">
-      <div class="flex flex-wrap items-center gap-3 justify-between">
+    <!-- h-16, matching the sidebar's own brand-row height exactly (aside's h-16 div, above) --
+         the two rows' bottom borders meet at the same y-position across the full page width now.
+         Used to be py-3 with no explicit height, which happened to work out to ~60px against the
+         sidebar's fixed 64px: close enough to look accidental rather than aligned, and reported
+         directly as needing to look neater. -->
+    <div class="h-16 px-4 sm:px-6 flex items-center">
+      <div class="flex flex-wrap items-center gap-3 justify-between w-full">
         <div class="flex items-center gap-3 min-w-0">
           <button type="button" id="mobile-menu-btn" class="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shrink-0">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
@@ -500,7 +505,11 @@
          and appears above every view, not just Board, so this row now does too -- one shared
          toolbar, one shared position, on all 8 views. View switching lives in the sidebar, not
          here. -->
-    <div class="flex flex-wrap items-center gap-2 justify-end">
+    <!-- Top border, not just the gap-6 <main> already puts between sections -- Focus of the Day
+         and this row are both dense, and reported as running together without something to mark
+         the boundary. pt-4 keeps the line from sitting flush against Focus of the Day's own
+         content above it. -->
+    <div id="toolbar-row" class="flex flex-wrap items-center gap-2 justify-end pt-4 border-t border-zinc-200 dark:border-zinc-700">
       <!-- Mobile-only filters trigger -- previously shared a row with mobile-view-trigger,
            which no longer exists (the hamburger button above opens the sidebar drawer
            instead), so this is full-width on its own now. -->
@@ -530,7 +539,7 @@
       </div>
 
       <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents order-3">
-      <div class="relative w-full sm:w-auto">
+      <div id="filter-priority-wrap" class="relative w-full sm:w-auto">
         <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
           <option value="">All priorities</option>
           <option value="High">High</option>
@@ -539,7 +548,7 @@
         </select>
         <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </div>
-      <div class="relative w-full sm:w-auto">
+      <div id="filter-project-wrap" class="relative w-full sm:w-auto">
         <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
           <option value="">All projects</option>
         </select>
@@ -551,7 +560,7 @@
            registered into the same allEnhancedSelects close-on-outside-click/Escape/other-panel
            registry so it behaves identically to every other header dropdown without a second
            set of handlers -- see the registration further down near the other filter wiring. -->
-      <div class="relative w-full sm:w-auto">
+      <div id="filter-people-wrap" class="relative w-full sm:w-auto">
         <button type="button" id="filter-people-trigger" class="w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
           <span id="filter-people-label" class="truncate">Everyone</span>
           <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
@@ -5145,6 +5154,7 @@
     document.getElementById('sidebar-backdrop').classList.add('hidden');
     syncSearchAvailability();
     syncSortAvailability();
+    syncToolbarLayout();
     renderCurrentSecondaryView();
   }
 
@@ -5204,6 +5214,28 @@
     select.title = disabled ? 'Sort doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView) : '';
     sortByPill.rebuild();
     sortByPill.setDisabled(disabled);
+  }
+
+  // Priority/Project/People describe tasks, and Activity isn't a task list -- same reasoning
+  // renderActivityFeed already gives for skipping applyFilters() entirely (see its own comment).
+  // Reported directly once the three dropdowns sat there doing nothing on this view: hide them
+  // rather than leave them clickable-and-inert, same call as Sort's disable above. Search and
+  // Sort both stay, since both genuinely work on Activity -- with only two controls left, the
+  // row re-centers instead of hugging the right edge, so it doesn't look like most of a toolbar
+  // went missing.
+  var ACTIVITY_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap'];
+
+  function syncToolbarLayout() {
+    var isActivity = currentView === 'activity';
+    ACTIVITY_HIDDEN_FILTER_WRAP_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', isActivity);
+    });
+    var row = document.getElementById('toolbar-row');
+    if (row) {
+      row.classList.toggle('justify-end', !isActivity);
+      row.classList.toggle('justify-center', isActivity);
+    }
   }
 
   document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
@@ -5978,7 +6010,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:08:52Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:18:08Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
