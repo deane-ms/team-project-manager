@@ -1239,6 +1239,62 @@ to bottom:
        back, else a short date, mirroring `activityDateHeader`'s own "Today"/"Yesterday" idiom
        without the full weekday+year the Activity feed's version uses (this has to fit on one
        line next to the project name).
+     - **The chat list's default width was halved** (`CHAT_LIST_WIDTH_MIN`/`CHAT_LIST_WIDTH_DEFAULT`,
+       200/256 → 100/128, matching `#chat-project-list-pane`'s fallback class going from `lg:w-64`
+       to `lg:w-32`) — reported directly against a screenshot of the column at its old default,
+       taking up roughly half the two-pane row. Both constants were halved together, not just the
+       default, to preserve the original ~56px gap between the floor and the default (a drag can
+       still shrink the column by the same relative amount it always could).
+       - **This reads cramped out of the box** — at 128px, `#chat-project-list-pane`'s own header
+         row ("CHATS" + "New chat") and every row's project name/preview/timestamp all clip hard,
+         confirmed visually while testing this change. The column is still fully resizable via
+         the existing drag handle (up to `chatListMaxWidth()`, 50% of the row) and remembers
+         whatever width someone drags it to (`localStorage`), so this only affects the first
+         look before anyone touches the handle — flagged directly rather than silently building
+         around it, since going narrower than what actually reads well is a real trade-off this
+         request makes, not a bug to route around unasked.
+     - **Favourite chats and unread tracking**, both requested directly in the same message
+       ("make favourite chats a feature and it should sort alongside My chats. Unread chats
+       should also be included in the sorting"):
+       - **Favouriting** (`isFavoriteChat`/`toggleFavoriteChat`, the per-row star toggle) and
+         **read tracking** (`isChatUnread`/`markChatRead`) both persist on the signed-in person's
+         own `people/{uid}` doc — `favoriteChats` and `chatLastRead` respectively — the same doc
+         `registerPresence`/`heartbeatPresence` already write to, chosen directly over
+         `localStorage` so both stay correct across devices/sessions. No `firestore.rules` change
+         needed: `people/{uid}` was already writable only by its own uid, and both are just new
+         fields on that same document.
+       - **Both are plain arrays of records, not maps keyed by project name** — `favoriteChats`
+         is `[name, ...]`, `chatLastRead` is `[{project, at}, ...]`. Same reasoning `projectTyping`
+         already documented above: a project name containing "." would otherwise be read as a
+         nested field path by `updateDoc`'s dotted-key handling, silently writing to the wrong
+         place. `chatLastRead` in particular has to upsert by project name on every write
+         (replace-if-present, else append), which is why it's a full read-modify-write rather
+         than `arrayUnion`/`arrayRemove` — those only add/remove a literal whole entry, not
+         "replace the entry for project X regardless of its old `at`."
+       - **`markChatRead` runs both when a chat is opened and on every subsequent re-render while
+         it's still open** (called from the end of `renderChatDetail`, not `selectChatProject`,
+         since the former already covers both cases) — otherwise a message arriving while someone
+         is actively looking at that chat would leave it marked unread again the next time they
+         glanced at the list. It skips the write once the stored `at` already covers the latest
+         message, so re-rendering an already-caught-up chat doesn't write to Firestore on every
+         unrelated snapshot.
+       - **Sort order**: favourites first, then unread, then everything else, each tier
+         newest-message-first — confirmed directly over a simpler "favourites only, unread is
+         just a badge" alternative. Replaces the previous plain-alphabetical order entirely;
+         `allProjectNames()` still supplies the starting list, `renderChatProjectList`'s own
+         `.sort()` reorders it into these three tiers afterward.
+       - **The "Favourites" filter toggle is session-local, like "My chats"** (`chatShowFavoritesOnly`,
+         not persisted) — only the favourite *status* itself persists (on the person doc above);
+         the button that narrows the visible list to just those chats resets on reload, same as
+         "My chats" already did.
+       - **The row had to stop being a real `<button>`** (`role="button" tabindex="0"` `<div>`
+         now) to host the star toggle as a real nested `<button>` — a `<button>` inside another
+         `<button>` is invalid HTML that browsers hoist/break unpredictably. The delegated click
+         listener on `#chat-project-list` checks for `.chat-favorite-toggle` first and returns
+         before reaching the row-select logic; a parallel `keydown` listener supplies the
+         Enter/Space activation a real `<button>` would give for free. `.chat-project-row:active`
+         was added alongside the global `button:not(:disabled):active` press-feedback rule, since
+         that rule only ever matches actual `<button>` elements and this row no longer is one.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via

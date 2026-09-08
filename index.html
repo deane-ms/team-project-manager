@@ -106,6 +106,11 @@
      present and applies instantly (still visible, just not eased) everywhere else -- no risk of
      stomping on an existing `transition` declaration by adding one of our own here. */
   button:not(:disabled):active { filter: brightness(0.9); }
+  /* .chat-project-row is a role="button" <div>, not a real <button> -- it has to nest a real
+     <button> star toggle inside it (see that markup's own comment for why), and the global rule
+     above only ever matches actual <button> elements, so this restores the same press feedback
+     for the one row type in the app that isn't one. */
+  .chat-project-row:active { filter: brightness(0.9); }
 
   @keyframes bell-nudge {
     0%, 100% { transform: rotate(0deg); }
@@ -677,7 +682,7 @@
         <!-- Project list -- only projects with an existing chat are listed here; creating one
              is its own explicit action (chat-new-btn) rather than an inline row for every
              project on the board, so this reads as "your conversations," not a full project
-             directory. Width is fixed (w-64) below the lg breakpoint's two-column layout, and
+             directory. Width is fixed (w-32) below the lg breakpoint's two-column layout, and
              JS-controlled (see applyChatListWidth) at lg and above -- the drag handle only makes
              sense once the panes actually sit side by side. -->
         <div id="chat-project-list-pane" class="w-full lg:w-32 shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
@@ -688,8 +693,16 @@
               New chat
             </button>
           </div>
-          <div class="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-700">
+          <!-- Stacked, not side-by-side -- the column's new 128px default (see
+               CHAT_LIST_WIDTH_DEFAULT) doesn't leave room for two pills across, and both
+               toggles need to stay readable at that width without forcing someone to widen the
+               column just to tell them apart. -->
+          <div class="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-700 flex flex-col gap-1.5">
             <button type="button" id="chat-mine-toggle" title="Show only chats you've posted in" class="w-full text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">My chats</button>
+            <button type="button" id="chat-favorites-toggle" title="Show only favourite chats" class="w-full flex items-center justify-center gap-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">
+              <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              Favourites
+            </button>
           </div>
           <div id="chat-project-list" class="divide-y divide-zinc-100 dark:divide-zinc-700 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto"></div>
         </div>
@@ -1717,6 +1730,106 @@
     renderChatProjectList();
   });
 
+  // Favourite chats and unread tracking -- both requested directly ("make favourite chats a
+  // feature and it should sort alongside My chats. Unread chats should also be included in the
+  // sorting"). Both persist on the signed-in person's own `people/{uid}` doc rather than
+  // localStorage, on request, so favouriting/read-state is the same on every device you sign
+  // into -- the same doc `registerPresence`/`heartbeatPresence` already write to, and already
+  // only writable by its own uid per firestore.rules, so neither feature needs a rules change.
+  //
+  // Both are plain arrays, not maps keyed by project name -- a project name containing "." would
+  // otherwise be read as a nested field path by updateDoc's dotted-key handling (the exact bug
+  // `projectTyping`'s own array-not-map shape was already chosen to avoid; see its comment).
+  function myPersonDoc() {
+    var uid = auth.currentUser && auth.currentUser.uid;
+    return uid ? teamPeople.find(function (p) { return p.id === uid; }) : null;
+  }
+
+  function myFavoriteChats() {
+    var me = myPersonDoc();
+    return (me && Array.isArray(me.favoriteChats)) ? me.favoriteChats : [];
+  }
+
+  function isFavoriteChat(name) {
+    return myFavoriteChats().indexOf(name) !== -1;
+  }
+
+  function toggleFavoriteChat(name) {
+    var uid = auth.currentUser && auth.currentUser.uid;
+    if (!uid) return;
+    var favs = myFavoriteChats().slice();
+    var idx = favs.indexOf(name);
+    if (idx === -1) favs.push(name); else favs.splice(idx, 1);
+    updateDoc(doc(peopleCol, uid), { favoriteChats: favs }).catch(function (err) {
+      showToast('Could not update favourites: ' + err.message, 'error');
+    });
+  }
+
+  // "Unread" compares each chat's latest message time against when this person last opened it
+  // (`chatLastRead`, an array of {project, at} entries -- same array-not-map reasoning as
+  // favourites above). Your own latest message never counts as unread for you.
+  function myLastReadAt(name) {
+    var me = myPersonDoc();
+    var entries = (me && Array.isArray(me.chatLastRead)) ? me.chatLastRead : [];
+    var entry = entries.find(function (e) { return e.project === name; });
+    return entry ? entry.at : null;
+  }
+
+  function isChatUnread(name) {
+    var pdoc = projectDeadlineDoc(name);
+    var chat = (pdoc && pdoc.chat) || [];
+    if (!chat.length) return false;
+    var last = chat[chat.length - 1];
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    if (last.author === myName) return false;
+    var lastRead = myLastReadAt(name);
+    return !lastRead || lastRead < last.date;
+  }
+
+  // Called both when a chat is opened (selectChatProject) and every time it re-renders while
+  // already open (renderChatDetail) -- the latter is what keeps a chat marked read while someone
+  // is actively looking at it and a new message arrives, rather than only at the moment they
+  // clicked into it. Skips the write once this person's stored `at` already covers the latest
+  // message, so re-rendering an already-caught-up chat doesn't write on every unrelated snapshot.
+  function markChatRead(name) {
+    var uid = auth.currentUser && auth.currentUser.uid;
+    if (!uid || !name) return;
+    var pdoc = projectDeadlineDoc(name);
+    var chat = (pdoc && pdoc.chat) || [];
+    if (!chat.length) return;
+    var latest = chat[chat.length - 1].date;
+    var existing = myLastReadAt(name);
+    if (existing && existing >= latest) return;
+    var me = myPersonDoc();
+    var entries = ((me && Array.isArray(me.chatLastRead)) ? me.chatLastRead : []).filter(function (e) { return e.project !== name; });
+    entries.push({ project: name, at: latest });
+    updateDoc(doc(peopleCol, uid), { chatLastRead: entries }).catch(function () { /* best-effort, see registerPresence's own comment */ });
+  }
+
+  function syncChatFavoritesToggleUI() {
+    var btn = document.getElementById('chat-favorites-toggle');
+    btn.classList.toggle('border-brand-300', chatShowFavoritesOnly);
+    btn.classList.toggle('dark:border-brand-500/40', chatShowFavoritesOnly);
+    btn.classList.toggle('bg-brand-50', chatShowFavoritesOnly);
+    btn.classList.toggle('dark:bg-brand-500/10', chatShowFavoritesOnly);
+    btn.classList.toggle('text-brand-700', chatShowFavoritesOnly);
+    btn.classList.toggle('dark:text-brand-300', chatShowFavoritesOnly);
+    btn.classList.toggle('border-zinc-200', !chatShowFavoritesOnly);
+    btn.classList.toggle('dark:border-zinc-700', !chatShowFavoritesOnly);
+    btn.classList.toggle('text-zinc-500', !chatShowFavoritesOnly);
+    btn.classList.toggle('dark:text-zinc-400', !chatShowFavoritesOnly);
+  }
+
+  // Session-local, same as chatShowMineOnly -- the toggle is a quick view filter; the underlying
+  // favourite status it filters on is what actually persists (on the person doc, see above).
+  var chatShowFavoritesOnly = false;
+
+  document.getElementById('chat-favorites-toggle').addEventListener('click', function () {
+    chatShowFavoritesOnly = !chatShowFavoritesOnly;
+    syncChatFavoritesToggleUI();
+    renderChatProjectList();
+  });
+
   // WhatsApp-style compact timestamp for the chat list row: a bare time for anything sent
   // today (the date would be redundant), "Yesterday" for exactly one day back, and a short
   // date beyond that -- formatShortDate/activityDateHeader's own "Today"/"Yesterday" idiom,
@@ -1756,11 +1869,25 @@
         var mine = myName && pdoc.chat.some(function (m) { return m.author === myName; });
         if (!mine) return false;
       }
+      if (chatShowFavoritesOnly && !isFavoriteChat(name)) return false;
       return true;
+    });
+    // Favourites float to the top regardless of read state, then unread, then everything else --
+    // each tier newest-message-first, on request ("it should sort alongside My chats. Unread
+    // chats should also be included in the sorting"). allProjectNames() only supplied the
+    // alphabetical starting order these tiers are built from.
+    withChat.sort(function (a, b) {
+      var tierA = isFavoriteChat(a) ? 0 : isChatUnread(a) ? 1 : 2;
+      var tierB = isFavoriteChat(b) ? 0 : isChatUnread(b) ? 1 : 2;
+      if (tierA !== tierB) return tierA - tierB;
+      var lastA = projectDeadlineDoc(a).chat, lastB = projectDeadlineDoc(b).chat;
+      var timeA = lastA.length ? new Date(lastA[lastA.length - 1].date).getTime() : 0;
+      var timeB = lastB.length ? new Date(lastB[lastB.length - 1].date).getTime() : 0;
+      return timeB - timeA;
     });
     var emptyMessage = !everyChat.length
       ? 'No group chats yet — use "New chat" above to start one.'
-      : 'No chats match ' + (search && chatShowMineOnly ? 'your search and "My chats" filter' : search ? 'your search' : '"My chats"') + '.';
+      : 'No chats match your current filters.';
     listEl.innerHTML = withChat.length
       ? withChat.map(function (name) {
           var pdoc = projectDeadlineDoc(name);
@@ -1780,21 +1907,39 @@
           // graveyard. The only difference is this quiet tag, matching the Projects tab's own
           // Ongoing/Completed wording, so it's clear at a glance which chats are historical.
           var completed = isProjectFullyArchived(name);
-          return '<button type="button" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 ' +
+          var unread = isChatUnread(name);
+          var favActive = isFavoriteChat(name);
+          // A real <button> for the star toggle nested inside this row -- a nested <button> would
+          // be invalid HTML if the row itself were still a <button> (browsers hoist/break nested
+          // buttons unpredictably), which is why the row below is a role="button" <div> instead;
+          // see the delegated click/keydown listeners just past this function for how it stays
+          // clickable and keyboard-operable without the native element.
+          var starBtn = '<button type="button" class="chat-favorite-toggle shrink-0 p-0.5 rounded ' +
+            (favActive ? 'text-amber-500' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-400 dark:hover:text-zinc-500') +
+            '" data-project="' + escapeHtml(name) + '" title="' + (favActive ? 'Remove from favourites' : 'Add to favourites') + '" aria-pressed="' + favActive + '">' +
+            '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="' + (favActive ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.star + '</svg>' +
+          '</button>';
+          var nameClass = 'text-sm truncate ' + (unread ? 'font-bold text-zinc-900 dark:text-zinc-50' : 'font-medium text-zinc-800 dark:text-zinc-100');
+          var metaClass = unread ? 'text-zinc-600 dark:text-zinc-300 font-semibold' : 'text-zinc-400 dark:text-zinc-500';
+          return '<div role="button" tabindex="0" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 cursor-pointer ' +
             (selected ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50') +
             '" data-project="' + escapeHtml(name) + '">' +
             chatAvatarHtml(name, 'w-8 h-8', 'text-xs') +
             '<span class="min-w-0 flex-1">' +
               '<span class="flex items-center justify-between gap-1.5">' +
                 '<span class="flex items-center gap-1.5 min-w-0">' +
-                  '<span class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+                  '<span class="' + nameClass + '">' + escapeHtml(name) + '</span>' +
                   (completed ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">Completed</span>' : '') +
                 '</span>' +
-                (timestamp ? '<span class="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">' + escapeHtml(timestamp) + '</span>' : '') +
+                '<span class="shrink-0 flex items-center gap-1">' +
+                  (unread ? '<span class="w-1.5 h-1.5 rounded-full bg-brand-500" title="Unread"></span>' : '') +
+                  starBtn +
+                  (timestamp ? '<span class="text-[10px] ' + metaClass + '">' + escapeHtml(timestamp) + '</span>' : '') +
+                '</span>' +
               '</span>' +
-              '<span class="block text-xs text-zinc-400 dark:text-zinc-500 truncate">' + subtitle + '</span>' +
+              '<span class="block text-xs ' + metaClass + ' truncate">' + subtitle + '</span>' +
             '</span>' +
-          '</button>';
+          '</div>';
         }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6 px-3">' + escapeHtml(emptyMessage) + '</p>';
   }
@@ -1810,8 +1955,26 @@
   }
 
   document.getElementById('chat-project-list').addEventListener('click', function (e) {
+    var starBtn = e.target.closest('.chat-favorite-toggle');
+    if (starBtn) {
+      // Checked before the row itself -- the star is a real <button> nested inside the row's
+      // role="button" <div>, and this same delegated listener sees clicks on both.
+      toggleFavoriteChat(starBtn.getAttribute('data-project'));
+      return;
+    }
     var row = e.target.closest('.chat-project-row');
     if (row) selectChatProject(row.getAttribute('data-project'));
+  });
+
+  // The row is a role="button" <div>, not a real <button> (see chat-favorite-toggle's own
+  // comment in renderChatProjectList for why), so Enter/Space have to be wired by hand -- a real
+  // button gets this from the browser for free.
+  document.getElementById('chat-project-list').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var row = e.target.closest('.chat-project-row');
+    if (!row) return;
+    e.preventDefault();
+    selectChatProject(row.getAttribute('data-project'));
   });
 
   // "New chat" -- a small dropdown of projects that DON'T have one yet (the complement of the
@@ -1906,6 +2069,10 @@
     } else {
       logEl.scrollTop = logEl.scrollHeight;
     }
+    // Marks this chat read on every render while it's open, not just the moment it's selected --
+    // see markChatRead's own comment for why (a message arriving while you're already looking at
+    // it shouldn't leave the chat sitting "unread" the next time you glance at the list).
+    markChatRead(currentChatProjectName);
   }
 
   // WhatsApp-style bubbles, on request ("can the chat look like whatsapp where my messages are
@@ -2815,7 +2982,8 @@
     forward: '<polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>',
-    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>'
+    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>',
+    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>'
   };
 
   function svgIcon(name, cls) {
@@ -7722,7 +7890,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T19:16:06Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T19:27:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
