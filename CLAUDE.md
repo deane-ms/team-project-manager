@@ -504,8 +504,35 @@ to bottom:
        its source of truth (not the select's own value, which is empty on a fresh load) and only
        *displays*.
      - `restoreFilterControls()` (called first in `init()`) pushes the persisted values back into
-       search/priority/sort only. The project and assignee selects have no options yet at init
-       time; `renderFilterOptions` restores those.
+       search/priority/sort only. The project select has no options yet at init time (and the
+       people filter has no roster yet either); `renderFilterOptions` restores those.
+     - **The people filter (`filters.assignees`) is a checkbox multi-select, not the single-value
+       `<select>` it used to be** — requested directly, framed as "subscribing to calendars":
+       pick any number of people whose schedule/workload to see, not one at a time. Built as its
+       own `#filter-people-trigger`/`#filter-people-menu` pair (not another `enhanceSelect()`
+       instance, which only ever drives one value) but registered into the same
+       `allEnhancedSelects` array those use, so it gets "closes on outside click / Escape / when
+       another header panel opens" for free from the existing generic handlers instead of a
+       second copy of that logic. `renderPeopleFilterList()` (called from `renderFilterOptions`)
+       rebuilds the checkbox list from `teamRoster()` — **the roster, not `uniqueValues('assignee')`**
+       — on purpose: someone with zero current tasks is still a real person to pre-subscribe to
+       before they have any, which a tasks-derived list would never offer. `reconcileFilters()`
+       validates persisted names against the same `teamRoster()` list.
+       - **Two things were decided rather than assumed, both kept at the safer/more-consistent
+         default:** nobody checked still means "show everyone" (matches the old filter's empty
+         state — an opt-in-only "nothing shows until you subscribe" reading of the calendar
+         metaphor was considered and rejected as too easy to load into a confusing empty board);
+         and it applies to the same four views the old single-select touched (Board/Gantt/
+         Calendar/People), not narrowed to just Gantt/People, so the app has one filtering
+         behavior everywhere instead of two.
+       - `loadFilters()` migrates the old persisted single `assignee` string into a one-item
+         `assignees` array, so someone's existing narrowed view survives the upgrade instead of
+         silently resetting to Everyone.
+       - **`DEFAULT_FILTERS.assignees` is a literal `[]` that must never be handed out as-is.**
+         `Object.assign({}, DEFAULT_FILTERS)` only shallow-copies, so every consumer (the
+         `loadFilters()` catch-all, the Clear-filters handler) explicitly overrides `assignees`
+         with its own fresh `[]` — sharing the template's array would let one caller's
+         `push()`/`splice()` corrupt the default for every other caller in the same page load.
    - `filters.search` (the search box, `#filter-search`) matches name/project/assignee plus
      checklist-item text and comment text (`applyFilters`) — wired into **Board, Gantt, Calendar and
      People**, the four views listed in `SEARCHABLE_VIEWS`. Projects/Activity/Archived/Suggestions

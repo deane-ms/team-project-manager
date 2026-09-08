@@ -430,11 +430,24 @@
           </select>
           <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </div>
+        <!-- Checkbox multi-select, not a single-value <select> -- "who's schedule/workload do I
+             want to see" is a subscribe-to-several-people question, not a pick-one one. Built as
+             its own trigger+panel (not enhanceSelect(), which is single-value by design) but
+             registered into the same allEnhancedSelects close-on-outside-click/Escape/other-panel
+             registry so it behaves identically to every other header dropdown without a second
+             set of handlers -- see the registration further down near the other filter wiring. -->
         <div class="relative w-full sm:w-auto">
-          <select id="filter-assignee" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
-            <option value="">Everyone</option>
-          </select>
-          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <button type="button" id="filter-people-trigger" class="w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
+            <span id="filter-people-label" class="truncate">Everyone</span>
+            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          </button>
+          <div id="filter-people-menu" class="hidden absolute left-0 mt-1 z-20 min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
+            <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-700">
+              <button type="button" id="filter-people-select-all" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Select all</button>
+              <button type="button" id="filter-people-clear" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Clear</button>
+            </div>
+            <div id="filter-people-list" class="py-1"></div>
+          </div>
         </div>
         <div class="relative w-full sm:w-auto">
           <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
@@ -1296,20 +1309,31 @@
   // visible pill plus a Clear button -- there is no hidden state to be surprised by. Only these
   // five keys are read back, so a stale or hand-edited value can't inject anything else.
   var FILTERS_KEY = 'flowboard_filters';
-  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignee: '', sortBy: 'focus' };
+  // `assignees` is a real array by shape, not a template value anyone reads directly --
+  // DEFAULT_FILTERS itself never gets assigned to `filters` as-is (Object.assign only shallow-
+  // copies, so every consumer below overrides `assignees` with its OWN fresh `[]`; sharing this
+  // literal instead would let one caller's array mutations quietly corrupt every other caller
+  // that ever fell back to this default in the same page load).
+  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus' };
 
   function loadFilters() {
     try {
       var raw = JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}');
+      // Multi-select replaced the old single `assignee` string filter (checkbox "who to see"
+      // instead of one-at-a-time) -- a person with the old shape still saved in localStorage
+      // gets it carried over as a one-item array rather than silently reset to "Everyone".
+      var assignees = Array.isArray(raw.assignees)
+        ? raw.assignees.filter(function (n) { return typeof n === 'string' && n; })
+        : (typeof raw.assignee === 'string' && raw.assignee ? [raw.assignee] : []);
       return {
         search: typeof raw.search === 'string' ? raw.search : '',
         priority: typeof raw.priority === 'string' ? raw.priority : '',
         project: typeof raw.project === 'string' ? raw.project : '',
-        assignee: typeof raw.assignee === 'string' ? raw.assignee : '',
+        assignees: assignees,
         sortBy: typeof raw.sortBy === 'string' ? raw.sortBy : 'focus'
       };
     } catch (e) {
-      return Object.assign({}, DEFAULT_FILTERS);
+      return Object.assign({}, DEFAULT_FILTERS, { assignees: [] });
     }
   }
 
@@ -1317,19 +1341,24 @@
     try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch (e) { /* ignore */ }
   }
 
-  // Drops a restored project/assignee filter that no longer matches anything on the board --
-  // otherwise it stays quietly active, hiding every task, with no pill on screen to explain why
-  // and nothing to click to clear. Called from the `tasks` snapshot handler rather than from a
-  // renderer on purpose: that is the one moment the set of real projects/people actually
-  // changes, and it is the only point at which `tasks` is known to be loaded rather than still
-  // an empty array on first paint.
+  // Drops a restored project filter, or any restored people-filter names, that no longer match
+  // anything on the board -- otherwise they stay quietly active, hiding tasks, with no pill on
+  // screen to explain why and nothing to click to clear. Called from the `tasks` snapshot
+  // handler rather than from a renderer on purpose: that is the one moment the set of real
+  // projects/people actually changes, and it is the only point at which `tasks` is known to be
+  // loaded rather than still an empty array on first paint. Checked against teamRoster(), not
+  // uniqueValues('assignee') -- someone on the roster with zero current tasks is still a valid
+  // person to have pre-subscribed to, and dropping them here would undo that the moment they
+  // (or anyone) reloads the page.
   function reconcileFilters() {
     var changed = false;
     if (filters.project && uniqueValues('project').indexOf(filters.project) === -1) {
       filters.project = ''; changed = true;
     }
-    if (filters.assignee && uniqueValues('assignee').indexOf(filters.assignee) === -1) {
-      filters.assignee = ''; changed = true;
+    var roster = teamRoster();
+    var keptAssignees = filters.assignees.filter(function (n) { return roster.indexOf(n) !== -1; });
+    if (keptAssignees.length !== filters.assignees.length) {
+      filters.assignees = keptAssignees; changed = true;
     }
     if (changed) persistFilters();
   }
@@ -1653,7 +1682,7 @@
     return list.filter(function (t) {
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.project && t.project !== filters.project) return false;
-      if (filters.assignee && t.assignee !== filters.assignee) return false;
+      if (filters.assignees.length && filters.assignees.indexOf(t.assignee) === -1) return false;
       if (q) {
         // Also searches checklist item text and comment text, not just name/project/assignee --
         // "what was that task with the CTA feedback" shouldn't require remembering its title.
@@ -2689,9 +2718,9 @@
     }
 
     // Rebuilds the menu's items from the real <select>'s current <option>
-    // list -- needed because filter-project/filter-assignee regenerate
-    // their options at runtime as tasks change, unlike the static option
-    // lists (priority/status/sort) that only need this once at setup.
+    // list -- needed because filter-project regenerates its options at
+    // runtime as tasks change, unlike the static option lists
+    // (priority/status/sort) that only need this once at setup.
     function rebuild() {
       menu.innerHTML = '';
       Array.prototype.forEach.call(select.options, function (opt) {
@@ -2744,11 +2773,81 @@
 
   var filterPriorityPill = enhanceSelect('filter-priority');
   var filterProjectPill = enhanceSelect('filter-project');
-  var filterAssigneePill = enhanceSelect('filter-assignee');
   var sortByPill = enhanceSelect('sort-by');
   var taskPriorityPill = enhanceSelect('task-priority');
   var taskStatusPill = enhanceSelect('task-status');
   var taskAssigneePill = enhanceSelect('task-assignee');
+
+  // The people filter isn't an enhanceSelect() instance -- that helper drives a single hidden
+  // <select>'s one value, and this is a checkbox multi-select with no <select> behind it at all
+  // -- but it still needs to obey the same "only one header dropdown open at a time" rule as
+  // every enhanceSelect() menu. Registering a plain {wrapper, menu, trigger} entry into the same
+  // allEnhancedSelects array gets that for free: the existing document-level click-outside and
+  // Escape handlers (above) already iterate this array generically, so this panel closes on
+  // outside click, on Escape, and when any other enhanced-select or header panel opens, with no
+  // second copy of that logic to keep in sync.
+  var filterPeopleTrigger = document.getElementById('filter-people-trigger');
+  var filterPeopleMenu = document.getElementById('filter-people-menu');
+  var filterPeopleEntry = { wrapper: filterPeopleTrigger.parentElement, menu: filterPeopleMenu, trigger: filterPeopleTrigger };
+  allEnhancedSelects.push(filterPeopleEntry);
+  filterPeopleTrigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (filterPeopleMenu.classList.contains('hidden')) {
+      closeOtherEnhancedSelectMenus(filterPeopleEntry.wrapper);
+      closeOtherHeaderPanels(null);
+      filterPeopleMenu.classList.remove('hidden');
+      filterPeopleTrigger.setAttribute('aria-expanded', 'true');
+    } else {
+      closeEnhancedSelectMenu(filterPeopleEntry);
+    }
+  });
+
+  function filterPeopleLabel() {
+    var n = filters.assignees.length;
+    if (n === 0) return 'Everyone';
+    if (n === 1) return filters.assignees[0];
+    return n + ' people';
+  }
+
+  // Rebuilds the checkbox list from the current roster and re-syncs the trigger's label --
+  // called from renderFilterOptions() (roster/filter state can both change) rather than kept in
+  // sync incrementally, same reasoning as every other filter select rebuilding from scratch there.
+  function renderPeopleFilterList() {
+    var list = document.getElementById('filter-people-list');
+    var roster = teamRoster();
+    list.innerHTML = roster.length
+      ? roster.map(function (name) {
+          var checked = filters.assignees.indexOf(name) !== -1;
+          return '<label class="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 cursor-pointer">' +
+            '<input type="checkbox" data-filter-person="' + escapeHtml(name) + '"' + (checked ? ' checked' : '') + ' class="rounded border-zinc-300 dark:border-zinc-600 text-brand-600 focus:ring-brand-500/40">' +
+            '<span class="truncate">' + escapeHtml(name) + '</span>' +
+          '</label>';
+        }).join('')
+      : '<p class="px-3 py-2 text-xs text-zinc-400 dark:text-zinc-500">No one on the roster yet.</p>';
+    document.getElementById('filter-people-label').textContent = filterPeopleLabel();
+  }
+
+  document.getElementById('filter-people-list').addEventListener('change', function (e) {
+    var input = e.target.closest('[data-filter-person]');
+    if (!input) return;
+    var name = input.getAttribute('data-filter-person');
+    var idx = filters.assignees.indexOf(name);
+    if (input.checked && idx === -1) filters.assignees.push(name);
+    else if (!input.checked && idx !== -1) filters.assignees.splice(idx, 1);
+    persistFilters();
+    document.getElementById('filter-people-label').textContent = filterPeopleLabel();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
+  });
+  document.getElementById('filter-people-select-all').addEventListener('click', function () {
+    filters.assignees = teamRoster();
+    persistFilters();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
+  });
+  document.getElementById('filter-people-clear').addEventListener('click', function () {
+    filters.assignees = [];
+    persistFilters();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
+  });
 
   // Sentinel for the "+ Someone else..." row. Prefixed and suffixed so it can never collide with
   // a real display name, which is what actually gets stored in task.assignee.
@@ -4824,28 +4923,23 @@
   ========================================================= */
   function renderFilterOptions() {
     var projectSel = document.getElementById('filter-project');
-    var assigneeSel = document.getElementById('filter-assignee');
-    // Source of truth is `filters`, not the select's own value -- on a fresh load the selects
-    // are empty while `filters` may already carry a restored project/assignee, and reading the
-    // select back would quietly discard it.
+    // Source of truth is `filters`, not the select's own value -- on a fresh load the select
+    // is empty while `filters` may already carry a restored project, and reading the select
+    // back would quietly discard it.
     var curProject = filters.project;
-    var curAssignee = filters.assignee;
 
     projectSel.innerHTML = '<option value="">All projects</option>' +
       uniqueValues('project').map(function (p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('');
-    assigneeSel.innerHTML = '<option value="">Everyone</option>' +
-      uniqueValues('assignee').map(function (a) { return '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>'; }).join('');
 
     // Purely display here -- dropping a filter that no longer matches anything is
     // reconcileFilters()' job, and it runs against real loaded data. Doing it here instead
     // would clear every persisted filter on the very first render, which happens while `tasks`
     // is still an empty array waiting on the first snapshot.
     if (uniqueValues('project').indexOf(curProject) !== -1) projectSel.value = curProject;
-    if (uniqueValues('assignee').indexOf(curAssignee) !== -1) assigneeSel.value = curAssignee;
     filterProjectPill.rebuild();
-    filterAssigneePill.rebuild();
+    renderPeopleFilterList();
 
-    var activeCount = [filters.search, filters.priority, filters.project, filters.assignee].filter(Boolean).length;
+    var activeCount = [filters.search, filters.priority, filters.project].filter(Boolean).length + (filters.assignees.length ? 1 : 0);
     document.getElementById('btn-clear-filters').classList.toggle('hidden', !activeCount);
     var mobileBadge = document.getElementById('mobile-filters-badge');
     mobileBadge.textContent = activeCount;
@@ -5013,18 +5107,16 @@
     persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
-  document.getElementById('filter-assignee').addEventListener('change', function (e) {
-    filters.assignee = e.target.value;
-    persistFilters();
-    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
-  });
   document.getElementById('sort-by').addEventListener('change', function (e) {
     filters.sortBy = e.target.value;
     persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('btn-clear-filters').addEventListener('click', function () {
-    filters = Object.assign({}, DEFAULT_FILTERS);
+    // Object.assign only shallow-copies -- DEFAULT_FILTERS.assignees is overridden with a fresh
+    // [] here rather than spread as-is, or this would alias the shared DEFAULT_FILTERS array and
+    // every later push()/splice() on filters.assignees would silently mutate the default too.
+    filters = Object.assign({}, DEFAULT_FILTERS, { assignees: [] });
     persistFilters();
     document.getElementById('sort-by').value = 'focus';
     sortByPill.sync();
@@ -5033,8 +5125,6 @@
     filterPriorityPill.sync();
     document.getElementById('filter-project').value = '';
     filterProjectPill.sync();
-    document.getElementById('filter-assignee').value = '';
-    filterAssigneePill.sync();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
 
@@ -5550,7 +5640,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-08-31T08:34:20Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T04:55:29Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
