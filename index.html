@@ -725,7 +725,7 @@
               <span id="project-chat-avatar"></span>
               <div class="min-w-0 flex-1">
                 <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
-                <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
+                <p id="project-chat-subtitle" class="text-xs text-zinc-400 dark:text-zinc-500 truncate"></p>
               </div>
               <!-- WhatsApp-style in-chat search -- toggles #chat-search-bar below. Text-only
                    (message bodies, not author names or pinned links), matching what a person
@@ -761,9 +761,22 @@
               </button>
             </div>
             <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
-              <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
+                <!-- The label/url/submit row below stays hidden until this is clicked -- reported
+                     directly ("this should only appear when clicking 'add'"), so the pane doesn't
+                     spend two permanent input rows on a feature used only occasionally. Same
+                     reveal-on-click idiom as the Projects tab's own "+ Deadline" affordance. -->
+                <button type="button" id="project-chat-link-toggle" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Add
+                </button>
+              </div>
               <div id="project-chat-links" class="flex flex-col gap-1.5"></div>
-              <div class="flex items-center gap-1.5">
+              <!-- `flex` deliberately NOT in this static class list -- same `hidden`+`flex`
+                   specificity trap documented on #chat-reply-preview/#chat-search-bar. JS toggles
+                   `flex` alongside `.hidden` in the toggle button's own click handler. -->
+              <div id="project-chat-link-form" hidden class="items-center gap-1.5">
                 <input id="project-chat-link-label" type="text" maxlength="60" placeholder="Label (optional)" class="w-44 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
                 <input id="project-chat-link-url" type="text" placeholder="Paste a link (Drive, Figma, image…)" class="flex-1 min-w-0 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
                 <button type="button" id="project-chat-link-add-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
@@ -1319,6 +1332,17 @@
     return (d && d.deadline) || '';
   }
 
+  // There's no single project-level Drive link field -- `driveLink` lives per task (set via the
+  // task modal's Project field/Drive picker; see task-drive's own comment). In practice every
+  // task under one project points at the same project folder, so the first non-empty one found
+  // stands in for "this project's folder" -- used by the Chat tab's header (requested directly,
+  // "it would be more useful to have the project folder link there" in place of the static
+  // description that used to sit under the chat title).
+  function projectDriveLink(name) {
+    var match = tasks.concat(archivedTasks).find(function (t) { return t.project === name && t.driveLink; });
+    return match ? match.driveLink : '';
+  }
+
   function setProjectDeadline(name, iso) {
     var existing = projectDeadlineDoc(name);
     var label = iso ? 'Set ' + name + ' deadline to ' + formatShortDate(iso) : 'Cleared the ' + name + ' deadline';
@@ -1576,10 +1600,12 @@
     latestChatTypingEntries = [];
     document.getElementById('project-chat-typing').textContent = '';
     // A reply-in-progress (or an open forward picker) shouldn't silently carry over into a
-    // different project's chat, and neither should a search someone was mid-typing.
+    // different project's chat, and neither should a search someone was mid-typing or an open
+    // "add a pinned link" form.
     cancelChatReply();
     closeChatForwardMenu();
     closeChatSearch();
+    closeProjectChatLinkForm();
     currentChatProjectName = name;
     document.getElementById('project-chat-title').textContent = name;
     document.getElementById('project-chat-avatar').innerHTML = chatAvatarHtml(name, 'w-10 h-10', 'text-sm');
@@ -2058,6 +2084,17 @@
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     var links = (pdoc && pdoc.links) || [];
     var chat = (pdoc && pdoc.chat) || [];
+
+    // The project's Drive folder, not a static description -- reported directly ("it would be
+    // more useful to have the project folder link there") in place of "Group chat for this
+    // project — separate from task comments." Re-derived on every render (not just when the
+    // chat is opened) so editing a task's Drive link while this chat happens to be open updates
+    // it live, the same way a new message or reaction does.
+    var driveLink = projectDriveLink(currentChatProjectName);
+    var subtitleEl = document.getElementById('project-chat-subtitle');
+    subtitleEl.innerHTML = driveLink
+      ? '<a href="' + escapeHtml(normalizeUrl(driveLink)) + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline" title="' + escapeHtml(driveLink) + '">' + svgIcon('drive', 'w-3 h-3 shrink-0') + 'Project folder</a>'
+      : 'No project folder linked yet — add one from any of this project\'s tasks.';
 
     var linksEl = document.getElementById('project-chat-links');
     linksEl.innerHTML = links.length
@@ -2598,6 +2635,23 @@
       showToast('Could not update reaction: ' + err.message, 'error');
     });
   }
+
+  // The label/url/submit row stays hidden until "+ Add" is clicked -- reported directly ("this
+  // should only appear when clicking 'add'"). A plain toggle, not open-only: clicking "+ Add"
+  // again while it's open closes it back up, same as the "New chat" dropdown's own button.
+  function closeProjectChatLinkForm() {
+    var formEl = document.getElementById('project-chat-link-form');
+    formEl.hidden = true;
+    formEl.classList.remove('flex');
+  }
+
+  document.getElementById('project-chat-link-toggle').addEventListener('click', function () {
+    var formEl = document.getElementById('project-chat-link-form');
+    if (!formEl.hidden) { closeProjectChatLinkForm(); return; }
+    formEl.hidden = false;
+    formEl.classList.add('flex');
+    document.getElementById('project-chat-link-url').focus();
+  });
 
   function addProjectChatLink() {
     var labelEl = document.getElementById('project-chat-link-label');
@@ -7912,7 +7966,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T19:37:07Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T19:45:29Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

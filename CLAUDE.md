@@ -1315,6 +1315,27 @@ to bottom:
          Enter/Space activation a real `<button>` would give for free. `.chat-project-row:active`
          was added alongside the global `button:not(:disabled):active` press-feedback rule, since
          that rule only ever matches actual `<button>` elements and this row no longer is one.
+     - **The chat header's subtitle shows the project's Drive folder, not a static caption** —
+       reported directly against a screenshot ("it would be more useful to have the project
+       folder link there") in place of "Group chat for this project — separate from task
+       comments." There's no dedicated project-level Drive link field; `driveLink` lives per
+       *task* (see the task modal's Project field). `projectDriveLink(name)` finds the first task
+       under that project with a non-empty `driveLink` and uses it — in practice every task in a
+       project points at the same folder, so the first match stands in for "this project's
+       folder." Falls back to a plain "No project folder linked yet" line when no task under that
+       project has one. Re-derived on every `renderChatDetail` (not just when the chat is first
+       opened), so editing a task's Drive link while this chat happens to be open updates the
+       header live, the same way a new message does.
+     - **"Pinned links"'s label/url/submit row is now hidden until "+ Add" is clicked** —
+       reported directly ("this should only appear when clicking 'add'. Move Add button to the
+       same row as Pinned links but right aligned"). `#project-chat-link-toggle` sits on the
+       "Pinned links" row itself, right-aligned via `justify-between`; clicking it a second time
+       while open closes it back up, same as the "New chat" dropdown's own trigger button. Same
+       `hidden`-attribute-plus-JS-toggled-`flex`-class idiom as `#chat-reply-preview`/
+       `#chat-search-bar` for the same reason — `flex` is deliberately absent from
+       `#project-chat-link-form`'s static class list. `closeProjectChatLinkForm()` is also called
+       from `selectChatProject`, alongside the existing reply/forward/search resets, so an open
+       "add a link" form doesn't silently carry over into a different project's chat.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via
