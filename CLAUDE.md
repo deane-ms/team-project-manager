@@ -1188,6 +1188,40 @@ to bottom:
          to Chat's message authors specifically (where online status was asked for), so every
          other call site (task comments, time entries, People cards, Focus of the Day, …) is
          completely untouched.
+     - **In-chat search** (`#chat-search-toggle`/`#chat-search-bar`) — requested directly
+       ("search within the chat itself should also be possible just like WhatsApp"), distinct
+       from `filters.search` on the project list, which only narrows which *chats* are listed.
+       Matches message text only (not author names or pinned links). `runChatSearch` reads
+       straight from `projectDeadlineDoc(currentChatProjectName).chat`, not from the rendered
+       DOM, so match count/order is correct even for messages currently scrolled out of view;
+       highlighting is applied separately by walking each matched row's `.chat-message-text`
+       text nodes with a `TreeWalker` and wrapping hits in `<mark>` (`highlightTextNode`), rather
+       than string-replacing that paragraph's `innerHTML` — the bubble can already contain `<a>`
+       tags from `enrichCommentText`'s mention/link handling, and a naive replace risks matching
+       inside a tag and corrupting the markup. `clearChatSearchHighlights` reverses it by
+       swapping each `<mark>` back for a plain text node and calling `.normalize()`.
+       - **`#chat-search-bar` uses the same `hidden`-attribute-plus-JS-toggled-`flex`-class
+         idiom as `#chat-reply-preview`** — `flex` is deliberately absent from its static class
+         list; putting it there would silently win the display property over `hidden` at rest
+         (same CSS-specificity bug documented above), leaving the bar permanently visible.
+       - **Re-runs itself on every `renderChatDetail`** (a live update while search is open,
+         e.g. a new message arriving mid-search) rather than just jumping to the bottom, since a
+         fresh `innerHTML` wipes any `<mark>` wrapping from the previous pass. Re-running resets
+         which match is "current" to the first one again — an accepted simplification, not
+         tracked as a bug, since a live update mid-search is a rare edge case.
+       - Enter/Shift+Enter step to the next/previous match; Escape closes the bar. Switching
+         chats (`selectChatProject`) always calls `closeChatSearch()`, same as it already does
+         for an in-progress reply or forward, so a search someone was mid-typing doesn't
+         silently carry over into a different project's thread.
+     - **The chat list's subtitle now shows the latest message, not a message count** —
+       reported directly against a screenshot of a real WhatsApp chat list ("the text below the
+       chat title should reflect the latest message... show the last update of day or time").
+       `renderChatProjectList` reads `chat[chat.length - 1]` and renders `"<author>: <text>"`
+       (`"You: …"` for your own last message), with a `chatListTimestamp` on the same row as the
+       project name — a bare time for anything sent today, `"Yesterday"` for exactly one day
+       back, else a short date, mirroring `activityDateHeader`'s own "Today"/"Yesterday" idiom
+       without the full weekday+year the Activity feed's version uses (this has to fit on one
+       line next to the project name).
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via

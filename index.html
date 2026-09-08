@@ -710,11 +710,37 @@
                 <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
                 <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
               </div>
+              <!-- WhatsApp-style in-chat search -- toggles #chat-search-bar below. Text-only
+                   (message bodies, not author names or pinned links), matching what a person
+                   means by "search within the chat itself" for a group thread they're scrolling
+                   back through. -->
+              <button type="button" id="chat-search-toggle" title="Search in this chat" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </button>
               <!-- Admin-only: wiping the whole thread (not one message) is real data loss for
                    the whole team, so it stays behind the same isAdminUser() gate as every other
                    admin-only action in this app -- hidden by default, shown by selectChatProject. -->
               <button type="button" id="chat-delete-btn" title="Delete this entire chat (admin only)" class="hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+            </div>
+            <!-- `flex` deliberately NOT in this static class list -- same `hidden`+`flex`
+                 specificity trap fixed on #chat-reply-preview: with the native `hidden`
+                 attribute, a co-present `flex` utility class of equal specificity wins the
+                 display property at rest regardless of the attribute. JS toggles `flex`
+                 alongside `.hidden` in openChatSearch/closeChatSearch instead. -->
+            <div id="chat-search-bar" hidden class="items-center gap-2 px-4 sm:px-5 py-2 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/40">
+              <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input id="chat-search-input" type="text" placeholder="Search in this chat" class="flex-1 min-w-0 bg-transparent text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none">
+              <span id="chat-search-count" class="shrink-0 text-xs text-zinc-400 dark:text-zinc-500 tabular-nums"></span>
+              <button type="button" id="chat-search-prev" title="Previous match" class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:pointer-events-none">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
+              </button>
+              <button type="button" id="chat-search-next" title="Next match" class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:pointer-events-none">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <button type="button" id="chat-search-close" title="Close search" class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
             <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
@@ -1530,9 +1556,10 @@
     latestChatTypingEntries = [];
     document.getElementById('project-chat-typing').textContent = '';
     // A reply-in-progress (or an open forward picker) shouldn't silently carry over into a
-    // different project's chat.
+    // different project's chat, and neither should a search someone was mid-typing.
     cancelChatReply();
     closeChatForwardMenu();
+    closeChatSearch();
     currentChatProjectName = name;
     document.getElementById('project-chat-title').textContent = name;
     document.getElementById('project-chat-avatar').innerHTML = chatAvatarHtml(name, 'w-10 h-10', 'text-sm');
@@ -1682,6 +1709,21 @@
     renderChatProjectList();
   });
 
+  // WhatsApp-style compact timestamp for the chat list row: a bare time for anything sent
+  // today (the date would be redundant), "Yesterday" for exactly one day back, and a short
+  // date beyond that -- formatShortDate/activityDateHeader's own "Today"/"Yesterday" idiom,
+  // just without the full weekday+year the Activity feed's date header uses since this has to
+  // fit on one line next to the project name.
+  function chatListTimestamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var startOfDay = new Date(d); startOfDay.setHours(0, 0, 0, 0);
+    var diffDays = daysBetween(startOfDay, todayMidnight());
+    if (diffDays === 0) return formatTimeOnly(iso);
+    if (diffDays === 1) return 'Yesterday';
+    return formatShortDate(localDateOf(iso));
+  }
+
   // Only projects with an existing chat are listed -- reported directly ("if no chat is
   // created, it should not be listed"). This used to list every project on the board with a
   // "no chat yet" placeholder row doubling as the create affordance; now creating one lives
@@ -1715,7 +1757,15 @@
       ? withChat.map(function (name) {
           var pdoc = projectDeadlineDoc(name);
           var selected = name === currentChatProjectName;
-          var subtitle = pdoc.chat.length ? pdoc.chat.length + ' message' + (pdoc.chat.length === 1 ? '' : 's') : 'No messages yet';
+          // The subtitle now mirrors WhatsApp's own chat list: the latest message itself (who
+          // said it, and what), not a static message count -- reported directly ("the text
+          // below the chat title should reflect the latest message"). Falls back to "No
+          // messages yet" for a chat someone just created but nobody has posted in.
+          var last = pdoc.chat.length ? pdoc.chat[pdoc.chat.length - 1] : null;
+          var subtitle = last
+            ? escapeHtml((last.author === myName ? 'You' : (last.author || 'Unknown')) + ': ' + (last.text || ''))
+            : 'No messages yet';
+          var timestamp = last ? chatListTimestamp(last.date) : '';
           // Archived/completed projects stay fully visible and functional here -- a wrapped-up
           // project's chat is often exactly what someone needs to look back at ("what did the
           // client say"), same reasoning the Archived task view is browsable rather than a
@@ -1727,11 +1777,14 @@
             '" data-project="' + escapeHtml(name) + '">' +
             chatAvatarHtml(name, 'w-8 h-8', 'text-xs') +
             '<span class="min-w-0 flex-1">' +
-              '<span class="flex items-center gap-1.5">' +
-                '<span class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
-                (completed ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">Completed</span>' : '') +
+              '<span class="flex items-center justify-between gap-1.5">' +
+                '<span class="flex items-center gap-1.5 min-w-0">' +
+                  '<span class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+                  (completed ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">Completed</span>' : '') +
+                '</span>' +
+                (timestamp ? '<span class="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-500">' + escapeHtml(timestamp) + '</span>' : '') +
               '</span>' +
-              '<span class="block text-xs text-zinc-400 dark:text-zinc-500">' + subtitle + '</span>' +
+              '<span class="block text-xs text-zinc-400 dark:text-zinc-500 truncate">' + subtitle + '</span>' +
             '</span>' +
           '</button>';
         }).join('')
@@ -1837,7 +1890,14 @@
     logEl.innerHTML = chat.length
       ? chat.map(function (m) { return chatMessageHtml(m, myName, chat); }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No messages yet. Say hello.</p>';
-    logEl.scrollTop = logEl.scrollHeight;
+    // A fresh innerHTML wipes any <mark> highlighting from a live update mid-search (a new
+    // message arriving via onSnapshot re-renders this same log) -- re-run it instead of just
+    // jumping to the bottom, so the search stays usable across live updates.
+    if (chatSearchOpen && document.getElementById('chat-search-input').value.trim()) {
+      runChatSearch();
+    } else {
+      logEl.scrollTop = logEl.scrollHeight;
+    }
   }
 
   // WhatsApp-style bubbles, on request ("can the chat look like whatsapp where my messages are
@@ -1898,7 +1958,7 @@
         (mine ? 'bg-brand-100 dark:bg-brand-500/20 rounded-br-md' : 'bg-zinc-100 dark:bg-zinc-700 rounded-bl-md') +
         ' text-zinc-800 dark:text-zinc-100">' +
         forwardedHtml + quotedHtml +
-        '<p class="text-sm whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
+        '<p class="chat-message-text text-sm whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
       '</div>';
 
     // No reply/forward/delete icons here either, hover or otherwise -- both went into the
@@ -1912,6 +1972,136 @@
       '</div>' +
     '</div>';
   }
+
+  // ---- In-chat search (WhatsApp-style) --------------------------------------------------
+  // Searches this chat's message text only, not author names or pinned links -- reported
+  // directly ("search within the chat itself should also be possible just like WhatsApp"),
+  // as distinct from the project-list search box, which narrows which CHATS are listed.
+  // Matches are highlighted by walking text nodes inside each matched row's `.chat-message-text`
+  // paragraph and wrapping hits in <mark>, rather than string-replacing that paragraph's
+  // innerHTML -- the bubble can already contain <a> tags from enrichCommentText's mention/link
+  // handling, and a naive replace risks matching inside a tag and corrupting the markup.
+  var chatSearchOpen = false;
+  var chatSearchMatchIds = [];
+  var chatSearchIndex = -1;
+
+  function openChatSearch() {
+    chatSearchOpen = true;
+    var bar = document.getElementById('chat-search-bar');
+    bar.hidden = false;
+    bar.classList.add('flex');
+    document.getElementById('chat-search-input').focus();
+  }
+
+  function closeChatSearch() {
+    chatSearchOpen = false;
+    var bar = document.getElementById('chat-search-bar');
+    bar.hidden = true;
+    bar.classList.remove('flex');
+    document.getElementById('chat-search-input').value = '';
+    chatSearchMatchIds = [];
+    chatSearchIndex = -1;
+    clearChatSearchHighlights();
+    updateChatSearchCount();
+  }
+
+  function clearChatSearchHighlights() {
+    document.querySelectorAll('#project-chat-log mark.chat-search-hit').forEach(function (mark) {
+      var parent = mark.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    });
+  }
+
+  function highlightTextNode(node, query, active) {
+    var text = node.nodeValue;
+    var lower = text.toLowerCase();
+    var idx = lower.indexOf(query);
+    if (idx === -1) return;
+    var frag = document.createDocumentFragment();
+    var cursor = 0;
+    while (idx !== -1) {
+      frag.appendChild(document.createTextNode(text.slice(cursor, idx)));
+      var mark = document.createElement('mark');
+      mark.className = 'chat-search-hit rounded px-0.5 ' + (active ? 'bg-orange-400 text-zinc-900' : 'bg-amber-300/70 text-zinc-900');
+      mark.textContent = text.slice(idx, idx + query.length);
+      frag.appendChild(mark);
+      cursor = idx + query.length;
+      idx = lower.indexOf(query, cursor);
+    }
+    frag.appendChild(document.createTextNode(text.slice(cursor)));
+    node.parentNode.replaceChild(frag, node);
+  }
+
+  function highlightChatMatches(query, currentId) {
+    document.querySelectorAll('#project-chat-log [data-message-row]').forEach(function (row) {
+      var id = row.getAttribute('data-message-row');
+      if (chatSearchMatchIds.indexOf(id) === -1) return;
+      var textEl = row.querySelector('.chat-message-text');
+      if (!textEl) return;
+      var walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null);
+      var nodes = [];
+      var n;
+      while ((n = walker.nextNode())) nodes.push(n);
+      nodes.forEach(function (node) { highlightTextNode(node, query, id === currentId); });
+    });
+  }
+
+  function updateChatSearchCount() {
+    var el = document.getElementById('chat-search-count');
+    var hasQuery = !!document.getElementById('chat-search-input').value.trim();
+    el.textContent = chatSearchMatchIds.length ? (chatSearchIndex + 1) + ' / ' + chatSearchMatchIds.length : (hasQuery ? 'No results' : '');
+    document.getElementById('chat-search-prev').disabled = chatSearchMatchIds.length < 2;
+    document.getElementById('chat-search-next').disabled = chatSearchMatchIds.length < 2;
+  }
+
+  function jumpToChatSearchMatch(index) {
+    if (!chatSearchMatchIds.length) return;
+    chatSearchIndex = ((index % chatSearchMatchIds.length) + chatSearchMatchIds.length) % chatSearchMatchIds.length;
+    var id = chatSearchMatchIds[chatSearchIndex];
+    var query = document.getElementById('chat-search-input').value.trim().toLowerCase();
+    clearChatSearchHighlights();
+    highlightChatMatches(query, id);
+    updateChatSearchCount();
+    var row = document.querySelector('#project-chat-log [data-message-row="' + id + '"]');
+    if (row) row.scrollIntoView({ block: 'center' });
+  }
+
+  // Re-run any time the log re-renders (a new message arrives, or the search text itself
+  // changes) since a fresh innerHTML wipes any <mark> wrapping from the previous pass.
+  function runChatSearch() {
+    var query = document.getElementById('chat-search-input').value.trim().toLowerCase();
+    clearChatSearchHighlights();
+    if (!query) {
+      chatSearchMatchIds = [];
+      chatSearchIndex = -1;
+      updateChatSearchCount();
+      return;
+    }
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var chat = (pdoc && pdoc.chat) || [];
+    chatSearchMatchIds = chat.filter(function (m) { return (m.text || '').toLowerCase().indexOf(query) !== -1; }).map(function (m) { return m.id; });
+    chatSearchIndex = chatSearchMatchIds.length ? 0 : -1;
+    if (chatSearchMatchIds.length) {
+      highlightChatMatches(query, chatSearchMatchIds[0]);
+      var row = document.querySelector('#project-chat-log [data-message-row="' + chatSearchMatchIds[0] + '"]');
+      if (row) row.scrollIntoView({ block: 'center' });
+    }
+    updateChatSearchCount();
+  }
+
+  document.getElementById('chat-search-toggle').addEventListener('click', function () {
+    if (chatSearchOpen) closeChatSearch(); else openChatSearch();
+  });
+  document.getElementById('chat-search-close').addEventListener('click', closeChatSearch);
+  document.getElementById('chat-search-input').addEventListener('input', runChatSearch);
+  document.getElementById('chat-search-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); jumpToChatSearchMatch(chatSearchIndex + (e.shiftKey ? -1 : 1)); }
+    if (e.key === 'Escape') { e.preventDefault(); closeChatSearch(); }
+  });
+  document.getElementById('chat-search-prev').addEventListener('click', function () { jumpToChatSearchMatch(chatSearchIndex - 1); });
+  document.getElementById('chat-search-next').addEventListener('click', function () { jumpToChatSearchMatch(chatSearchIndex + 1); });
 
   document.getElementById('project-chat-log').addEventListener('click', function (e) {
     var reactBtn = e.target.closest('.project-chat-reaction');
@@ -7511,7 +7701,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T18:53:31Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T19:06:08Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
