@@ -895,6 +895,30 @@ to bottom:
        the client say back in Q1"). The Chat tab now calls `ensureArchivedTasksListener()` on
        entry (mirroring the Projects tab) so `archivedTasks` is actually loaded for this check,
        not just whichever tasks happen to already be in memory from an earlier view.
+     - **Chat's search box moved off the centered treatment it shared with Activity** — reported
+       directly ("move search bar to the right"). `syncToolbarLayout()`'s centering used to be
+       the same boolean as the filter-hiding one (`TOOLBAR_HIDDEN_FILTER_VIEWS`, both Activity and
+       Chat), which made sense back when both views were "just a lone search box, nothing else in
+       the row." Chat no longer fits that: it has its own controls (New chat, My chats) directly
+       below the toolbar, so a centered search box above them read as floating/misplaced in a way
+       it doesn't on Activity, which still has nothing else there. The two concerns are now
+       split — `TOOLBAR_HIDDEN_FILTER_VIEWS` still governs which views hide the four filter
+       dropdowns (Activity and Chat, unchanged), but centering is now `currentView === 'activity'`
+       specifically, and everything else (including Chat) right-aligns.
+     - **A dot+count on the sidebar's own "Chat" link** (`renderChatNavBadge`, `#chat-nav-badge`)
+       — asked directly, in two parts ("does chat notifications appear on the sidebar?" → no →
+       "build the chat dot with number on side bar"). No new data model: the same `notifications`
+       collection and `read` flag the bell already tracks, narrowed to the subset carrying
+       `chatProject` (an @mention in a project chat — see `notifyOnProjectChat` — the only thing
+       that currently notifies about chat activity at all, same as a plain task comment with no
+       @mention notifies nobody). Called alongside `renderNotificationBell()` from the same
+       `notifications` `onSnapshot` handler, since it's reading the exact same `myNotifications`
+       array, just filtered further — there's no separate read-state to invent or keep in sync,
+       and it clears the same way the bell's own badge does (opening the notification from the
+       bell, or "Mark all read"). Positioned `absolute` on the nav button (`relative` added to
+       the button itself) rather than inline after the label, specifically so it still renders —
+       overlaid on the icon's top-right corner — when the sidebar is collapsed to its icon-only
+       rail, not just in the expanded label view.
      - **Lives on the same `projects/{id}` doc as the deadline**, not a new collection —
        `chat` (array of `{id, text, author, date, reactions}`, same shape/append pattern as task
        comments: `arrayUnion` to add, a full-array rewrite to edit an existing entry's fields)
