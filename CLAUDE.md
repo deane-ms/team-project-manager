@@ -853,6 +853,16 @@ needs revisiting.
     asymmetry native browser tooltips use. Re-verified the real fix with the same isolated
     two-case test before wiring it into this file — both now render the full text outside their
     respective clipped ancestor, escaping correctly in both directions.
+  - **`positionTooltip()`'s `tooltip-top` branch only clamped the left edge, not the right.**
+    Never mattered while the Gantt project badge was the only `tooltip-top` user — it always sits
+    in the frozen left column, nowhere near the right edge of the viewport. The Gantt's own
+    "Progress" toggle (`#gantt-progress-toggle`, replacing its native `title` with `data-tooltip`
+    on request, same swap `#sb-collapse-btn` got) sits at the *right* end of the chart's legend
+    row, and a tooltip long enough to need centering there ran its right edge straight off-screen.
+    Caught from an actual screenshot, not just the passing DOM check — the check only confirms a
+    tooltip element exists with the right text, not that it's fully visible. Fixed by clamping
+    both edges: `Math.min(centeredLeft, window.innerWidth - tr.width - 4)` before the existing
+    `Math.max(4, ...)`.
 - **Search + the priority/project/people/sort toolbar moved out of `<header>` entirely, into
   `<main>`, right after `#focus-section`.** It used to share a row with the header's own
   title/stats, directly under it — reported directly as too much crammed under a line that was

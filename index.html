@@ -617,7 +617,7 @@
             <span id="gantt-hidden-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an assignee and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="The deadline falls on a day the assignee is away. The shaded stripes on a row are that person's time off -- set it in the People tab."></span>
-            <button type="button" id="gantt-progress-toggle" title="Show/hide checklist progress on the bars" class="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+            <button type="button" id="gantt-progress-toggle" data-tooltip="Fill bars by checklist completion instead of status" class="tooltip-top flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
               <span>Progress</span>
             </button>
@@ -5557,7 +5557,15 @@
     var r = target.getBoundingClientRect();
     var tr = tooltipEl.getBoundingClientRect();
     if (target.classList.contains('tooltip-top')) {
-      tooltipEl.style.left = Math.max(4, r.left + r.width / 2 - tr.width / 2) + 'px';
+      // Clamped on both edges, not just the left -- a tooltip-top centered on a target near the
+      // right edge of the viewport (e.g. the Gantt's own "Progress" toggle, hard up against the
+      // legend's right side) otherwise ran its right edge straight off-screen. Only the Gantt
+      // project badge (always in the frozen left column) used tooltip-top before, so this never
+      // came up until a second, right-edge use case did.
+      var left = r.left + r.width / 2 - tr.width / 2;
+      left = Math.min(left, window.innerWidth - tr.width - 4);
+      left = Math.max(4, left);
+      tooltipEl.style.left = left + 'px';
       tooltipEl.style.top = (r.top - tr.height - 8) + 'px';
     } else {
       tooltipEl.style.left = (r.right + 8) + 'px';
@@ -5983,7 +5991,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:26:28Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:29:12Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
