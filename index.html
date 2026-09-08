@@ -729,6 +729,18 @@
             <div id="project-chat-log" class="max-h-[45vh] overflow-y-auto px-4 sm:px-5 py-3 space-y-2"></div>
             <p id="project-chat-typing" class="px-4 sm:px-5 text-xs italic text-zinc-400 dark:text-zinc-500 h-4"></p>
             <div class="px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">
+              <!-- Reply preview -- shown above the compose box while replying to a message
+                   (WhatsApp's "swipe to reply" preview, minus the swipe), cleared on send/cancel
+                   or on switching to a different chat. -->
+              <div id="chat-reply-preview" hidden class="flex items-start gap-2 mb-1.5 pl-2.5 pr-2 py-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-700/50 border-l-2 border-brand-400">
+                <div class="min-w-0 flex-1">
+                  <p id="chat-reply-preview-author" class="text-xs font-semibold text-brand-600 dark:text-brand-400"></p>
+                  <p id="chat-reply-preview-text" class="text-xs text-zinc-500 dark:text-zinc-400 truncate"></p>
+                </div>
+                <button type="button" id="chat-reply-cancel" class="shrink-0 p-0.5 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300" aria-label="Cancel reply">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+              </div>
               <div class="relative">
                 <textarea id="project-chat-input" rows="2" maxlength="2000" placeholder="Message the team about this project… (@name to mention)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-3 pr-10 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
                 <div id="project-chat-mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
@@ -996,6 +1008,14 @@
      + scrolling list) which clipped this menu's text the moment a project name was long enough
      to need the wider width below -- reported directly against a screenshot. -->
 <div id="chat-new-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1"></div>
+
+<!-- "Forward to..." picker -- same fixed-position/off-DOM-parent reasoning as the two panels
+     above, opened from a message's forward button (openChatForwardMenu). Lists existing chats to
+     forward *into*, excluding whichever chat is currently open. -->
+<div id="chat-forward-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1">
+  <p class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Forward to…</p>
+  <div id="chat-forward-options"></div>
+</div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -1442,6 +1462,8 @@
         document.getElementById('chat-empty-state').classList.remove('hidden');
         if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
         if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
+        cancelChatReply();
+        closeChatForwardMenu();
       }
       renderChatProjectList();
     }).catch(function (err) {
@@ -1472,6 +1494,10 @@
     if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
     latestChatTypingEntries = [];
     document.getElementById('project-chat-typing').textContent = '';
+    // A reply-in-progress (or an open forward picker) shouldn't silently carry over into a
+    // different project's chat.
+    cancelChatReply();
+    closeChatForwardMenu();
     currentChatProjectName = name;
     document.getElementById('project-chat-title').textContent = name;
     document.getElementById('project-chat-avatar').innerHTML = chatAvatarHtml(name, 'w-10 h-10', 'text-sm');
@@ -1759,24 +1785,33 @@
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     var logEl = document.getElementById('project-chat-log');
     logEl.innerHTML = chat.length
-      ? chat.map(function (m) { return chatMessageHtml(m, myName); }).join('')
+      ? chat.map(function (m) { return chatMessageHtml(m, myName, chat); }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No messages yet. Say hello.</p>';
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // Only reactions someone has actually used show, plus a quiet "+" to add one -- a fixed
-  // 6-icon quick row used to show on every single message regardless of whether it had any
-  // reactions at all, which read as cluttered/distracting on an ordinary chat log (reported
-  // directly against a screenshot). Reacting at all now always goes through the "+" picker
-  // (openChatReactionPicker) rather than a one-click shortcut for a handful of presets.
-  function chatMessageHtml(m, myName) {
+  // WhatsApp-style bubbles, on request ("can the chat look like whatsapp where my messages are
+  // ... on the right while the others are on the left"). Own messages right-align with no
+  // name/avatar (you know it's you, same reasoning WhatsApp itself skips it); everyone else's
+  // left-align with their avatar+name above the bubble, since this is a group chat where "who
+  // said this" still needs answering at a glance. Bubble colors are soft tints (brand-100/
+  // zinc-100), not a solid WhatsApp-green fill -- enrichCommentText's existing mention/link
+  // styling (brand-600 text) needs a light background to stay readable, and a solid brand-500
+  // bubble with white text would have swallowed both.
+  //
+  // `chat` (the full array, not just this one message) is threaded through so a reply's quoted
+  // preview can look up the original by id -- unlike task comments' real threaded tree
+  // (renderCommentsLog), this stays flat/chronological; a reply is just a message carrying a
+  // small quote of an earlier one, closer to WhatsApp's own quoted-reply than a nested thread.
+  function chatMessageHtml(m, myName, chat) {
+    var mine = m.author === myName;
     var reactions = m.reactions || {};
-    var shown = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
-    var reactionsHtml = shown.map(function (emoji) {
+    var usedReactions = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
+    var reactionsHtml = usedReactions.map(function (emoji) {
       var names = reactions[emoji] || [];
-      var mine = names.indexOf(myName) !== -1;
+      var mineReacted = names.indexOf(myName) !== -1;
       return '<button type="button" class="project-chat-reaction inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border ' +
-        (mine
+        (mineReacted
           ? 'border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10'
           : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600') +
         '" data-message-id="' + m.id + '" data-emoji="' + emoji + '" title="' + (names.length ? names.map(escapeHtml).join(', ') : 'React') + '">' +
@@ -1784,15 +1819,55 @@
       '</button>';
     }).join('');
     reactionsHtml += '<button type="button" class="chat-reaction-add inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300" data-message-id="' + m.id + '" title="Add a reaction">' + svgIcon('plus', 'w-3 h-3') + '</button>';
-    return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
-      '<div class="flex items-center gap-1.5 mb-1">' +
+
+    var quotedHtml = '';
+    if (m.replyTo) {
+      var original = chat.find(function (x) { return x.id === m.replyTo; });
+      // Silently omitted if the original was since deleted -- same "don't guess, don't break"
+      // fallback removeCommentAt's own dangling replyTo case uses for task comments.
+      if (original) {
+        quotedHtml = '<div class="mb-1 pl-2 border-l-2 border-brand-400/60 dark:border-brand-500/40">' +
+          '<p class="text-xs font-semibold text-brand-600 dark:text-brand-400">' + escapeHtml(original.author || 'Unknown') + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(original.text || '') + '</p>' +
+        '</div>';
+      }
+    }
+
+    var forwardedHtml = m.forwarded
+      ? '<p class="flex items-center gap-1 text-[11px] italic text-zinc-400 dark:text-zinc-500 mb-1">' + svgIcon('forward', 'w-3 h-3 shrink-0') + 'Forwarded' + (m.forwardedFrom ? ' from ' + escapeHtml(m.forwardedFrom) : '') + '</p>'
+      : '';
+
+    var nameRowHtml = mine ? '' : '<div class="flex items-center gap-1.5 mb-0.5">' +
         presenceAvatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
         '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
-        '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
-        (m.author === myName ? '<button type="button" class="chat-message-remove ml-auto p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-message-id="' + m.id + '" aria-label="Remove your message">' + svgIcon('x', 'w-3 h-3') + '</button>' : '') +
+      '</div>';
+
+    var bubbleHtml = '<div class="rounded-2xl px-3 py-2 ' +
+        (mine ? 'bg-brand-100 dark:bg-brand-500/20 rounded-br-md' : 'bg-zinc-100 dark:bg-zinc-700 rounded-bl-md') +
+        ' text-zinc-800 dark:text-zinc-100">' +
+        forwardedHtml + quotedHtml +
+        '<p class="text-sm whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
+      '</div>';
+
+    // Reply/forward/delete stay hidden until hover (group/group-hover) -- visible on every
+    // message at once was exactly the "always six icons nobody's touching" clutter the quick-
+    // reaction row was already cut for; the timestamp alone is enough to see at rest.
+    var actionsHtml = '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">' +
+        '<button type="button" class="chat-message-reply p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-message-id="' + m.id + '" aria-label="Reply">' + svgIcon('reply', 'w-3 h-3') + '</button>' +
+        '<button type="button" class="chat-message-forward p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-message-id="' + m.id + '" aria-label="Forward">' + svgIcon('forward', 'w-3 h-3') + '</button>' +
+        (mine ? '<button type="button" class="chat-message-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-message-id="' + m.id + '" aria-label="Remove your message">' + svgIcon('x', 'w-3 h-3') + '</button>' : '') +
+      '</div>';
+
+    var metaRowHtml = '<div class="flex items-center gap-1 mt-0.5">' +
+        '<span class="text-[10px] text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+        actionsHtml +
+      '</div>';
+
+    return '<div class="flex ' + (mine ? 'justify-end' : 'justify-start') + ' group">' +
+      '<div class="max-w-[78%] flex flex-col ' + (mine ? 'items-end' : 'items-start') + '">' +
+        nameRowHtml + bubbleHtml + metaRowHtml +
+        '<div class="flex items-center flex-wrap gap-1.5 mt-1">' + reactionsHtml + '</div>' +
       '</div>' +
-      '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
-      '<div class="flex items-center flex-wrap gap-1.5 mt-1.5">' + reactionsHtml + '</div>' +
     '</div>';
   }
 
@@ -1801,6 +1876,10 @@
     if (addBtn) { openChatReactionPicker(addBtn.getAttribute('data-message-id'), addBtn); return; }
     var reactBtn = e.target.closest('.project-chat-reaction');
     if (reactBtn) { toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji')); return; }
+    var replyBtn = e.target.closest('.chat-message-reply');
+    if (replyBtn) { startChatReply(replyBtn.getAttribute('data-message-id')); return; }
+    var forwardBtn = e.target.closest('.chat-message-forward');
+    if (forwardBtn) { openChatForwardMenu(forwardBtn.getAttribute('data-message-id'), forwardBtn); return; }
     var removeBtn = e.target.closest('.chat-message-remove');
     if (removeBtn) {
       var messageId = removeBtn.getAttribute('data-message-id');
@@ -1852,14 +1931,113 @@
     if (!pdoc) return;
     var user = auth.currentUser;
     var newMessage = { id: uid(), text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null };
+    if (chatReplyTarget) newMessage.replyTo = chatReplyTarget.id;
     updateDoc(doc(projectsCol, pdoc.id), { chat: arrayUnion(newMessage) }).then(function () {
       input.value = '';
+      cancelChatReply();
       projectChatMentions.close();
       clearProjectChatTyping();
       notifyOnProjectChat(text, currentChatProjectName);
       logActivity('project_chat', 'Posted in the "' + currentChatProjectName + '" group chat');
     }).catch(function (err) {
       showToast('Could not send: ' + err.message, 'error');
+    });
+  }
+
+  // Reply -- WhatsApp's quoted-preview idea, not a nested/indented thread like task comments'
+  // own replyTo (those form a real tree via renderCommentsLog; chat stays flat and chronological,
+  // a reply is just a message that happens to carry a small quote of an earlier one).
+  var chatReplyTarget = null;
+
+  function startChatReply(messageId) {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var original = pdoc && (pdoc.chat || []).find(function (m) { return m.id === messageId; });
+    if (!original) return;
+    chatReplyTarget = { id: original.id, author: original.author, text: original.text };
+    document.getElementById('chat-reply-preview-author').textContent = original.author || 'Unknown';
+    document.getElementById('chat-reply-preview-text').textContent = original.text || '';
+    document.getElementById('chat-reply-preview').hidden = false;
+    document.getElementById('project-chat-input').focus();
+  }
+
+  function cancelChatReply() {
+    chatReplyTarget = null;
+    document.getElementById('chat-reply-preview').hidden = true;
+  }
+  document.getElementById('chat-reply-cancel').addEventListener('click', cancelChatReply);
+
+  // Forward -- copies the message text into a different project's chat, attributed to whoever
+  // forwarded it (not the original author), tagged "Forwarded" -- same convention WhatsApp uses:
+  // it's a new message you're sending, just marked where it came from. Reactions/replyTo are
+  // deliberately not carried over; a forwarded message starts fresh in its new context.
+  var chatForwardMessageId = null;
+
+  function openChatForwardMenu(messageId, triggerEl) {
+    chatForwardMessageId = messageId;
+    var optionsEl = document.getElementById('chat-forward-options');
+    var targets = allProjectNames().filter(function (name) {
+      if (name === currentChatProjectName) return false;
+      var pdoc = projectDeadlineDoc(name);
+      return !!(pdoc && Array.isArray(pdoc.chat));
+    });
+    optionsEl.innerHTML = targets.length
+      ? targets.map(function (name) {
+          return '<button type="button" class="chat-forward-option w-full text-left px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 whitespace-normal break-words" data-project="' + escapeHtml(name) + '">' + escapeHtml(name) + '</button>';
+        }).join('')
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500 px-3 py-2">No other chats to forward to yet.</p>';
+    var panel = document.getElementById('chat-forward-menu');
+    panel.hidden = false;
+    var r = triggerEl.getBoundingClientRect();
+    var pw = panel.offsetWidth || 256;
+    var left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8));
+    var top = r.bottom + 6;
+    if (top + 200 > window.innerHeight) top = Math.max(8, r.top - 206);
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
+
+  function closeChatForwardMenu() {
+    document.getElementById('chat-forward-menu').hidden = true;
+    chatForwardMessageId = null;
+  }
+
+  document.getElementById('chat-forward-options').addEventListener('click', function (e) {
+    var opt = e.target.closest('.chat-forward-option');
+    if (!opt || !chatForwardMessageId) return;
+    var targetName = opt.getAttribute('data-project');
+    var messageId = chatForwardMessageId;
+    closeChatForwardMenu();
+    openConfirm(
+      'Forward this message to "' + targetName + '"?',
+      'Sends a copy of this message to that project\'s group chat.',
+      function () { forwardChatMessage(messageId, targetName); },
+      { tone: 'question', confirmText: 'Forward', cancelText: 'Cancel' }
+    );
+  });
+  document.addEventListener('click', function (e) {
+    var panel = document.getElementById('chat-forward-menu');
+    if (panel.hidden || panel.contains(e.target) || e.target.closest('.chat-message-forward')) return;
+    closeChatForwardMenu();
+  });
+
+  function forwardChatMessage(messageId, targetName) {
+    var sourcePdoc = projectDeadlineDoc(currentChatProjectName);
+    var targetPdoc = projectDeadlineDoc(targetName);
+    if (!sourcePdoc || !targetPdoc) return;
+    var original = (sourcePdoc.chat || []).find(function (m) { return m.id === messageId; });
+    if (!original) return;
+    var user = auth.currentUser;
+    var myName = user ? (user.displayName || user.email) : null;
+    var forwarded = {
+      id: uid(), text: original.text, date: new Date().toISOString(), author: myName,
+      forwarded: true, forwardedFrom: currentChatProjectName
+    };
+    updateDoc(doc(projectsCol, targetPdoc.id), { chat: arrayUnion(forwarded) }).then(function () {
+      showToast('Forwarded to ' + targetName, 'success');
+      logActivity('project_chat', 'Forwarded a message from "' + currentChatProjectName + '" to the "' + targetName + '" group chat');
+      notifyOnProjectChat(original.text, targetName);
+    }).catch(function (err) {
+      showToast('Could not forward message: ' + err.message, 'error');
     });
   }
 
@@ -2303,6 +2481,7 @@
     archive: '<polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line>',
     checklist: '<path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path>',
     reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>',
+    forward: '<polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>',
     sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>'
@@ -7199,7 +7378,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T18:27:14Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T18:34:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -998,6 +998,48 @@ to bottom:
          field on one already in the array. Emoji characters are safe as object keys here
          specifically *because* it's a full-object rewrite, not a dotted-path `updateDoc` call —
          see the typing-presence note below for the case where that distinction does matter.
+     - **WhatsApp-style bubbles, reply, and forward — all asked for directly in one message**
+       ("can the chat look like whatsapp where my messages are ... on the right while the others
+       are on the left? Also replying and forwarding of messages should be possible").
+       `chatMessageHtml` was rebuilt around this rather than patched: own messages right-align
+       with no name/avatar (you already know it's you, same reasoning WhatsApp itself skips it);
+       everyone else's left-align with avatar+name above the bubble, since a *group* chat still
+       needs "who said this" answered at a glance, unlike WhatsApp's 1:1 case. Bubbles are soft
+       tints (`bg-brand-100`/`bg-zinc-100`), not a solid WhatsApp-green fill — `enrichCommentText`'s
+       existing mention/link styling (`brand-600` text) needs a light background to stay
+       readable, and white text on a solid `brand-500` bubble would have made both nearly
+       invisible; changing bubble color was cheaper and safer than touching that shared function.
+       Reply/forward/delete icons stay `opacity-0 group-hover:opacity-100` (Tailwind `group`) —
+       visible on hover only, not stacked on every message at rest, for the same "stop showing
+       controls nobody's touching" reasoning the quick-reaction row was cut for just above.
+       - **Reply is a quoted preview, not a nested thread** — deliberately not a rerun of task
+         comments' real `replyTo` tree (`renderCommentsLog`, which actually indents children under
+         parents). Chat stays flat and chronological; a reply is just a message that carries a
+         small quote of an earlier one, exactly WhatsApp's own quoted-reply, not a thread view.
+         `startChatReply(messageId)` looks the original up in the *currently loaded* `pdoc.chat`
+         (no separate fetch) and populates `#chat-reply-preview` above the compose box;
+         `chatReplyTarget` holds `{id, author, text}` until send or cancel.
+         `sendProjectChatMessage` attaches `replyTo: chatReplyTarget.id` to the new message and
+         calls `cancelChatReply()` in the same `.then()` that already clears the input and the
+         mention menu. `chatMessageHtml` takes the *whole* `chat` array (not just the one message)
+         specifically so a reply's quote can resolve `m.replyTo` against it; if the original was
+         since deleted, the quote is silently omitted — same "don't guess, don't break" fallback
+         `renderCommentsLog` uses for a task comment's dangling `replyTo`.
+       - **Forward copies a message into a *different* project's chat** — a materially different
+         feature from task comments (which have no forward at all) because Flowboard's chats are
+         one-per-project, so "forward" here specifically means *across* chats, not within one.
+         `openChatForwardMenu` reuses the exact `position: fixed`/`getBoundingClientRect()`
+         pattern as the reaction picker and "New chat" menu (`#chat-forward-menu`, a single shared
+         panel), listing every *other* project that already has a chat — not `allProjectNames()`
+         unfiltered, since forwarding into a chat that doesn't exist yet isn't offered here (start
+         one via "New chat" first). `forwardChatMessage` writes a **new** message
+         (`{id: uid(), text, author: <the forwarder>, forwarded: true, forwardedFrom:
+         <source project>}`) via `arrayUnion` on the target doc — deliberately not attributed to
+         the original author, matching WhatsApp's own convention that a forwarded message is a
+         new message *you* sent, just tagged where it came from. Reactions and `replyTo` are not
+         carried over; a forwarded message starts fresh with zero reactions in its new chat.
+         `notifyOnProjectChat` still runs against the target project, so an @mention inside a
+         forwarded message notifies there exactly like a freshly typed one would.
      - **Typing indicators and reactions were asked for directly, then the free-tier constraint
        was clarified before building either.** Both are plain Firestore field writes with no
        Cloud Storage dependency, so both fit inside Spark's free quota (50k reads/20k writes per
