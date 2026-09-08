@@ -673,7 +673,7 @@
       <!-- Online is app-wide, not per-project, so it sits above the two-pane layout rather than
            inside either pane. Empty (not shown at all) when nobody else is currently online. -->
       <div id="chat-online-strip" class="hidden items-center gap-2 mb-3 text-xs text-zinc-500 dark:text-zinc-400"></div>
-      <div class="flex flex-col lg:flex-row gap-4 lg:gap-0">
+      <div id="chat-panes-row" class="flex flex-col lg:flex-row gap-4 lg:gap-0">
         <!-- Project list -- only projects with an existing chat are listed here; creating one
              is its own explicit action (chat-new-btn) rather than an inline row for every
              project on the board, so this reads as "your conversations," not a full project
@@ -1551,13 +1551,24 @@
      Firestore) -- this is a personal display preference, not shared team state. ---- */
   var CHAT_LIST_WIDTH_KEY = 'flowboard_chat_list_width';
   var CHAT_LIST_WIDTH_MIN = 200;
-  var CHAT_LIST_WIDTH_MAX = 440;
   var CHAT_LIST_WIDTH_DEFAULT = 256; // matches the original w-64
+
+  // The cap is relative (up to half the row), not a fixed pixel ceiling -- reported directly
+  // ("make the width extendable to up to 50% of the space allowed"). A flat 440px read as
+  // arbitrarily restrictive on a wide monitor where 50% of the row would be much more; on a
+  // narrow one, capping at half still leaves the detail pane a usable width instead of letting
+  // the list swallow the whole row. Falls back to CHAT_LIST_WIDTH_MIN if the row isn't in the DOM
+  // yet (e.g. computing this before the Chat tab has ever rendered).
+  function chatListMaxWidth() {
+    var row = document.getElementById('chat-panes-row');
+    var rowWidth = row ? row.getBoundingClientRect().width : 0;
+    return Math.max(CHAT_LIST_WIDTH_MIN, Math.round(rowWidth * 0.5) || CHAT_LIST_WIDTH_MIN);
+  }
 
   function loadChatListWidth() {
     try {
       var v = parseInt(localStorage.getItem(CHAT_LIST_WIDTH_KEY), 10);
-      if (v >= CHAT_LIST_WIDTH_MIN && v <= CHAT_LIST_WIDTH_MAX) return v;
+      if (v >= CHAT_LIST_WIDTH_MIN && v <= chatListMaxWidth()) return v;
     } catch (e) { /* ignore */ }
     return CHAT_LIST_WIDTH_DEFAULT;
   }
@@ -1567,13 +1578,17 @@
 
   // Only actually applies the inline width at the lg breakpoint the two-column layout (and the
   // handle) exists at -- clearing it below that lets the plain w-full Tailwind class govern the
-  // stacked mobile layout instead of an inline style permanently overriding it.
+  // stacked mobile layout instead of an inline style permanently overriding it. Re-clamps against
+  // the current 50% cap every time (not just at drag-time), so a saved width from a wider window
+  // doesn't silently push the detail pane too narrow after the browser itself is resized down.
   function applyChatListWidth() {
     var pane = document.getElementById('chat-project-list-pane');
+    chatListWidth = Math.min(chatListWidth, chatListMaxWidth());
     pane.style.width = chatListDesktopQuery.matches ? (chatListWidth + 'px') : '';
   }
   applyChatListWidth();
   chatListDesktopQuery.addEventListener('change', applyChatListWidth);
+  window.addEventListener('resize', debounce(applyChatListWidth, 150));
 
   (function () {
     var handle = document.getElementById('chat-list-resize-handle');
@@ -1587,7 +1602,7 @@
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
       var left = pane.getBoundingClientRect().left;
-      chatListWidth = Math.min(CHAT_LIST_WIDTH_MAX, Math.max(CHAT_LIST_WIDTH_MIN, e.clientX - left));
+      chatListWidth = Math.min(chatListMaxWidth(), Math.max(CHAT_LIST_WIDTH_MIN, e.clientX - left));
       applyChatListWidth();
     });
     document.addEventListener('mouseup', function () {
@@ -7378,7 +7393,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T18:34:40Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T18:42:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -781,6 +781,13 @@ to bottom:
        preference, not shared team state, so it isn't written to Firestore. Only active at the
        `lg` breakpoint the two-column layout exists at (`matchMedia('(min-width: 1024px)')`);
        below that the panes stack and the handle is hidden, since there's nothing to drag between.
+       - **The max width is relative (`chatListMaxWidth()`, half of `#chat-panes-row`'s own
+         width), not a fixed pixel ceiling** — first shipped as a flat 440px cap, reported back
+         directly as too restrictive ("make the width extendable to up to 50% of the space
+         allowed"). `applyChatListWidth()` re-clamps against the current cap on every call, not
+         just at drag-time (via a debounced `resize` listener too), so a width saved on a wide
+         monitor doesn't strand the detail pane too narrow after the browser window itself
+         shrinks.
      - **The shared confirm modal (`#confirm-title`/`#confirm-body`) didn't wrap a long,
        space-free string — it overflowed past the modal's edge instead**, surfaced by the same
        long project name above landing in the "Create a group chat for…" confirm. Plain CSS text
