@@ -770,6 +770,26 @@ to bottom:
        generalized form of what used to be Activity-only hiding logic) hides the Priority/
        Project/People/Sort dropdowns on Chat too, for the same reason Activity hides them — none
        of the four describe a project list any more than they describe an activity log.
+     - **The project list column is drag-to-resize** (`#chat-list-resize-handle`,
+       `applyChatListWidth`) — reported directly against a screenshot where several project
+       names ("271231[LittlePaddington]MarketingAgencyPartner2026…") were truncating past
+       usefulness in the fixed `w-64` column. This team's project-naming convention embeds a
+       long, space-free date/client/campaign string, so no single fixed width reads every name
+       without truncating *something* — letting people widen the column themselves beats
+       guessing one width that works for every project on the board. Persisted to
+       `localStorage` (`flowboard_chat_list_width`), same as `filters` — a personal display
+       preference, not shared team state, so it isn't written to Firestore. Only active at the
+       `lg` breakpoint the two-column layout exists at (`matchMedia('(min-width: 1024px)')`);
+       below that the panes stack and the handle is hidden, since there's nothing to drag between.
+     - **The shared confirm modal (`#confirm-title`/`#confirm-body`) didn't wrap a long,
+       space-free string — it overflowed past the modal's edge instead**, surfaced by the same
+       long project name above landing in the "Create a group chat for…" confirm. Plain CSS text
+       wrapping only breaks at spaces; a single unbroken token wider than the modal (`max-w-sm`)
+       had nowhere to break, so it just ran past the `overflow-hidden` edge and got clipped. Fixed
+       with `break-words` (`overflow-wrap: break-word`) on both elements — a general fix to the
+       shared component, not a chat-specific one, since `openConfirm` is reused for archive/
+       delete/etc. confirmations elsewhere that insert task or project names the same way and
+       were equally exposed to this, just not yet hit by a name long enough to show it.
      - **Manual, not automatic on a project's first task** — explicitly called out by the user
        mid-build ("this is something to be created manually and not automatically when a user
        creates a task"). Most projects never need a dedicated thread, so both `projectCardHtml`'s
