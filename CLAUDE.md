@@ -818,9 +818,31 @@ to bottom:
        `projectCardHtml`'s own button already used. `allProjectNames()` factors out the "every
        project name on the board" query both the list and the picker need the complementary
        halves of. The empty states are worded differently on purpose: "No group chats yet — use
-       'New chat' above" (nothing created at all) vs. "Every project already has a chat." /
-       "No projects on the board yet." inside the picker itself (nothing *left* to create one
-       for) — conflating these would tell someone to click a button that can't actually help them.
+       'New chat' above" (nothing created at all) vs. "Every active project already has a chat."
+       / "No active projects on the board." inside the picker itself (nothing *left* to create
+       one for) — conflating these would tell someone to click a button that can't actually help
+       them.
+       - **Only "on the board" projects are offered** (`!isProjectFullyArchived(name)`, the same
+         Ongoing/Completed definition `renderProjects` uses) — reported directly after a fully
+         archived, wrapped-up project showed up as a "New chat" candidate alongside active ones.
+         Starting a fresh conversation for something already finished and archived isn't a real
+         use case; this only narrows what "New chat" can start, not what the main list already
+         shows — an archived project's *existing* chat (with its own "Completed" tag) still
+         appears there untouched.
+       - **`#chat-new-menu` is `position: fixed`, computed from the button's own rect on open, not
+         an absolutely-positioned child of `#chat-project-list-pane`** — it originally was, and
+         got silently clipped by that pane's own `overflow-hidden` (needed for the rounded corners
+         and the scrolling list beneath it) the moment a project name was long enough to need the
+         wider width below to show. Reported directly against a screenshot. Same fix, and the same
+         underlying reason, as `#chat-reaction-picker` a few sections up — a dropdown anchored
+         inside any `overflow-hidden` ancestor will eventually clip once its content is wide
+         enough, so it has to live outside that ancestor in the DOM and be positioned in viewport
+         coordinates instead of document-flow ones.
+       - **Option labels wrap (`whitespace-normal break-words`) instead of truncating** —
+         reported directly ("the dropdown should expand so the entire title can be seen"). The
+         menu's own `max-w-[24rem]` caps how wide any single long name can force the dropdown
+         before wrapping takes over, so one very long project name can't blow the picker out to
+         an unreasonable width on screen.
      - **Search and a "My chats" filter, both requested directly** — `chat` joined
        `SEARCHABLE_VIEWS` (custom placeholder "Search chats…", same pattern Activity already
        uses for its own non-`applyFilters()` search) and `renderChatProjectList` matches
