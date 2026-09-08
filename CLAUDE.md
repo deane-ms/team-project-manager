@@ -753,17 +753,30 @@ to bottom:
        the rest of it (past the date/time icons) sat empty. Moving it to the end and giving it
        `ml-auto` pushes just that one badge to the row's right edge without disturbing the
        left-packed order of Priority/date/time/overdue before it.
-   - **Project group chat** (`createProjectChat`, `openProjectChat`, `renderProjectChatModal`,
-     `PROJECT_CHAT_REACTIONS`) — a dedicated message thread + pinned-links list per project,
-     requested directly as "something equivalent to a WhatsApp/Google Chat group" for housing a
-     project's links, images and conversation in one place, separate from task comments.
+   - **Project group chat** (`#view-chat`, `selectChatProject`, `renderChatView`,
+     `renderChatDetail`) — a dedicated message thread + pinned-links list per project, requested
+     directly as "something equivalent to a WhatsApp/Google Chat group" for housing a project's
+     links, images and conversation in one place, separate from task comments.
+     - **A standalone sidebar tab, not a modal** — shipped first as a modal opened from the
+       Projects tab, then reported directly ("the chat should be a standalone tab") and rebuilt.
+       `data-view-btn="chat"` sits in the sidebar nav right after Projects, with its own
+       `messageCircle` icon (a rounded speech bubble) — deliberately not the rectangular
+       `message` icon Suggestions already uses one row below it, which would have made the two
+       indistinguishable at a glance. The view itself is a two-pane layout: `#chat-project-list`
+       on the left (every project, whether or not it has a chat yet), the selected project's
+       thread in `#chat-detail` on the right, with `#chat-empty-state` shown until something's
+       selected. `renderChatView()` is this tab's renderer, wired into
+       `renderCurrentSecondaryView()` like every other view; `TOOLBAR_HIDDEN_FILTER_VIEWS` (the
+       generalized form of what used to be Activity-only hiding logic) hides the Priority/
+       Project/People/Sort dropdowns on Chat too, for the same reason Activity hides them — none
+       of the four describe a project list any more than they describe an activity log.
      - **Manual, not automatic on a project's first task** — explicitly called out by the user
        mid-build ("this is something to be created manually and not automatically when a user
-       creates a task"). Most projects never need a dedicated thread, so `projectCardHtml` shows
-       a quiet `+ Group chat` button (same progressive-disclosure pattern as `+ Deadline` above
-       it) until someone deliberately creates one via `openConfirm`; only then does it become
-       `Group chat (N)`, an open button. `Array.isArray(projectDoc.chat)` is the one signal a
-       chat exists — no separate boolean flag to keep in sync with it.
+       creates a task"). Most projects never need a dedicated thread, so both `projectCardHtml`'s
+       card button and the Chat tab's own project-list row show a quiet "+" until someone
+       deliberately creates one via `openConfirm` (`createProjectChat`). `Array.isArray
+       (projectDoc.chat)` is the one signal a chat exists — no separate boolean flag to keep in
+       sync with it.
      - **Lives on the same `projects/{id}` doc as the deadline**, not a new collection —
        `chat` (array of `{id, text, author, date, reactions}`, same shape/append pattern as task
        comments: `arrayUnion` to add, a full-array rewrite to edit an existing entry's fields)
@@ -780,8 +793,45 @@ to bottom:
        `notifyOnComment` minus that fallback). The notification doc carries a new `chatProject`
        field instead of `taskId`/`taskName`; `renderNotificationBell` and the notification-list
        click handler both branch on its presence — the sentence reads "mentioned you in the '…'
-       group chat" instead of "…on '…'", and clicking opens `openProjectChat(chatProject)`
-       instead of a task.
+       group chat" instead of "…on '…'", and clicking switches to the Chat tab and calls
+       `selectChatProject(chatProject)` instead of opening a task.
+     - **An emoji picker was asked for directly, "similar to what we've built on Content Hub"** —
+       ported from the sibling MS LinkedIn Hub's `createEmojiPicker`/`EMOJI_CATEGORIES`
+       (`content-hub-firebase.html`), which that app's own `DESIGN.md` documents as a *deliberate
+       exception* to "never emoji" — real emoji there are the feature's actual content, not UI
+       chrome, same reasoning that applies here. `EMOJI_CATEGORIES`'s eight category lists are
+       copied verbatim for consistency across Mediashock's tools. The factory itself is
+       `createEmojiPickerPanel(tabsEl, gridEl, onPick)`, adapted rather than copied byte-for-byte:
+       Content Hub's version is hardwired to one textarea (`insertAtCursor`/`onInsert`), but this
+       app reuses the exact same category-tab-plus-grid UI for two different purposes (see
+       below), so it takes a plain `onPick(emoji)` callback instead and leaves what "picking" an
+       emoji actually does to the caller. `insertAtCursor` itself is copied unchanged.
+       - **The compose box** (`#project-chat-emoji-toggle`/`#project-chat-emoji-picker`) is the
+         direct port of Content Hub's usage — an inline smiley button overlaid bottom-right of
+         the textarea, `onPick` inserting the emoji at the cursor via `insertAtCursor`.
+       - **Reactions were asked for separately ("I want more reactions"), on the same message
+         that asked for the emoji picker** — read as one request, not two: reactions became real
+         emoji rather than the small fixed SVG icon set (Like/Love/Noted) this shipped with
+         first. `PROJECT_CHAT_QUICK_REACTIONS` (👍❤️😂🎉👀✅, doubled from the original 3) shows
+         as one-click pills on every message; a dashed "+" opens a *second* instance of the same
+         `createEmojiPickerPanel` (`#chat-reaction-picker`, a single shared panel, not one per
+         message) to react with anything else, so the effective set is unlimited rather than a
+         fixed short list. `activeReactionMessageId` tracks which message the shared panel is
+         currently open for. A reaction picked from the full picker still has to keep showing
+         (and stay re-clickable) afterward, not just work once — `chatMessageHtml` appends
+         whichever already-used emoji aren't in the quick set to the row it renders.
+       - **The reaction picker positions itself with `position: fixed`, computed from the
+         trigger's `getBoundingClientRect()`** (`openChatReactionPicker`), the same technique
+         `positionTooltip` already uses elsewhere in this file — not a CSS-relative dropdown
+         anchored to the message row, which `#project-chat-log`'s own `overflow-y-auto` would
+         clip the moment the panel needed to extend past the scroll container's edge. The
+         compose-box picker doesn't need this: it lives in the non-scrolling footer, so a plain
+         `absolute` position anchored to the textarea wrapper is safe there.
+       - Toggling a reaction is a full-array rewrite of `chat` (same reason `removeCommentAt`
+         rewrites the whole array) — `arrayUnion` can only append a new element, never mutate a
+         field on one already in the array. Emoji characters are safe as object keys here
+         specifically *because* it's a full-object rewrite, not a dotted-path `updateDoc` call —
+         see the typing-presence note below for the case where that distinction does matter.
      - **Typing indicators and reactions were asked for directly, then the free-tier constraint
        was clarified before building either.** Both are plain Firestore field writes with no
        Cloud Storage dependency, so both fit inside Spark's free quota (50k reads/20k writes per
@@ -789,34 +839,34 @@ to bottom:
        The one genuine free-tier wall in this app is images/file *uploads*: Cloud Storage for
        Firebase stopped supporting the Spark plan for new buckets in a 2024 policy change, which
        is why links stay paste-only (see above) rather than a real upload/attach flow.
-       - **Reactions** (`PROJECT_CHAT_REACTIONS`, `toggleProjectChatReaction`) are a small fixed
-         set (Like/Love/Noted — `thumbsUp`/`heart`/`check` SVGs), not a free emoji picker: this
-         app never uses emoji anywhere (always inline SVG, see the parent `Claude
-         Projects/CLAUDE.md`), so a normal chat app's 👍/❤️ reaction picker isn't available and
-         needed its own icon set instead. Toggling is a full-array rewrite of `chat` (same reason
-         `removeCommentAt` rewrites the whole array) — `arrayUnion` can only append a new
-         element, never mutate a field on one already in the array.
        - **Typing presence** (`projectTyping/{projectId}`, same doc id as the project doc) is
          `{entries: [{name, at}]}`, a plain array rather than a map keyed by display name — a
          name containing "." would otherwise be read as a nested field path by `setDoc`/
          `updateDoc`'s dotted-key handling (e.g. "J. Tan"), silently writing to the wrong place.
-         The chat modal keeps its own local cache of the latest snapshot
-         (`latestChatTypingEntries`) rather than calling `getDoc` fresh on every heartbeat — the
-         modal has to already be open (and therefore already subscribed) for anyone to type into
-         it, so the cache is never actually stale when a heartbeat needs it. Entries age out
-         after `PROJECT_CHAT_TYPING_TTL_MS` (8s); a person's own entry also clears immediately on
-         blur/send/close rather than waiting out the TTL, and a plain `setInterval` re-render
-         (`chatTypingTickTimer`, every 2s) is what actually hides a stale entry for everyone else
-         once nobody's written a newer heartbeat over it — nothing server-side expires it.
+         The chat view keeps its own local cache of the latest snapshot
+         (`latestChatTypingEntries`) rather than calling `getDoc` fresh on every heartbeat — a
+         project has to already be selected (and therefore already subscribed) for anyone to
+         type into its chat, so the cache is never actually stale when a heartbeat needs it.
+         Entries age out after `PROJECT_CHAT_TYPING_TTL_MS` (8s); a person's own entry also
+         clears immediately on blur/send/switching to a different project rather than waiting
+         out the TTL, and a plain `setInterval` re-render (`chatTypingTickTimer`, every 2s) is
+         what actually hides a stale entry for everyone else once nobody's written a newer
+         heartbeat over it — nothing server-side expires it.
        - **Firestore rules needed a new, deliberately wide-open collection block**
          (`projectTyping` in `firestore.rules`) — enumerated explicitly rather than folded into
          an existing rule, per this app's "never `match /{document=**}`" convention. Whole-team
          read/write, same as `projects` itself: there's no per-message ownership to scope here,
          just a small rolling presence list.
-     - **An open chat re-renders live from the same `projects` listener that already drives the
-       deadline UI** — `unsubProjects`'s `onSnapshot` calls `renderProjectChatModal()` whenever
-       the modal is open, the same way the `tasks` listener already re-renders an open task
-       modal. A teammate's new message, reaction or pinned link shows up without needing its own
+     - **Switching the selected project tears down and re-subscribes typing presence
+       (`selectChatProject`); switching *tabs* away from Chat does not.** The typing
+       subscription and its 2s render timer just keep running cheaply in the background — same
+       as every other listener in this app (tasks/people/projects/activity all stay subscribed
+       regardless of which view is on screen) — until the selection actually changes or the
+       session signs out (`stopListeners` tears both down explicitly, since nothing else would).
+     - **The Chat tab re-renders live from the same `projects` listener that already drives the
+       deadline UI** — `unsubProjects`'s `onSnapshot` calls `renderChatView()` whenever Chat is
+       the current tab, the same way the `tasks` listener already re-renders an open task modal.
+       A teammate's new message, reaction or pinned link shows up without needing its own
        listener.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a

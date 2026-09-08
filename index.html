@@ -348,6 +348,12 @@
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
         <span class="sidebar-label truncate">Projects</span>
       </button>
+      <!-- messageCircle (rounded bubble), not the rectangular "message" icon Suggestions already
+           uses right below it -- the two would be indistinguishable at a glance otherwise. -->
+      <button data-view-btn="chat" data-tooltip="Chat" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        <span class="sidebar-label truncate">Chat</span>
+      </button>
 
       <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
 
@@ -658,6 +664,60 @@
       <div id="projects-grid"></div>
     </section>
 
+    <!-- ============ CHAT VIEW ============ -->
+    <section id="view-chat" data-view class="flex-1">
+      <div class="flex flex-col lg:flex-row gap-4">
+        <!-- Project list -- every project appears here (same names as the Projects tab), not
+             just ones with a chat already, so "+ Create" is reachable in one place. -->
+        <div class="w-full lg:w-64 shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col">
+          <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700">
+            <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Projects</p>
+          </div>
+          <div id="chat-project-list" class="divide-y divide-zinc-100 dark:divide-zinc-700 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto"></div>
+        </div>
+        <!-- Selected project's chat -->
+        <div class="flex-1 min-w-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col">
+          <div id="chat-empty-state" class="flex items-center justify-center text-center text-sm text-zinc-400 dark:text-zinc-500 px-6 py-16">
+            Select a project on the left to see its group chat, or create one.
+          </div>
+          <div id="chat-detail" class="hidden flex-col">
+            <div class="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+              <div class="min-w-0">
+                <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
+                <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
+              </div>
+            </div>
+            <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
+              <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
+              <div id="project-chat-links" class="flex flex-col gap-1.5"></div>
+              <div class="flex items-center gap-1.5">
+                <input id="project-chat-link-label" type="text" maxlength="60" placeholder="Label (optional)" class="w-28 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+                <input id="project-chat-link-url" type="text" placeholder="Paste a link (Drive, Figma, image…)" class="flex-1 min-w-0 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+                <button type="button" id="project-chat-link-add-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
+              </div>
+            </div>
+            <div id="project-chat-log" class="max-h-[45vh] overflow-y-auto px-4 sm:px-5 py-3 space-y-2"></div>
+            <p id="project-chat-typing" class="px-4 sm:px-5 text-xs italic text-zinc-400 dark:text-zinc-500 h-4"></p>
+            <div class="px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">
+              <div class="relative">
+                <textarea id="project-chat-input" rows="2" maxlength="2000" placeholder="Message the team about this project… (@name to mention)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-3 pr-10 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+                <button type="button" id="project-chat-emoji-toggle" title="Insert emoji" aria-expanded="false" aria-controls="project-chat-emoji-picker" class="absolute right-2 bottom-2 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-600">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                </button>
+                <div id="project-chat-emoji-picker" hidden class="absolute right-0 bottom-11 z-20 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2">
+                  <div id="project-chat-emoji-tabs" class="flex flex-wrap gap-0.5 mb-1.5" role="tablist" aria-label="Emoji categories"></div>
+                  <div id="project-chat-emoji-grid" class="grid grid-cols-8 gap-0.5 max-h-40 overflow-y-auto"></div>
+                </div>
+              </div>
+              <div class="flex justify-end mt-2">
+                <button type="button" id="project-chat-send-btn" class="shrink-0 text-sm font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ ACTIVITY VIEW ============ -->
     <section id="view-activity" data-view class="flex-1">
       <div id="activity-feed" class="max-w-2xl mx-auto flex flex-col gap-1.5"></div>
@@ -871,36 +931,6 @@
   </div>
 </div>
 
-<!-- ============ PROJECT CHAT MODAL ============ -->
-<div id="project-chat-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="project-chat-title">
-  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">
-    <div class="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
-      <div class="min-w-0">
-        <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
-        <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
-      </div>
-      <button id="project-chat-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 shrink-0">
-        <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
-    </div>
-    <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
-      <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
-      <div id="project-chat-links" class="flex flex-col gap-1.5"></div>
-      <div class="flex items-center gap-1.5">
-        <input id="project-chat-link-label" type="text" maxlength="60" placeholder="Label (optional)" class="w-28 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-        <input id="project-chat-link-url" type="text" placeholder="Paste a link (Drive, Figma, image…)" class="flex-1 min-w-0 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-        <button type="button" id="project-chat-link-add-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
-      </div>
-    </div>
-    <div id="project-chat-log" class="flex-1 overflow-y-auto px-4 sm:px-5 py-3 space-y-2"></div>
-    <p id="project-chat-typing" class="px-4 sm:px-5 text-xs italic text-zinc-400 dark:text-zinc-500 h-4"></p>
-    <div class="flex items-end gap-2 px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">
-      <textarea id="project-chat-input" rows="1" maxlength="2000" placeholder="Message the team about this project… (@name to mention)" class="flex-1 min-w-0 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
-      <button type="button" id="project-chat-send-btn" class="shrink-0 text-sm font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Send</button>
-    </div>
-  </div>
-</div>
-
 <!-- ============ CONFIRM MODAL ============ -->
 <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
   <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden modal-pop-in">
@@ -920,6 +950,14 @@
 
 <!-- ============ TOASTS ============ -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
+
+<!-- Shared "add a reaction" emoji picker for the Chat tab -- one instance, repositioned via JS
+     (position: fixed) to sit under whichever message's "+" was clicked. Declared here, not
+     inside #project-chat-log, so #project-chat-log's own overflow-y-auto can never clip it. -->
+<div id="chat-reaction-picker" hidden class="fixed z-40 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2">
+  <div id="chat-reaction-tabs" class="flex flex-wrap gap-0.5 mb-1.5" role="tablist" aria-label="Emoji categories"></div>
+  <div id="chat-reaction-grid" class="grid grid-cols-8 gap-0.5 max-h-40 overflow-y-auto"></div>
+</div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -1133,50 +1171,168 @@
   }
 
   /* =========================================================
-     PROJECT GROUP CHAT -- one dedicated message thread + pinned-links
-     list per project, living on the same `projects/{id}` doc as the
-     deadline above (`chat`, `links` fields). Deliberately NOT created
-     automatically when a project first appears from a task -- most
-     projects don't need one, so it's an explicit "+ Group chat" action
-     a person takes (projectCardHtml), same progressive-disclosure
-     reasoning as the deadline field itself. `Array.isArray(doc.chat)`
-     is the one signal "has a chat been created" -- no separate boolean
-     flag to keep in sync with it.
+     PROJECT GROUP CHAT -- a standalone "Chat" tab (sidebar nav item,
+     #view-chat), not a modal -- reported directly ("the chat should be
+     a standalone tab"). A project list on the left selects which
+     project's thread shows on the right; `renderChatView()` is this
+     tab's renderer, wired into renderCurrentSecondaryView() the same
+     way every other view is. Message thread + pinned links live on the
+     same `projects/{id}` doc as the deadline (`chat`, `links` fields).
+
+     Deliberately NOT created automatically when a project first
+     appears from a task -- most projects don't need one, so it's an
+     explicit "+ Create" action (projectCardHtml's button, or the "no
+     chat yet" row in the tab's own project list), same progressive-
+     disclosure reasoning as the deadline field itself.
+     `Array.isArray(doc.chat)` is the one signal "has a chat been
+     created" -- no separate boolean flag to keep in sync with it.
 
      Typing indicators and reactions are scoped to this chat only, not
      task comments -- both are plain Firestore writes with no Storage
-     dependency, so neither needs Spark's paid Blaze tier. Images/files
-     are pasted links only (enrichCommentText already linkifies them),
-     same reasoning as everywhere else in this app: Cloud Storage for
-     Firebase no longer supports the free plan for new buckets.
+     dependency, so neither needs Spark's paid Blaze tier. Pinned links
+     stay paste-only (enrichCommentText already linkifies them) for the
+     same reason images/files are pasted links everywhere else in this
+     app: Cloud Storage for Firebase no longer supports the free plan
+     for new buckets.
   ========================================================= */
   var projectTypingCol = collection(db, "projectTyping");
   var currentChatProjectName = null;
-  var projectChatModal = document.getElementById('project-chat-modal');
   var projectChatTypingUnsub = null;
   var chatTypingTickTimer = null;
   var lastTypingHeartbeatAt = 0;
+  var activeReactionMessageId = null;
   // The typing doc's own local cache -- both the render (every 2s, to age out a stale entry
   // even with no new snapshot) and the heartbeat write (to dedupe/replace this person's own
-  // entry) read from here instead of a fresh getDoc, since the chat modal has to be open --
-  // and therefore already subscribed -- for anyone to be typing into it in the first place.
+  // entry) read from here instead of a fresh getDoc, since a project has to already be selected
+  // -- and therefore already subscribed -- for anyone to be typing into its chat in the first
+  // place.
   var latestChatTypingEntries = [];
   var PROJECT_CHAT_TYPING_TTL_MS = 8000;
   var PROJECT_CHAT_TYPING_HEARTBEAT_MS = 3000;
 
-  // Small fixed set, not a free emoji picker -- this app never uses emoji (always inline SVG,
-  // see the parent Claude Projects/CLAUDE.md), so reactions need their own icon set rather than
-  // the usual 👍/❤️ picker every chat app ships.
-  var PROJECT_CHAT_REACTIONS = [
-    { key: 'like', icon: 'thumbsUp', label: 'Like' },
-    { key: 'love', icon: 'heart', label: 'Love' },
-    { key: 'done', icon: 'check', label: 'Noted' }
-  ];
+  /* ---- Emoji picker -- ported from the sibling Content Hub's createEmojiPicker/
+     EMOJI_CATEGORIES (see content-hub-firebase.html), the one place in any Mediashock internal
+     tool real emoji are used as content rather than UI chrome (that app's own DESIGN.md calls
+     its picker's category data a deliberate exception to "never emoji" for exactly this reason).
+     Reused here for two different things: inserting an emoji into a chat message, and picking
+     a reaction -- so createEmojiPickerPanel takes a plain onPick(emoji) callback instead of
+     Content Hub's textarea-specific insertAtCursor/onInsert pair, and each caller decides what
+     picking an emoji actually does. Category data is copied verbatim for consistency across
+     Mediashock's tools, not reinvented. ---- */
+  var EMOJI_CATEGORIES = {
+    "Smileys": ["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","😎","🤓","🧐","😕","😟","🙁","😮","😯","😲","😳","🥺","😦","😧","😨","😰","😥","😢","😭","😱","😖","😣","😞","😓","😩","😫","🥱","😤","😡","😠","🤬","😈","👿","💀","☠️","💩","🤡","👻","👽","🤖"],
+    "Gestures": ["👋","🤚","🖐️","✋","🖖","👌","🤌","🤏","✌️","🤞","🤟","🤘","🤙","👈","👉","👆","🖕","👇","☝️","👍","👎","✊","👊","🤛","🤜","👏","🙌","👐","🤲","🤝","🙏","💪","🖊️","✍️","💅","🤳","🧑‍💻","🕺","💃"],
+    "Nature": ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🐔","🐧","🐦","🦆","🦅","🦉","🐺","🐴","🦄","🐝","🦋","🐢","🐍","🐙","🐬","🐳","🌵","🎄","🌲","🌳","🌴","🌱","🌿","☘️","🍀","🍂","🍁","🌾","💐","🌷","🌹","🌺","🌸","🌼","🌻","🌞","🌝","⭐","🌟","✨","⚡","🔥","💧","🌊","🌈"],
+    "Food": ["🍏","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🫐","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🥑","🥦","🥒","🌶️","🌽","🥕","🧄","🧅","🥐","🍞","🧀","🥚","🍳","🥞","🥓","🍗","🍔","🍟","🍕","🌭","🌮","🌯","🥗","🍝","🍜","🍲","🍣","🍱","🍚","🍤","🍦","🍩","🍪","🎂","🍰","🧁","🍫","🍬","🍭","🍿","🥜","☕","🍵","🥤","🍺","🍻","🥂","🍷","🥃","🍾"],
+    "Activities": ["⚽","🏀","🏈","⚾","🎾","🏐","🏉","🎱","🏓","🏸","🥊","🥋","🎽","🎿","🏋️","🤸","🏄","🏊","🚴","🏆","🥇","🥈","🥉","🏅","🎖️","🎗️","🎫","🎪","🤹","🎭","🎨","🎬","🎤","🎧","🎼","🎹","🥁","🎷","🎺","🎸","🎻","🎲","🎯","🎳","🎮"],
+    "Travel": ["🚗","🚕","🚙","🚌","🚎","🚓","🚑","🚒","🚐","🚚","🚛","🚜","🏍️","🚲","✈️","🛫","🛬","🚀","🚁","🚢","⛵","🚤","🚂","🚆","🚇","🚊","🚉","🗺️","🗽","🗼","🏰","🏯","🎡","🎢","🎠","⛲","🏖️","🏝️","🏜️","⛰️","🏔️","🗻","🏕️","🏠","🏢","🏬","🏥","🏦","🏨","⛪","🕌"],
+    "Objects": ["⌚","📱","💻","⌨️","🖥️","🖨️","🖱️","📷","📸","📹","🎥","📞","☎️","📺","📻","🔋","🔌","💡","🔦","🕯️","💰","💵","💳","💎","🧰","🔧","🔨","🛠️","🔩","⚙️","🧲","🔑","🚪","🛋️","🛏️","🖼️","🛍️","🛒","🎁","🎈","🎊","🎉","✉️","📩","📧","📦","📊","📈","📉","📅","📆","🗑️","📁","📂","📋","📌","📍","✂️","📝","✏️","🔍","🔒","🔓"],
+    "Symbols": ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💯","💢","💥","💫","💦","💨","🕳️","💬","🗨️","🗯️","💭","♻️","✅","☑️","✔️","❌","❎","➕","➖","➗","✖️","💠","🔥","⭐","🌟","✨","⚡","☀️","⛅","☁️","🌧️","❗","❓","‼️","⁉️","💯","🔔","🔕","🎵","🎶","💤","🚩","🏁","🎌","🏆"],
+    "Flags": ["🏳️","🏴","🏳️‍🌈","🇸🇬","🇲🇾","🇮🇩","🇹🇭","🇻🇳","🇵🇭","🇯🇵","🇰🇷","🇨🇳","🇭🇰","🇮🇳","🇦🇺","🇳🇿","🇬🇧","🇺🇸","🇨🇦","🇩🇪","🇫🇷","🇦🇪"]
+  };
 
-  function projectChatEnabled(name) {
-    var d = projectDeadlineDoc(name);
-    return !!(d && Array.isArray(d.chat));
+  function insertAtCursor(textarea, text) {
+    var start = textarea.selectionStart == null ? textarea.value.length : textarea.selectionStart;
+    var end = textarea.selectionEnd == null ? textarea.value.length : textarea.selectionEnd;
+    var val = textarea.value;
+    textarea.value = val.slice(0, start) + text + val.slice(end);
+    var pos = start + text.length;
+    textarea.focus();
+    textarea.setSelectionRange(pos, pos);
   }
+
+  function createEmojiPickerPanel(tabsEl, gridEl, onPick) {
+    var currentCategory = Object.keys(EMOJI_CATEGORIES)[0];
+    function render() {
+      tabsEl.innerHTML = Object.keys(EMOJI_CATEGORIES).map(function (cat) {
+        return '<button type="button" class="text-[11px] font-semibold px-2 py-1 rounded ' +
+          (cat === currentCategory
+            ? 'bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-400'
+            : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700') +
+          '" data-cat="' + cat + '" role="tab" aria-selected="' + (cat === currentCategory) + '">' + cat + '</button>';
+      }).join('');
+      gridEl.innerHTML = EMOJI_CATEGORIES[currentCategory].map(function (em) {
+        return '<button type="button" class="text-lg leading-8 text-center rounded hover:bg-zinc-100 dark:hover:bg-zinc-700" data-emoji="' + em + '" aria-label="' + em + '">' + em + '</button>';
+      }).join('');
+    }
+    tabsEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-cat]');
+      if (!btn) return;
+      currentCategory = btn.getAttribute('data-cat');
+      render();
+    });
+    gridEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-emoji]');
+      if (btn) onPick(btn.getAttribute('data-emoji'));
+    });
+    return { render: render };
+  }
+
+  var chatComposeEmojiPicker = createEmojiPickerPanel(
+    document.getElementById('project-chat-emoji-tabs'),
+    document.getElementById('project-chat-emoji-grid'),
+    function (emoji) { insertAtCursor(document.getElementById('project-chat-input'), emoji); }
+  );
+  document.getElementById('project-chat-emoji-toggle').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var picker = document.getElementById('project-chat-emoji-picker');
+    var willOpen = picker.hidden;
+    picker.hidden = !willOpen;
+    this.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    if (willOpen) chatComposeEmojiPicker.render();
+  });
+  document.addEventListener('click', function (e) {
+    var picker = document.getElementById('project-chat-emoji-picker');
+    var toggleBtn = document.getElementById('project-chat-emoji-toggle');
+    if (picker.hidden || picker.contains(e.target) || toggleBtn.contains(e.target)) return;
+    picker.hidden = true;
+    toggleBtn.setAttribute('aria-expanded', 'false');
+  });
+
+  // Reactions were asked for directly ("I want more reactions"), on the heels of asking for the
+  // emoji feature above -- so reactions are real emoji too, not the small fixed SVG icon set
+  // this shipped with first. A handful of one-click quick reactions covers the common case;
+  // the "+" button opens the same category picker as the compose box for anything else, so the
+  // set is effectively unlimited rather than a fixed short list.
+  var PROJECT_CHAT_QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '✅'];
+
+  var chatReactionEmojiPicker = createEmojiPickerPanel(
+    document.getElementById('chat-reaction-tabs'),
+    document.getElementById('chat-reaction-grid'),
+    function (emoji) {
+      if (activeReactionMessageId) toggleProjectChatReaction(activeReactionMessageId, emoji);
+      closeChatReactionPicker();
+    }
+  );
+
+  // position: fixed (like positionTooltip elsewhere in this file), not an absolutely-positioned
+  // child of the message row -- the reaction row lives inside #project-chat-log's own
+  // overflow-y-auto, which would clip a relatively-anchored dropdown the moment it needed to
+  // extend past the scroll container's edge.
+  function openChatReactionPicker(messageId, triggerEl) {
+    activeReactionMessageId = messageId;
+    chatReactionEmojiPicker.render();
+    var panel = document.getElementById('chat-reaction-picker');
+    panel.hidden = false;
+    var r = triggerEl.getBoundingClientRect();
+    var pw = panel.offsetWidth || 256;
+    var left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8));
+    var top = r.bottom + 6;
+    if (top + 200 > window.innerHeight) top = Math.max(8, r.top - 206);
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
+
+  function closeChatReactionPicker() {
+    document.getElementById('chat-reaction-picker').hidden = true;
+    activeReactionMessageId = null;
+  }
+
+  document.addEventListener('click', function (e) {
+    var panel = document.getElementById('chat-reaction-picker');
+    if (panel.hidden || panel.contains(e.target) || e.target.closest('.chat-reaction-add')) return;
+    closeChatReactionPicker();
+  });
 
   function createProjectChat(name) {
     var existing = projectDeadlineDoc(name);
@@ -1186,35 +1342,88 @@
     return write.then(function () {
       showToast('Group chat created for ' + name, 'success');
       logActivity('project_chat_created', 'Created a group chat for "' + name + '"');
-      openProjectChat(name);
+      selectChatProject(name);
     }).catch(function (err) {
       showToast('Could not create the group chat: ' + err.message, 'error');
     });
   }
 
-  function openProjectChat(name) {
+  // Switching the tab's selected project, not opening/closing a modal -- the typing subscription
+  // is torn down for whichever project was selected before (using the OLD currentChatProjectName,
+  // so clearProjectChatTyping clears the right presence doc) and re-established for the new one.
+  // Leaving the Chat tab entirely for another view does NOT tear this down -- same as every other
+  // listener in this app, it just keeps running cheaply in the background until the selection
+  // actually changes or the session signs out (see stopListeners).
+  function selectChatProject(name) {
+    if (currentChatProjectName && currentChatProjectName !== name) clearProjectChatTyping();
+    if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
+    if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
+    latestChatTypingEntries = [];
+    document.getElementById('project-chat-typing').textContent = '';
     currentChatProjectName = name;
     document.getElementById('project-chat-title').textContent = name;
-    renderProjectChatModal();
-    projectChatModal.classList.remove('hidden');
-    projectChatModal.classList.add('flex');
+    document.getElementById('chat-empty-state').classList.add('hidden');
+    document.getElementById('chat-detail').classList.remove('hidden');
+    document.getElementById('chat-detail').classList.add('flex');
     document.getElementById('project-chat-input').value = '';
+    renderChatProjectList();
+    renderChatDetail();
     subscribeProjectChatTyping(name);
     setTimeout(function () { document.getElementById('project-chat-input').focus(); }, 30);
   }
 
-  function closeProjectChat() {
-    projectChatModal.classList.add('hidden');
-    projectChatModal.classList.remove('flex');
-    clearProjectChatTyping();
-    if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
-    if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
-    document.getElementById('project-chat-typing').textContent = '';
-    latestChatTypingEntries = [];
-    currentChatProjectName = null;
+  function renderChatView() {
+    renderChatProjectList();
+    if (currentChatProjectName) renderChatDetail();
   }
 
-  function renderProjectChatModal() {
+  // Every project appears here, same names as the Projects tab (grouped from the task list, not
+  // from projectDocs -- a project with no deadline and no chat yet still has no projectDocs entry
+  // at all), so "no chat yet" projects are reachable in the same place as ones that already have
+  // one, rather than only surfacing once someone's created something.
+  function renderChatProjectList() {
+    var listEl = document.getElementById('chat-project-list');
+    var names = {};
+    tasks.concat(archivedTasks).forEach(function (t) { if (t.project) names[t.project] = true; });
+    var sorted = Object.keys(names).sort(function (a, b) { return a.localeCompare(b); });
+    listEl.innerHTML = sorted.length
+      ? sorted.map(function (name) {
+          var pdoc = projectDeadlineDoc(name);
+          var hasChat = !!(pdoc && Array.isArray(pdoc.chat));
+          var selected = name === currentChatProjectName;
+          var subtitle = hasChat
+            ? (pdoc.chat.length ? pdoc.chat.length + ' message' + (pdoc.chat.length === 1 ? '' : 's') : 'No messages yet')
+            : 'No chat yet';
+          return '<button type="button" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-2 ' +
+            (selected ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50') +
+            '" data-project="' + escapeHtml(name) + '" data-has-chat="' + (hasChat ? '1' : '0') + '">' +
+            '<span class="min-w-0">' +
+              '<span class="block text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+              '<span class="block text-xs text-zinc-400 dark:text-zinc-500">' + subtitle + '</span>' +
+            '</span>' +
+            (hasChat ? '' : svgIcon('plus', 'w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 shrink-0')) +
+          '</button>';
+        }).join('')
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6 px-3">No projects yet.</p>';
+  }
+
+  document.getElementById('chat-project-list').addEventListener('click', function (e) {
+    var row = e.target.closest('.chat-project-row');
+    if (!row) return;
+    var name = row.getAttribute('data-project');
+    if (row.getAttribute('data-has-chat') === '1') {
+      selectChatProject(name);
+      return;
+    }
+    openConfirm(
+      'Create a group chat for "' + name + '"?',
+      'Gives this project its own message thread and pinned links, separate from task comments. Anyone on the team can post once it exists.',
+      function () { createProjectChat(name); },
+      { tone: 'question', confirmText: 'Create chat', cancelText: 'Cancel' }
+    );
+  });
+
+  function renderChatDetail() {
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     var links = (pdoc && pdoc.links) || [];
     var chat = (pdoc && pdoc.chat) || [];
@@ -1234,31 +1443,49 @@
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     var logEl = document.getElementById('project-chat-log');
     logEl.innerHTML = chat.length
-      ? chat.map(function (m) {
-          var reactionsHtml = PROJECT_CHAT_REACTIONS.map(function (r) {
-            var names = (m.reactions && m.reactions[r.key]) || [];
-            var mine = names.indexOf(myName) !== -1;
-            return '<button type="button" class="project-chat-reaction flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full border ' +
-              (mine
-                ? 'border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
-                : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-600') +
-              '" data-message-id="' + m.id + '" data-reaction-key="' + r.key + '" title="' + r.label + (names.length ? ': ' + names.map(escapeHtml).join(', ') : '') + '">' +
-              svgIcon(r.icon, 'w-3 h-3') + (names.length ? names.length : '') +
-            '</button>';
-          }).join('');
-          return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
-            '<div class="flex items-center gap-1.5 mb-1">' +
-              avatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
-              '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
-              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
-            '</div>' +
-            '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
-            '<div class="flex items-center gap-1.5 mt-1.5">' + reactionsHtml + '</div>' +
-          '</div>';
-        }).join('')
+      ? chat.map(function (m) { return chatMessageHtml(m, myName); }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No messages yet. Say hello.</p>';
     logEl.scrollTop = logEl.scrollHeight;
   }
+
+  // Every quick reaction always shows (so the row reads the same on every message), plus
+  // whichever non-quick emoji someone's already reacted with via the "+" picker -- a reaction
+  // picked from the full set still has to be visible and re-clickable afterward, not just usable
+  // once.
+  function chatMessageHtml(m, myName) {
+    var reactions = m.reactions || {};
+    var used = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
+    var extra = used.filter(function (e) { return PROJECT_CHAT_QUICK_REACTIONS.indexOf(e) === -1; });
+    var shown = PROJECT_CHAT_QUICK_REACTIONS.concat(extra);
+    var reactionsHtml = shown.map(function (emoji) {
+      var names = reactions[emoji] || [];
+      var mine = names.indexOf(myName) !== -1;
+      return '<button type="button" class="project-chat-reaction inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border ' +
+        (mine
+          ? 'border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10'
+          : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600') +
+        '" data-message-id="' + m.id + '" data-emoji="' + emoji + '" title="' + (names.length ? names.map(escapeHtml).join(', ') : 'React') + '">' +
+        '<span>' + emoji + '</span>' + (names.length ? '<span class="text-zinc-500 dark:text-zinc-400 font-medium">' + names.length + '</span>' : '') +
+      '</button>';
+    }).join('');
+    reactionsHtml += '<button type="button" class="chat-reaction-add inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300" data-message-id="' + m.id + '" title="Add a reaction">' + svgIcon('plus', 'w-3 h-3') + '</button>';
+    return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
+      '<div class="flex items-center gap-1.5 mb-1">' +
+        avatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
+        '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
+        '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+      '</div>' +
+      '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
+      '<div class="flex items-center flex-wrap gap-1.5 mt-1.5">' + reactionsHtml + '</div>' +
+    '</div>';
+  }
+
+  document.getElementById('project-chat-log').addEventListener('click', function (e) {
+    var addBtn = e.target.closest('.chat-reaction-add');
+    if (addBtn) { openChatReactionPicker(addBtn.getAttribute('data-message-id'), addBtn); return; }
+    var reactBtn = e.target.closest('.project-chat-reaction');
+    if (reactBtn) toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji'));
+  });
 
   function sendProjectChatMessage() {
     var input = document.getElementById('project-chat-input');
@@ -1305,17 +1532,17 @@
   // Full-array rewrite, same as removeCommentAt/task comment edits -- arrayUnion can only add a
   // new element, never mutate an existing one's fields, and toggling a reaction changes a field
   // on a message that's already in the array.
-  function toggleProjectChatReaction(messageId, key) {
+  function toggleProjectChatReaction(messageId, emoji) {
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     if (!pdoc || !myName) return;
     var chat = (pdoc.chat || []).map(function (m) {
       if (m.id !== messageId) return m;
       var reactions = Object.assign({}, m.reactions);
-      var names = (reactions[key] || []).slice();
+      var names = (reactions[emoji] || []).slice();
       var idx = names.indexOf(myName);
       if (idx === -1) names.push(myName); else names.splice(idx, 1);
-      if (names.length) reactions[key] = names; else delete reactions[key];
+      if (names.length) reactions[emoji] = names; else delete reactions[emoji];
       return Object.assign({}, m, { reactions: reactions });
     });
     updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).catch(function (err) {
@@ -1401,10 +1628,6 @@
     setDoc(doc(projectTypingCol, pdoc.id), { entries: entries }).catch(function () { /* best-effort */ });
   }
 
-  document.getElementById('project-chat-close').addEventListener('click', closeProjectChat);
-  projectChatModal.addEventListener('click', function (e) { if (e.target === projectChatModal) closeProjectChat(); });
-  projectChatModal.addEventListener('keydown', trapFocus(projectChatModal));
-
   document.getElementById('project-chat-send-btn').addEventListener('click', sendProjectChatMessage);
   document.getElementById('project-chat-input').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendProjectChatMessage(); }
@@ -1417,11 +1640,6 @@
   });
   document.getElementById('project-chat-input').addEventListener('blur', clearProjectChatTyping);
 
-  document.getElementById('project-chat-log').addEventListener('click', function (e) {
-    var btn = e.target.closest('.project-chat-reaction');
-    if (!btn) return;
-    toggleProjectChatReaction(btn.getAttribute('data-message-id'), btn.getAttribute('data-reaction-key'));
-  });
   document.getElementById('project-chat-link-add-btn').addEventListener('click', addProjectChatLink);
   document.getElementById('project-chat-links').addEventListener('click', function (e) {
     var btn = e.target.closest('.project-chat-link-remove');
@@ -1723,9 +1941,7 @@
     reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>',
-    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>',
-    thumbsUp: '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>',
-    heart: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>'
+    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -3472,7 +3688,8 @@
     }
     var chatOpenBtn = e.target.closest('.project-chat-open');
     if (chatOpenBtn) {
-      openProjectChat(chatOpenBtn.getAttribute('data-project'));
+      setView('chat');
+      selectChatProject(chatOpenBtn.getAttribute('data-project'));
       return;
     }
     var addBtn = e.target.closest('.project-deadline-add');
@@ -5603,7 +5820,7 @@
   /* =========================================================
      VIEW SWITCH
   ========================================================= */
-  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived' };
+  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived' };
 
   function setView(view) {
     currentView = view;
@@ -5680,18 +5897,22 @@
   // joined this hidden set on a direct follow-up ("no need for this in activity page") rather
   // than staying merely greyed out like it is on Projects -- Activity's Sort is hidden outright,
   // not just disabled, so only Search remains, centered alone.
-  var ACTIVITY_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap', 'sort-by-wrap'];
+  // Chat joined the same hidden set once it became a standalone tab -- it's a project list +
+  // one thread, not a task list either, so none of these four apply there any more than they do
+  // on Activity.
+  var TOOLBAR_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap', 'sort-by-wrap'];
+  var TOOLBAR_HIDDEN_FILTER_VIEWS = ['activity', 'chat'];
 
   function syncToolbarLayout() {
-    var isActivity = currentView === 'activity';
-    ACTIVITY_HIDDEN_FILTER_WRAP_IDS.forEach(function (id) {
+    var hideFilters = TOOLBAR_HIDDEN_FILTER_VIEWS.indexOf(currentView) !== -1;
+    TOOLBAR_HIDDEN_FILTER_WRAP_IDS.forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.classList.toggle('hidden', isActivity);
+      if (el) el.classList.toggle('hidden', hideFilters);
     });
     var row = document.getElementById('toolbar-row');
     if (row) {
-      row.classList.toggle('justify-end', !isActivity);
-      row.classList.toggle('justify-center', isActivity);
+      row.classList.toggle('justify-end', !hideFilters);
+      row.classList.toggle('justify-center', hideFilters);
     }
   }
 
@@ -5820,6 +6041,7 @@
     // stale/empty archived data (0 completed projects, an empty Archived list) until this
     // listener's first snapshot lands and calls this function again.
     if (currentView === 'projects') { ensureArchivedTasksListener(); renderProjects(); }
+    if (currentView === 'chat') renderChatView();
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
     if (currentView === 'archived') { ensureArchivedTasksListener(); renderArchived(); }
@@ -6174,6 +6396,9 @@
   });
 
   function stopListeners() {
+    if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
+    if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
+    currentChatProjectName = null;
     if (unsubTasks) { unsubTasks(); unsubTasks = null; }
     if (unsubActivity) { unsubActivity(); unsubActivity = null; }
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
@@ -6353,9 +6578,9 @@
       // Full re-render, not just the Projects tab: project deadlines drive the Gantt's grouped
       // rows and the deadline popups too, so any of them can be on screen when this fires.
       renderAll();
-      // Keeps an open chat live for everyone in it -- a teammate's new message, reaction or
+      // Keeps the Chat tab live for everyone in it -- a teammate's new message, reaction or
       // pinned link lands here the same way an edited task lands in the tasks listener above.
-      if (currentChatProjectName && !projectChatModal.classList.contains('hidden')) renderProjectChatModal();
+      if (currentView === 'chat') renderChatView();
     }, function (err) {
       showToast('Project deadlines aren\'t loading: ' + err.message, 'error');
     });
@@ -6431,7 +6656,7 @@
     updateDoc(doc(notificationsCol, notifId), { read: true }).catch(function () {});
     notificationPanel.classList.add('hidden');
     var chatProject = item.getAttribute('data-notification-chat-project');
-    if (chatProject) { openProjectChat(chatProject); return; }
+    if (chatProject) { setView('chat'); selectChatProject(chatProject); return; }
     var taskId = item.getAttribute('data-notification-task');
     var t = taskId ? tasks.find(function (x) { return x.id === taskId; }) : null;
     if (t) openTaskModal(t);
@@ -6508,7 +6733,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T16:15:54Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T16:38:32Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
