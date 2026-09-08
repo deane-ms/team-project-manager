@@ -231,6 +231,44 @@
      content-column width instead of Flowboard stretching noticeably wider. */
   .app-container { max-width: 78rem; }
   @media (min-width: 1600px) { .app-container { max-width: min(92vw, 150rem); } }
+
+  /* ---------- sidebar ---------- */
+  /* Width lives in one CSS custom property, toggled by a single class on #sidebar itself --
+     collapsing is a single rule to tune here, not a value computed and re-applied from JS on
+     every click. */
+  #sidebar { width: 15rem; transition: width 0.15s ease; }
+  #sidebar.collapsed { width: 4.25rem; }
+  .sidebar-label { transition: opacity 0.1s ease; }
+  #sidebar.collapsed .sidebar-label { opacity: 0; pointer-events: none; position: absolute; }
+  #sidebar.collapsed .view-toggle-btn { justify-content: center; }
+  #sidebar.collapsed #sb-collapse-icon { transform: scaleX(-1); }
+
+  /* Nav item coloring lives here instead of the pile of individually-toggled Tailwind utility
+     classes the old horizontal tab row used (bg-white/shadow-card/text-brand-700/etc., toggled
+     per-class in setView()) -- that shape suited a white pill floating on a grey track; a
+     vertical rail item is a plainer on/off state, so setView() now toggles one class
+     ("active") and this rule decides what it looks like. */
+  .view-toggle-btn { color: #52525b; }
+  .dark .view-toggle-btn { color: #a1a1aa; }
+  .view-toggle-btn:hover { background: #fafafa; color: #27272a; }
+  .dark .view-toggle-btn:hover { background: rgba(63,63,70,0.6); color: #f4f4f5; }
+  .view-toggle-btn.active { background: #ffe4da; color: #b93816; }
+  .dark .view-toggle-btn.active { background: rgba(255,78,32,0.14); color: #ff9d7e; }
+
+  /* Below md, the sidebar is an off-canvas drawer (slides in from the left over a dimmed
+     backdrop) rather than a permanent rail -- there isn't room for both a rail and real
+     content on a phone. #app's own `flex` row layout is untouched; this just lifts the
+     sidebar out of flow and gives it somewhere to slide from. */
+  @media (max-width: 767px) {
+    #sidebar {
+      position: fixed; inset: 0 auto 0 0; z-index: 40; width: 17rem !important;
+      transform: translateX(-100%); transition: transform 0.2s ease;
+    }
+    #app.sidebar-open #sidebar { transform: translateX(0); }
+    #sidebar.collapsed .sidebar-label { opacity: 1; pointer-events: auto; position: static; }
+    #sidebar.collapsed .view-toggle-btn { justify-content: flex-start; }
+    #sb-collapse-btn { display: none; }
+  }
 </style>
 </head>
 <body class="bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 min-h-screen">
@@ -260,33 +298,128 @@
   </div>
 </div>
 
-<div id="app" class="min-h-screen flex flex-col hidden">
+<div id="app" class="h-screen flex hidden">
+
+  <!-- Only relevant below the sidebar's own md:translate-x-0 breakpoint (see CSS) -- the
+       sidebar becomes an off-canvas drawer there instead of a permanent rail, and this dims
+       the content behind it and gives the drawer somewhere to close to on tap. -->
+  <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-black/30 z-30 md:hidden"></div>
+
+  <!-- ============ SIDEBAR ============ -->
+  <!-- Nav used to be a horizontal tab row inside the header, sharing space with search, four
+       filters, and half a dozen action buttons -- reported directly as too much crammed into
+       one strip. Moved to its own persistent rail: nav is the one thing a sidebar structurally
+       does better than a tab row, and everything else that was fighting it for header space
+       now has the whole top bar to breathe in. See CLAUDE.md for what else moved (and what
+       deliberately didn't) and why. -->
+  <aside id="sidebar" class="shrink-0 h-screen flex flex-col bg-white dark:bg-zinc-800 border-r border-zinc-200 dark:border-zinc-700">
+    <div class="flex items-center gap-2.5 px-4 h-16 border-b border-zinc-100 dark:border-zinc-700 shrink-0">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card shrink-0">
+        <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+      </div>
+      <h1 class="sidebar-label text-sm font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none truncate">MS Project Manager</h1>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
+      <button data-view-btn="board" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+        <span class="sidebar-label truncate">Board</span>
+      </button>
+      <button data-view-btn="gantt" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>
+        <span class="sidebar-label truncate">Timeline</span>
+      </button>
+      <button data-view-btn="calendar" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span class="sidebar-label truncate">Calendar</span>
+      </button>
+      <button data-view-btn="people" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        <span class="sidebar-label truncate">People</span>
+      </button>
+      <button data-view-btn="projects" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span class="sidebar-label truncate">Projects</span>
+      </button>
+
+      <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
+
+      <button data-view-btn="activity" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+        <span class="sidebar-label truncate">Activity</span>
+      </button>
+      <button data-view-btn="suggestions" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <span class="sidebar-label truncate">Suggestions</span>
+      </button>
+      <button data-view-btn="archived" class="view-toggle-btn w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+        <span class="sidebar-label truncate">Archived</span>
+      </button>
+    </nav>
+
+    <!-- Account area anchored to the sidebar's bottom -- the one real relocation beyond "nav
+         moved," same Slack/Linear/Notion split as the mockup this was agreed against: bells
+         (glanced at from anywhere) stayed in the top bar, identity/theme/sign-out (set once,
+         rarely touched) live down here. user-menu-panel opens UPWARD (bottom-full, not
+         top-full) since its trigger now sits near the bottom of the viewport instead of the
+         top -- everything inside it (ids, content) is untouched, only its own position rule
+         changed. -->
+    <div class="border-t border-zinc-100 dark:border-zinc-700 p-2 shrink-0 relative">
+      <button id="sb-collapse-btn" type="button" class="hidden md:flex w-full items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/60" title="Collapse sidebar">
+        <svg id="sb-collapse-icon" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 19l-7-7 7-7"></path><path d="M20 19l-7-7 7-7"></path></svg>
+        <span class="sidebar-label truncate">Collapse</span>
+      </button>
+      <div id="user-chip" class="hidden items-center">
+        <button id="user-menu-trigger" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition">
+          <span id="user-chip-avatar" class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"></span>
+          <span id="user-chip-name" class="sidebar-label flex-1 min-w-0 text-left truncate"></span>
+          <svg class="sidebar-label w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+      </div>
+      <div id="user-menu-panel" class="hidden absolute left-2 bottom-full mb-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm panel-pop-in">
+        <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+          <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
+          <span id="theme-toggle-label">Switch to dark mode</span>
+        </button>
+        <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+          <span id="desktop-notif-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
+          <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
+        </button>
+        <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
+        <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          <span>Sign out</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN COLUMN ============ -->
+  <div class="flex-1 min-w-0 h-screen flex flex-col overflow-hidden">
 
   <!-- ============ HEADER ============ -->
-  <header class="sticky top-0 z-40 bg-white/90 dark:bg-zinc-800/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-700">
-    <div class="app-container mx-auto px-4 sm:px-6 pt-4 sm:pt-[1.75rem] pb-4">
+  <!-- No longer `sticky` -- it's a shrink-0 flex sibling above the scrolling <main> now (see the
+       overflow-hidden column wrapper above), which pins it at the top by construction instead
+       of needing position:sticky the way it did back when header+main scrolled together as one
+       page. -->
+  <header class="shrink-0 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+    <div class="px-4 sm:px-6 py-3">
       <div class="flex flex-wrap items-center gap-3 justify-between">
-        <div class="flex items-center gap-3.5">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card shrink-0">
-            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
-          </div>
-          <div>
-            <h1 class="text-xl font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none">
-              <span class="sm:hidden">MS Project Manager</span>
-              <span class="hidden sm:inline">MediaShock APAC — Project Manager</span>
-            </h1>
-            <p class="hidden sm:block text-[0.82rem] text-zinc-500 dark:text-zinc-400 leading-none mt-1">Project &amp; task prioritization dashboard</p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 flex-wrap justify-end ml-auto relative">
-          <div id="stats-bar" class="hidden lg:flex items-center gap-4 mr-2 pr-4 border-r border-zinc-200 dark:border-zinc-700 text-sm">
+        <div class="flex items-center gap-3 min-w-0">
+          <button type="button" id="mobile-menu-btn" class="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shrink-0">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+          <h2 id="current-view-title" class="text-base font-bold text-zinc-900 dark:text-white truncate">Board</h2>
+          <div id="stats-bar" class="hidden lg:flex items-center gap-4 pl-3 ml-1 border-l border-zinc-200 dark:border-zinc-700 text-sm">
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-400"></span><span id="stat-total" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">tasks</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">overdue</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span id="stat-high" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">high priority</span></div>
             <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">completed</span></div>
           </div>
+        </div>
 
+        <div class="flex items-center gap-2 flex-wrap justify-end ml-auto relative">
           <div id="digest-bell-wrap" class="hidden">
             <button id="btn-digest" title="This Week" class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -309,40 +442,13 @@
           </div>
           <!-- Positioned relative to the whole icons row (not notification-bell-wrap) so it
                can't render off-screen when the row wraps and the bell isn't at the true
-               right edge -- see the same reasoning on #user-menu-panel below. -->
+               right edge. -->
           <div id="notification-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
             <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
               <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
               <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
             </div>
             <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
-          </div>
-          <div id="user-chip" class="hidden items-center mr-1">
-            <button id="user-menu-trigger" class="inline-flex items-center gap-1.5 h-9 pl-1.5 pr-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
-              <span id="user-chip-avatar" class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"></span>
-              <span id="user-chip-name" class="hidden sm:inline"></span>
-              <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-            </button>
-          </div>
-          <!-- Positioned relative to the whole icons row, not #user-chip: on mobile the row
-               wraps and the chip isn't always the rightmost element, so a panel anchored to
-               the chip's own (narrow, off-right) box could render partly off-screen to the
-               left. Anchoring to the full row -- which is itself right-aligned via
-               justify-end/ml-auto above -- keeps it on-screen regardless of chip position. -->
-          <div id="user-menu-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm panel-pop-in">
-            <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
-              <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
-              <span id="theme-toggle-label">Switch to dark mode</span>
-            </button>
-            <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
-              <span id="desktop-notif-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
-              <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
-            </button>
-            <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
-            <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
-              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-              <span>Sign out</span>
-            </button>
           </div>
           <button id="btn-export" title="Export" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -357,18 +463,12 @@
         </div>
       </div>
 
-      <!-- Toolbar: view switch / search / filters -->
-      <div class="flex flex-wrap items-center gap-2 mt-3 sm:mt-[1.5rem]">
-        <!-- Mobile-only: nav + filters triggers share one row instead of stacking, since
-             both are short buttons -- desktop never sees this (sm:hidden). -->
+      <!-- Toolbar: search / filters -- view switching lives in the sidebar now. -->
+      <div class="flex flex-wrap items-center gap-2 mt-3">
+        <!-- Mobile-only filters trigger -- previously shared a row with mobile-view-trigger,
+             which no longer exists (the hamburger button above opens the sidebar drawer
+             instead), so this is full-width on its own now. -->
         <div class="flex sm:hidden items-center gap-2 w-full order-1">
-          <button type="button" id="mobile-view-trigger" class="flex-1 flex items-center justify-between gap-2 text-sm font-semibold px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200">
-            <span class="flex items-center gap-1.5">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-              <span id="mobile-view-trigger-label">Board</span>
-            </span>
-            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-          </button>
           <button type="button" id="mobile-filters-trigger" class="flex-1 flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300">
             <span class="flex items-center gap-1.5">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
@@ -379,42 +479,12 @@
           </button>
         </div>
 
-        <div class="w-full sm:w-auto sm:contents order-2 sm:order-none">
-        <div id="view-tab-row" class="hidden sm:flex flex-col sm:flex-row items-stretch sm:items-center gap-1 bg-zinc-100 dark:bg-zinc-700 rounded-lg p-1 sm:overflow-x-auto min-w-0 max-w-full">
-          <button data-view-btn="board" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>Board
-          </button>
-          <button data-view-btn="gantt" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>Timeline
-          </button>
-          <button data-view-btn="calendar" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>Calendar
-          </button>
-          <button data-view-btn="people" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>People
-          </button>
-          <button data-view-btn="projects" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>Projects
-          </button>
-          <button data-view-btn="activity" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>Activity
-          </button>
-          <button data-view-btn="suggestions" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Suggestions
-          </button>
-          <button data-view-btn="archived" class="view-toggle-btn shrink-0 text-sm font-medium px-3 py-1.5 rounded-md transition flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>Archived
-          </button>
-        </div>
-        </div>
-
-        <div class="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 order-3 sm:order-none">
-        <div class="relative w-full sm:flex-1 sm:min-w-[240px] sm:max-w-xs">
+        <div class="relative w-full sm:flex-1 sm:min-w-[240px] sm:max-w-xs order-2">
           <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input id="filter-search" type="text" placeholder="Search tasks, checklists, comments…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
         </div>
 
-        <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents">
+        <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents order-3">
         <div class="relative w-full sm:w-auto">
           <select id="filter-priority" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
             <option value="">All priorities</option>
@@ -460,12 +530,11 @@
         </div>
         <button id="btn-clear-filters" class="text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
         </div>
-        </div>
       </div>
     </div>
   </header>
 
-  <main class="app-container w-full mx-auto px-4 sm:px-6 pt-5 pb-16 flex-1 flex flex-col gap-6">
+  <main class="flex-1 min-h-0 overflow-y-auto app-container w-full mx-auto px-4 sm:px-6 pt-5 pb-16 flex flex-col gap-6">
 
     <!-- ============ FOCUS OF THE DAY ============ -->
     <section id="focus-section">
@@ -577,11 +646,15 @@
       <div id="archived-list" class="max-w-2xl mx-auto flex flex-col gap-2"></div>
     </section>
 
+    <!-- Inside the scrolling <main>, not pinned below it -- only reached by actually scrolling
+         to the end, same as before the shell restructure; it isn't important enough to spend
+         permanent footer space on every screen. -->
+    <footer class="text-center text-xs text-zinc-400 dark:text-zinc-600 py-4">
+      MediaShock APAC — Project Manager — shared live with the team via Firestore. Signed in with your Mediashock Google account.
+    </footer>
   </main>
 
-  <footer class="text-center text-xs text-zinc-400 dark:text-zinc-600 py-4">
-    MediaShock APAC — Project Manager — shared live with the team via Firestore. Signed in with your Mediashock Google account.
-  </footer>
+  </div>
 </div>
 
 <!-- ============ TASK MODAL ============ -->
@@ -4956,20 +5029,20 @@
     currentView = view;
     document.querySelectorAll('[data-view]').forEach(function (el) { el.classList.remove('active-view'); });
     document.getElementById('view-' + view).classList.add('active-view');
+    // One class instead of the old pile of individually-toggled Tailwind utilities -- see the
+    // .view-toggle-btn/.active CSS rules (styles block) for what it looks like now that these
+    // buttons live in the sidebar rail instead of a horizontal tab row.
     document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
-      var active = btn.getAttribute('data-view-btn') === view;
-      btn.classList.toggle('bg-white', active);
-      btn.classList.toggle('dark:bg-zinc-600', active);
-      btn.classList.toggle('shadow-card', active);
-      btn.classList.toggle('text-brand-700', active);
-      btn.classList.toggle('dark:text-brand-400', active);
-      btn.classList.toggle('text-zinc-500', !active);
-      btn.classList.toggle('dark:text-zinc-400', !active);
+      btn.classList.toggle('active', btn.getAttribute('data-view-btn') === view);
     });
-    document.getElementById('mobile-view-trigger-label').textContent = VIEW_LABELS[view] || view;
-    // Picking a view closes the mobile nav menu -- it stays open on desktop since there
-    // `view-tab-row` is always visible regardless of this class (sm:flex overrides it).
-    document.getElementById('view-tab-row').classList.add('hidden');
+    document.getElementById('current-view-title').textContent = VIEW_LABELS[view] || view;
+    // Picking a view closes the mobile sidebar drawer -- it stays permanently open on desktop,
+    // which never gets this class in the first place (see the hamburger/backdrop handlers below).
+    // appRoot isn't assigned until the AUTH section further down, but that's fine: this function
+    // body only ever runs later, from a click, long after the module's synchronous top-to-bottom
+    // pass has already set it (same reasoning already relied on elsewhere in this file).
+    appRoot.classList.remove('sidebar-open');
+    document.getElementById('sidebar-backdrop').classList.add('hidden');
     syncSearchAvailability();
     renderCurrentSecondaryView();
   }
@@ -5001,10 +5074,32 @@
     btn.addEventListener('click', function () { setView(btn.getAttribute('data-view-btn')); });
   });
 
-  document.getElementById('mobile-view-trigger').addEventListener('click', function (e) {
-    e.stopPropagation();
-    document.getElementById('view-tab-row').classList.toggle('hidden');
+  // Sidebar collapse (desktop icon-only rail) and the mobile off-canvas drawer are two
+  // different things sharing one #sidebar element and one "collapsed" class shape, kept apart
+  // entirely by the CSS media query above -- collapsed means "narrow rail" above 767px and
+  // "full-width drawer, ignore collapsed" below it (#sb-collapse-btn itself is hidden on
+  // mobile too, so the drawer can only ever be opened/closed, never collapsed).
+  var sidebarEl = document.getElementById('sidebar');
+  var SIDEBAR_COLLAPSED_KEY = 'flowboard_sidebar_collapsed';
+  try {
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1') sidebarEl.classList.add('collapsed');
+  } catch (e) { /* ignore */ }
+  document.getElementById('sb-collapse-btn').addEventListener('click', function () {
+    var collapsed = sidebarEl.classList.toggle('collapsed');
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : ''); } catch (e) { /* ignore */ }
   });
+
+  function closeMobileSidebar() {
+    appRoot.classList.remove('sidebar-open');
+    document.getElementById('sidebar-backdrop').classList.add('hidden');
+  }
+  document.getElementById('mobile-menu-btn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    appRoot.classList.add('sidebar-open');
+    document.getElementById('sidebar-backdrop').classList.remove('hidden');
+  });
+  document.getElementById('sidebar-backdrop').addEventListener('click', closeMobileSidebar);
+
   document.getElementById('mobile-filters-trigger').addEventListener('click', function (e) {
     e.stopPropagation();
     var nowHidden = document.getElementById('filters-panel').classList.toggle('hidden');
@@ -5274,6 +5369,7 @@
     if (e.key === 'Escape') {
       if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
       if (!confirmModal.classList.contains('hidden')) closeConfirm();
+      if (appRoot.classList.contains('sidebar-open')) closeMobileSidebar();
     }
   });
 
@@ -5324,9 +5420,9 @@
     userMenuPanel.classList.toggle('hidden');
   });
   document.addEventListener('click', function (e) {
-    // The panel is a sibling of #user-chip (not nested inside it) so it can be positioned
-    // relative to the whole icons row -- checked against the trigger and the panel itself
-    // instead of a shared wrapper.
+    // The panel is a sibling of #user-chip (not nested inside it), positioned relative to their
+    // shared parent (the sidebar's bottom account area) -- checked against the trigger and the
+    // panel itself instead of that shared wrapper.
     if (!userMenuPanel.classList.contains('hidden') && !userMenuTrigger.contains(e.target) && !userMenuPanel.contains(e.target)) {
       userMenuPanel.classList.add('hidden');
     }
@@ -5640,7 +5736,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T04:55:29Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T06:10:37Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

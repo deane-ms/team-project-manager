@@ -733,6 +733,58 @@ to bottom:
    `onAuthStateChanged`.
 9. **Version-poll auto-reload** — see Deploying above.
 
+### App shell: sidebar nav, not a horizontal tab row
+
+`#app` is a top-level flex **row**, not a flex column: `<aside id="sidebar">` beside a
+`<div class="flex-1 ... flex flex-col overflow-hidden">` holding the (now much slimmer) `<header>`
+and `<main>`. This replaced a single flex-column page where 8 view tabs, search, four filters, and
+half a dozen action buttons all lived in one horizontal header — reported directly as too much
+crammed into one strip. Agreed on via an interactive mockup (a separate, standalone artifact) before
+touching this file, per standing collaborate-before-building feedback — see that memory if this
+needs revisiting.
+
+- **Nav is the one thing that actually moved to the sidebar.** The 8 `.view-toggle-btn` buttons
+  (same `data-view-btn` attribute, same click wiring, same icons) now live in a vertical
+  `<nav>` instead of `#view-tab-row`'s horizontal track. `setView()` used to toggle 7 individual
+  Tailwind utility classes per button (`bg-white`/`shadow-card`/`text-brand-700`/etc. — shaped for
+  a white pill floating on a grey track) — now toggles a single `.active` class, with
+  `.view-toggle-btn`/`.view-toggle-btn.active`/`:hover` rules in the styles block deciding what
+  that looks like for a rail item instead.
+- **Notification/digest bells stayed in the top header; account (avatar, theme toggle, sign out)
+  moved to the sidebar's bottom.** This was the one deliberate relocation beyond "nav moved,"
+  matching the Slack/Linear/Notion split: bells are glanced at from wherever you are and shouldn't
+  need a side panel open; identity/settings are "set once, rarely touched." `#user-menu-panel`'s
+  own markup/ids/content are untouched — only its position rule flipped from `top-full mt-1
+  right-0` to `bottom-full mb-1 left-2`, since its trigger now sits near the bottom of the
+  viewport instead of the top.
+- **The header is no longer `position: sticky`.** It's a `shrink-0` flex sibling stacked above
+  the scrolling `<main>` inside the same overflow-hidden column as the sidebar, which pins it at
+  the top by construction — sticky positioning was only ever needed back when header+main
+  scrolled together as one ordinary page. `<footer>` moved from a sibling of `<main>` to the last
+  thing *inside* it, so it's still only seen by actually scrolling to the end (unchanged
+  behavior), not turned into a permanently-visible status bar.
+- **Sidebar collapse (icon-only rail) is one class, one CSS custom property.** `#sidebar.collapsed`
+  swaps a single width via a CSS custom property (`--` not used directly — width is just two
+  fixed values, expanded vs. collapsed, on the class selector) and fades `.sidebar-label` spans to
+  `opacity:0` — nothing computed or re-applied from JS per click. Persisted to `localStorage`
+  (`flowboard_sidebar_collapsed`), restored immediately on load (no auth dependency, unlike
+  everything else that waits on `onAuthStateChanged`).
+- **Below 767px, the sidebar becomes an off-canvas drawer** (`position: fixed`, `translateX(-100%)`
+  by default, slides in on `#app.sidebar-open`) with a dedicated `#sidebar-backdrop` — replacing
+  the old `#mobile-view-trigger`, which toggled `#view-tab-row`'s own `hidden` class inline rather
+  than sliding anything. The drawer closes on: picking a view (`setView()`), tapping the backdrop,
+  or Escape (added to the existing task-modal/confirm-modal Escape handler for the same reason
+  those get it — a backdropped overlay should close on Escape). `#sb-collapse-btn` itself is
+  `hidden` below `md:`, so "collapsed" and "drawer open" can never be a state to reason about at
+  the same time — a stale `collapsed` class surviving a resize down to mobile width is overridden
+  back to full labels by the mobile media query (same specificity, later in the stylesheet, wins
+  when its condition matches).
+- **Verified against the real file, not just the standalone mockup**, before shipping: a scratch
+  copy with the auth gate forced open and the real (Firebase-importing) module script swapped for
+  a tiny stand-in wiring only the collapse/drawer/nav-click behavior under test, screenshotted in
+  light, dark, collapsed, and mobile-drawer states. Still not a live-browser/Firestore check (no
+  emulator in this environment) — worth a real click-through after deploying.
+
 ### No mock/sample data
 
 There is deliberately **no sample or demo content anywhere in this app.** A `seedDemoData()`
