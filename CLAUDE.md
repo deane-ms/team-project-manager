@@ -1016,9 +1016,12 @@ to bottom:
        existing mention/link styling (`brand-600` text) needs a light background to stay
        readable, and white text on a solid `brand-500` bubble would have made both nearly
        invisible; changing bubble color was cheaper and safer than touching that shared function.
-       Reply/forward/delete icons stay `opacity-0 group-hover:opacity-100` (Tailwind `group`) —
-       visible on hover only, not stacked on every message at rest, for the same "stop showing
-       controls nobody's touching" reasoning the quick-reaction row was cut for just above.
+       Reply/forward/delete/react first shipped as an `opacity-0 group-hover:opacity-100` icon
+       row, then moved to a right-click context menu on a direct follow-up with a WhatsApp Web
+       screenshot attached ("can we have the same way whatsapp does it? Right click to show
+       options") — see the dedicated section below; `chatMessageHtml` today renders only the
+       bubble, timestamp, and any reactions someone's actually added, nothing interactive beyond
+       that at rest or on hover.
        - **Reply is a quoted preview, not a nested thread** — deliberately not a rerun of task
          comments' real `replyTo` tree (`renderCommentsLog`, which actually indents children under
          parents). Chat stays flat and chronological; a reply is just a message that carries a
@@ -1047,6 +1050,53 @@ to bottom:
          carried over; a forwarded message starts fresh with zero reactions in its new chat.
          `notifyOnProjectChat` still runs against the target project, so an @mention inside a
          forwarded message notifies there exactly like a freshly typed one would.
+     - **`#chat-reply-preview` showed up permanently, empty, regardless of its `hidden`
+       attribute** — reported directly ("the reply preview bar should not be there unless
+       replying"), twice; the first fix attempt (bumping the whole feature) didn't address the
+       actual cause. Root cause: its static class list included `flex` *alongside* the native
+       `hidden` attribute. `[hidden]` (a UA-stylesheet rule) and `.flex` (an author-stylesheet
+       rule) are equal specificity, and the author stylesheet always wins a tie — so `.flex`'s
+       `display: flex` overrode `[hidden]`'s `display: none` regardless of whether the attribute
+       was actually set at runtime. This is the identical bug class `task-project-link-row`
+       already works around elsewhere in this file (see its own comment) — the fix here is the
+       same: `flex` was removed from the static class list, and `startChatReply`/`cancelChatReply`
+       now toggle it explicitly alongside `.hidden`, instead of leaving a competing display class
+       sitting in the markup permanently. Worth checking any *other* `hidden`+`flex` (or
+       `hidden`+`grid`/`block`) pairing in this file for the same latent bug — the other three
+       Chat floating panels (`chat-reaction-picker`, `chat-new-menu`, `chat-forward-menu`) happen
+       to be safe only because none of them pairs `hidden` with a competing display-setting class
+       (`fixed` alone doesn't touch `display`).
+     - **Message actions moved to a right-click context menu, WhatsApp Web's own pattern** — asked
+       for directly with a screenshot of WhatsApp's real menu attached ("can we have the same way
+       whatsapp does it? Right click to show options"), after the hover-icon row and the
+       always-present reaction "+" were *both* separately reported as visual clutter first.
+       `chatMessageHtml` now renders nothing interactive beyond existing reaction pills at rest —
+       `data-message-row="<id>"` on the outer wrapper is the only hook a `contextmenu` listener on
+       `#project-chat-log` needs (`e.preventDefault()`, then `openChatMessageMenu(id, e.clientX,
+       e.clientY)`). One shared `#chat-message-menu` panel (`position: fixed`, positioned at the
+       click coordinates the same way the other floating panels position off a trigger's rect) —
+       a quick-reaction row (`CHAT_CONTEXT_REACTIONS`, WhatsApp's own six: 👍❤️😂😮😢🙏) plus a
+       "+" into the full picker, then Reply / Forward / Copy / Delete. Right-click is desktop-only
+       by design, same as WhatsApp's own — there's no long-press equivalent wired for touch, since
+       that wasn't what was shown or asked for.
+       - **Copy is new** (`#chat-message-menu-copy`, `navigator.clipboard.writeText`) — the one
+         action that didn't exist in any form before this menu; every other action already existed
+         as its own inline control and just moved.
+       - **Delete only ever shows for your own message** — same `msg.author !== myName` check the
+         old inline button used, still backed by the same `firestore.rules` boundary
+         (`chatSingleOwnRemoval`) regardless of where the button that triggers it lives.
+       - **Forward and the reaction "+" both read their trigger button's position *before* closing
+         the message menu**, not after — `openChatForwardMenu`/`openChatReactionPicker` compute
+         their own position from `getBoundingClientRect()` on the button that opened them, which
+         returns a meaningless all-zero rect once that button's ancestor menu is `hidden`.
+     - **Chat messages don't appear in the Activity feed at all** — reported directly ("chat
+       messages should not appear in Activity"). `logActivity` calls for posting, removing, and
+       forwarding an individual message were removed outright (they'd have flooded a task-focused
+       audit log with routine chat traffic, and surfaced message *snippets* somewhere well beyond
+       the chat itself). Creating or deleting an entire chat thread (`project_chat_created`/
+       `project_chat_deleted`) still logs — that's a project-level event closer in kind to a
+       deadline change than to the message traffic inside the thread, and stays rare enough not to
+       be noise.
      - **Typing indicators and reactions were asked for directly, then the free-tier constraint
        was clarified before building either.** Both are plain Firestore field writes with no
        Cloud Storage dependency, so both fit inside Spark's free quota (50k reads/20k writes per

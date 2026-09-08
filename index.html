@@ -732,7 +732,15 @@
               <!-- Reply preview -- shown above the compose box while replying to a message
                    (WhatsApp's "swipe to reply" preview, minus the swipe), cleared on send/cancel
                    or on switching to a different chat. -->
-              <div id="chat-reply-preview" hidden class="flex items-start gap-2 mb-1.5 pl-2.5 pr-2 py-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-700/50 border-l-2 border-brand-400">
+              <!-- `flex` is intentionally NOT in this static class list -- with the native
+                   `hidden` attribute, a co-present `flex` utility class wins the display
+                   property at rest (both are author/UA rules of equal specificity, and Tailwind's
+                   stylesheet loads after the UA one), which is exactly what made this bar show up
+                   permanently, empty, regardless of the attribute -- reported directly ("the
+                   reply preview bar should not be there unless replying"). JS toggles `flex`
+                   alongside `.hidden` instead, same idiom `task-project-link-row` already uses
+                   for this identical class of bug. -->
+              <div id="chat-reply-preview" hidden class="items-start gap-2 mb-1.5 pl-2.5 pr-2 py-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-700/50 border-l-2 border-brand-400">
                 <div class="min-w-0 flex-1">
                   <p id="chat-reply-preview-author" class="text-xs font-semibold text-brand-600 dark:text-brand-400"></p>
                   <p id="chat-reply-preview-text" class="text-xs text-zinc-500 dark:text-zinc-400 truncate"></p>
@@ -1010,11 +1018,35 @@
 <div id="chat-new-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1"></div>
 
 <!-- "Forward to..." picker -- same fixed-position/off-DOM-parent reasoning as the two panels
-     above, opened from a message's forward button (openChatForwardMenu). Lists existing chats to
-     forward *into*, excluding whichever chat is currently open. -->
+     above, opened from the message context menu below (openChatForwardMenu). Lists existing
+     chats to forward *into*, excluding whichever chat is currently open. -->
 <div id="chat-forward-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1">
   <p class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Forward to…</p>
   <div id="chat-forward-options"></div>
+</div>
+
+<!-- Per-message right-click menu -- WhatsApp's own desktop pattern, on request ("right click to
+     show options"). Replaced the always-present hover row (reply/forward/delete icons) and the
+     permanently-visible "add a reaction" dashed "+" -- both reported as visual clutter -- with a
+     single context menu holding all of it, invisible until you actually ask for it. -->
+<div id="chat-message-menu" hidden class="fixed z-40 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-1.5">
+  <div id="chat-message-menu-reactions" class="flex items-center gap-0.5 px-0.5 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-700"></div>
+  <button type="button" id="chat-message-menu-reply" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
+    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
+    Reply
+  </button>
+  <button type="button" id="chat-message-menu-forward" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
+    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>
+    Forward
+  </button>
+  <button type="button" id="chat-message-menu-copy" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
+    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    Copy
+  </button>
+  <button type="button" id="chat-message-menu-delete" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-rose-600 dark:text-rose-400 rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10">
+    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+    Delete
+  </button>
 </div>
 
 <script type="module">
@@ -1421,7 +1453,10 @@
 
   document.addEventListener('click', function (e) {
     var panel = document.getElementById('chat-reaction-picker');
-    if (panel.hidden || panel.contains(e.target) || e.target.closest('.chat-reaction-add')) return;
+    // #chat-message-menu-more-react is the "+" that opens this now (the old per-message
+    // .chat-reaction-add button is gone) -- excluded so the same click that opens the picker
+    // doesn't immediately register as the "outside click" that closes it again.
+    if (panel.hidden || panel.contains(e.target) || e.target.closest('#chat-message-menu-more-react')) return;
     closeChatReactionPicker();
   });
 
@@ -1822,6 +1857,9 @@
     var mine = m.author === myName;
     var reactions = m.reactions || {};
     var usedReactions = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
+    // No more "+" add-reaction button here -- reacting at all now goes through the right-click
+    // menu (openChatMessageMenu). An existing reaction pill is still directly clickable to
+    // toggle your own, since that's real information already on screen, not an idle affordance.
     var reactionsHtml = usedReactions.map(function (emoji) {
       var names = reactions[emoji] || [];
       var mineReacted = names.indexOf(myName) !== -1;
@@ -1833,7 +1871,6 @@
         '<span>' + emoji + '</span>' + (names.length ? '<span class="text-zinc-500 dark:text-zinc-400 font-medium">' + names.length + '</span>' : '') +
       '</button>';
     }).join('');
-    reactionsHtml += '<button type="button" class="chat-reaction-add inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300" data-message-id="' + m.id + '" title="Add a reaction">' + svgIcon('plus', 'w-3 h-3') + '</button>';
 
     var quotedHtml = '';
     if (m.replyTo) {
@@ -1864,44 +1901,31 @@
         '<p class="text-sm whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
       '</div>';
 
-    // Reply/forward/delete stay hidden until hover (group/group-hover) -- visible on every
-    // message at once was exactly the "always six icons nobody's touching" clutter the quick-
-    // reaction row was already cut for; the timestamp alone is enough to see at rest.
-    var actionsHtml = '<div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">' +
-        '<button type="button" class="chat-message-reply p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-message-id="' + m.id + '" aria-label="Reply">' + svgIcon('reply', 'w-3 h-3') + '</button>' +
-        '<button type="button" class="chat-message-forward p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-message-id="' + m.id + '" aria-label="Forward">' + svgIcon('forward', 'w-3 h-3') + '</button>' +
-        (mine ? '<button type="button" class="chat-message-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-message-id="' + m.id + '" aria-label="Remove your message">' + svgIcon('x', 'w-3 h-3') + '</button>' : '') +
-      '</div>';
-
-    var metaRowHtml = '<div class="flex items-center gap-1 mt-0.5">' +
-        '<span class="text-[10px] text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
-        actionsHtml +
-      '</div>';
-
-    return '<div class="flex ' + (mine ? 'justify-end' : 'justify-start') + ' group">' +
+    // No reply/forward/delete icons here either, hover or otherwise -- both went into the
+    // right-click menu (openChatMessageMenu below), on request ("right click to show options,
+    // same as whatsapp does it"). Just the timestamp at rest.
+    return '<div class="flex ' + (mine ? 'justify-end' : 'justify-start') + '" data-message-row="' + m.id + '">' +
       '<div class="max-w-[78%] flex flex-col ' + (mine ? 'items-end' : 'items-start') + '">' +
-        nameRowHtml + bubbleHtml + metaRowHtml +
-        '<div class="flex items-center flex-wrap gap-1.5 mt-1">' + reactionsHtml + '</div>' +
+        nameRowHtml + bubbleHtml +
+        '<span class="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+        (reactionsHtml ? '<div class="flex items-center flex-wrap gap-1.5 mt-1">' + reactionsHtml + '</div>' : '') +
       '</div>' +
     '</div>';
   }
 
   document.getElementById('project-chat-log').addEventListener('click', function (e) {
-    var addBtn = e.target.closest('.chat-reaction-add');
-    if (addBtn) { openChatReactionPicker(addBtn.getAttribute('data-message-id'), addBtn); return; }
     var reactBtn = e.target.closest('.project-chat-reaction');
-    if (reactBtn) { toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji')); return; }
-    var replyBtn = e.target.closest('.chat-message-reply');
-    if (replyBtn) { startChatReply(replyBtn.getAttribute('data-message-id')); return; }
-    var forwardBtn = e.target.closest('.chat-message-forward');
-    if (forwardBtn) { openChatForwardMenu(forwardBtn.getAttribute('data-message-id'), forwardBtn); return; }
-    var removeBtn = e.target.closest('.chat-message-remove');
-    if (removeBtn) {
-      var messageId = removeBtn.getAttribute('data-message-id');
-      openConfirm('Remove your message?', 'This removes it for everyone on the team. This cannot be undone.', function () {
-        removeChatMessage(messageId);
-      });
-    }
+    if (reactBtn) toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji'));
+  });
+
+  // Right-click for message actions -- the WhatsApp Web pattern shown directly as a reference
+  // screenshot ("can we have the same way whatsapp does it? Right click to show options"),
+  // replacing what used to be an always-present (or hover-revealed) icon row entirely.
+  document.getElementById('project-chat-log').addEventListener('contextmenu', function (e) {
+    var row = e.target.closest('[data-message-row]');
+    if (!row) return;
+    e.preventDefault();
+    openChatMessageMenu(row.getAttribute('data-message-row'), e.clientX, e.clientY);
   });
 
   // Deliberately narrower than removing a task comment (removeCommentAt, open to the whole
@@ -1923,10 +1947,12 @@
       return;
     }
     var chat = (pdoc.chat || []).filter(function (m) { return m.id !== messageId; });
-    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).then(function () {
-      var snippet = removed.text ? (removed.text.length > 60 ? removed.text.slice(0, 60) + '…' : removed.text) : '';
-      logActivity('project_chat', 'Removed a message in the "' + currentChatProjectName + '" group chat: "' + snippet + '"');
-    }).catch(function (err) {
+    // Deliberately no logActivity call -- individual chat messages (post/remove/forward) don't
+    // appear in the Activity feed at all, on request ("chat messages should not appear in
+    // Activity"). Creating/deleting the chat thread itself still logs (see createProjectChat/
+    // deleteProjectChat) since that's a project-level event closer to a deadline change than to
+    // the message traffic inside it.
+    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).catch(function (err) {
       showToast('Could not remove message: ' + err.message, 'error');
     });
   }
@@ -1953,7 +1979,8 @@
       projectChatMentions.close();
       clearProjectChatTyping();
       notifyOnProjectChat(text, currentChatProjectName);
-      logActivity('project_chat', 'Posted in the "' + currentChatProjectName + '" group chat');
+      // No logActivity call -- see removeChatMessage's comment for why chat messages are
+      // deliberately excluded from the Activity feed entirely.
     }).catch(function (err) {
       showToast('Could not send: ' + err.message, 'error');
     });
@@ -1972,12 +1999,14 @@
     document.getElementById('chat-reply-preview-author').textContent = original.author || 'Unknown';
     document.getElementById('chat-reply-preview-text').textContent = original.text || '';
     document.getElementById('chat-reply-preview').hidden = false;
+    document.getElementById('chat-reply-preview').classList.add('flex');
     document.getElementById('project-chat-input').focus();
   }
 
   function cancelChatReply() {
     chatReplyTarget = null;
     document.getElementById('chat-reply-preview').hidden = true;
+    document.getElementById('chat-reply-preview').classList.remove('flex');
   }
   document.getElementById('chat-reply-cancel').addEventListener('click', cancelChatReply);
 
@@ -2031,7 +2060,10 @@
   });
   document.addEventListener('click', function (e) {
     var panel = document.getElementById('chat-forward-menu');
-    if (panel.hidden || panel.contains(e.target) || e.target.closest('.chat-message-forward')) return;
+    // #chat-message-menu-forward is what opens this now (the old per-message .chat-message-
+    // forward button is gone) -- same "don't self-close on the opening click" reasoning as the
+    // reaction picker's own guard above.
+    if (panel.hidden || panel.contains(e.target) || e.target.closest('#chat-message-menu-forward')) return;
     closeChatForwardMenu();
   });
 
@@ -2047,14 +2079,100 @@
       id: uid(), text: original.text, date: new Date().toISOString(), author: myName,
       forwarded: true, forwardedFrom: currentChatProjectName
     };
+    // No logActivity call here either -- see removeChatMessage's comment.
     updateDoc(doc(projectsCol, targetPdoc.id), { chat: arrayUnion(forwarded) }).then(function () {
       showToast('Forwarded to ' + targetName, 'success');
-      logActivity('project_chat', 'Forwarded a message from "' + currentChatProjectName + '" to the "' + targetName + '" group chat');
       notifyOnProjectChat(original.text, targetName);
     }).catch(function (err) {
       showToast('Could not forward message: ' + err.message, 'error');
     });
   }
+
+  /* ---- Per-message right-click menu -- WhatsApp Web's own pattern, shown directly as a
+     reference screenshot ("can we have the same way whatsapp does it? Right click to show
+     options"). Reply/forward/copy/delete and reacting all live here now; nothing about a
+     message is visible/clickable until you actually right-click it. Only wired to a real
+     `contextmenu` event, not a long-press -- there's no touch/mobile equivalent, same as
+     WhatsApp's own desktop-only right-click (mobile WhatsApp long-presses instead). ---- */
+  var chatMessageMenuId = null;
+  var CHAT_CONTEXT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']; // WhatsApp's own quick set
+
+  function openChatMessageMenu(messageId, x, y) {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var msg = pdoc && (pdoc.chat || []).find(function (m) { return m.id === messageId; });
+    if (!msg) return;
+    chatMessageMenuId = messageId;
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    var reactionsRow = document.getElementById('chat-message-menu-reactions');
+    reactionsRow.innerHTML = CHAT_CONTEXT_REACTIONS.map(function (emoji) {
+      return '<button type="button" class="chat-message-menu-react w-7 h-7 flex items-center justify-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 text-base" data-emoji="' + emoji + '">' + emoji + '</button>';
+    }).join('') + '<button type="button" id="chat-message-menu-more-react" title="More reactions" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">' + svgIcon('plus', 'w-3.5 h-3.5') + '</button>';
+    // Delete only ever offered on your own message -- same rule the old inline button enforced,
+    // still backed by the real firestore.rules boundary (chatSingleOwnRemoval), not just this.
+    document.getElementById('chat-message-menu-delete').classList.toggle('hidden', msg.author !== myName);
+    var menu = document.getElementById('chat-message-menu');
+    menu.hidden = false;
+    var mw = menu.offsetWidth || 208;
+    var mh = menu.offsetHeight || 220;
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - mw - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + 'px';
+  }
+
+  function closeChatMessageMenu() {
+    document.getElementById('chat-message-menu').hidden = true;
+    chatMessageMenuId = null;
+  }
+
+  document.getElementById('chat-message-menu-reactions').addEventListener('click', function (e) {
+    // Read before closing -- openChatReactionPicker positions itself off this button's own
+    // rect, which is only meaningful while the message menu (and this button) is still visible.
+    var moreBtn = e.target.closest('#chat-message-menu-more-react');
+    if (moreBtn && chatMessageMenuId) {
+      var idForMore = chatMessageMenuId;
+      openChatReactionPicker(idForMore, moreBtn);
+      closeChatMessageMenu();
+      return;
+    }
+    var reactBtn = e.target.closest('.chat-message-menu-react');
+    if (reactBtn && chatMessageMenuId) {
+      toggleProjectChatReaction(chatMessageMenuId, reactBtn.getAttribute('data-emoji'));
+      closeChatMessageMenu();
+    }
+  });
+  document.getElementById('chat-message-menu-reply').addEventListener('click', function () {
+    var id = chatMessageMenuId;
+    closeChatMessageMenu();
+    if (id) startChatReply(id);
+  });
+  document.getElementById('chat-message-menu-forward').addEventListener('click', function () {
+    // Same "read the trigger's rect before closing" reasoning as the reaction "+" above.
+    if (chatMessageMenuId) openChatForwardMenu(chatMessageMenuId, this);
+    closeChatMessageMenu();
+  });
+  document.getElementById('chat-message-menu-copy').addEventListener('click', function () {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var msg = chatMessageMenuId && pdoc && (pdoc.chat || []).find(function (m) { return m.id === chatMessageMenuId; });
+    closeChatMessageMenu();
+    if (!msg) return;
+    navigator.clipboard.writeText(msg.text).then(function () {
+      showToast('Message copied', 'success');
+    }).catch(function () {
+      showToast('Could not copy message', 'error');
+    });
+  });
+  document.getElementById('chat-message-menu-delete').addEventListener('click', function () {
+    var id = chatMessageMenuId;
+    closeChatMessageMenu();
+    if (!id) return;
+    openConfirm('Remove your message?', 'This removes it for everyone on the team. This cannot be undone.', function () {
+      removeChatMessage(id);
+    });
+  });
+  document.addEventListener('click', function (e) {
+    var menu = document.getElementById('chat-message-menu');
+    if (menu.hidden || menu.contains(e.target)) return;
+    closeChatMessageMenu();
+  });
 
   // Only @mentions get notified here -- unlike a task comment, a project chat message has no
   // single "assignee" to default to, so silence (no mention) means nobody's pinged, same as
@@ -7393,7 +7511,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T18:42:07Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T18:53:31Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
