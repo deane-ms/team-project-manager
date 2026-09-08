@@ -805,11 +805,47 @@ to bottom:
        (`w-28` → `w-44`) — reported directly against a screenshot.
      - **Manual, not automatic on a project's first task** — explicitly called out by the user
        mid-build ("this is something to be created manually and not automatically when a user
-       creates a task"). Most projects never need a dedicated thread, so both `projectCardHtml`'s
-       card button and the Chat tab's own project-list row show a quiet "+" until someone
-       deliberately creates one via `openConfirm` (`createProjectChat`). `Array.isArray
-       (projectDoc.chat)` is the one signal a chat exists — no separate boolean flag to keep in
-       sync with it.
+       creates a task"). Most projects never need a dedicated thread, so `projectCardHtml`'s card
+       button and the Chat tab's own "New chat" picker (below) both funnel into the same
+       `openConfirm` → `createProjectChat` flow. `Array.isArray(projectDoc.chat)` is the one
+       signal a chat exists — no separate boolean flag to keep in sync with it.
+     - **`#chat-project-list` only lists projects that already have a chat** — reported directly
+       ("if no chat is created, it should not be listed"). It first shipped listing *every*
+       project on the board, with a "no chat yet" placeholder row doubling as the create
+       affordance; creating one now lives entirely behind an explicit **"New chat"** button
+       (`#chat-new-btn`/`#chat-new-menu`, `renderNewChatMenu`) — a small dropdown of exactly the
+       complementary set (projects *without* a chat), each option opening the same create-confirm
+       `projectCardHtml`'s own button already used. `allProjectNames()` factors out the "every
+       project name on the board" query both the list and the picker need the complementary
+       halves of. The empty states are worded differently on purpose: "No group chats yet — use
+       'New chat' above" (nothing created at all) vs. "Every project already has a chat." /
+       "No projects on the board yet." inside the picker itself (nothing *left* to create one
+       for) — conflating these would tell someone to click a button that can't actually help them.
+     - **Search and a "My chats" filter, both requested directly** — `chat` joined
+       `SEARCHABLE_VIEWS` (custom placeholder "Search chats…", same pattern Activity already
+       uses for its own non-`applyFilters()` search) and `renderChatProjectList` matches
+       `filters.search` against project names. "My chats" (`chatShowMineOnly`, a plain
+       session-local toggle button, not persisted — a quick narrow-down while looking, not a
+       standing preference like the board filters) was read literally: "chats I am involved in"
+       means chats this person has actually **posted in** (`pdoc.chat.some(m => m.author ===
+       myName)`), not merely projects they're assigned a task in — those are different
+       relationships and the literal one is what was asked for. Both compose with each other
+       (search AND My-chats can be active together), and the empty-state message names whichever
+       combination produced zero results rather than a generic "no chats."
+     - **@mention autocomplete didn't exist in the chat compose box at all** — reported directly
+       ("tagging people in the chat does not seem to work"). A manually-typed exact
+       `@FullName` would still have highlighted and notified correctly (chat messages already ran
+       through the same `parseMentions`/`enrichCommentText` task comments use), but with no
+       discoverable `@` menu, nobody would think to try typing a name out in full. The task
+       comment box's own autocomplete was hardwired to one specific input/menu pair
+       (`mentionInput`/`mentionMenu` module vars); generalized into `wireMentionAutocomplete
+       (inputEl, menuEl)` — same name and shape as the sibling Content Hub's own function of the
+       same purpose, which had already generalized this before Flowboard did — and instantiated
+       twice: once for `#task-comment-input`/`#mention-menu` (unchanged behavior), once for the
+       new `#project-chat-input`/`#project-chat-mention-menu`. Each caller holds its own returned
+       `{close}` handle rather than sharing one global `closeMentionMenu()`, so sending a chat
+       message can't accidentally leave the *task* comment box's menu in a stale state or
+       vice versa.
      - **Lives on the same `projects/{id}` doc as the deadline**, not a new collection —
        `chat` (array of `{id, text, author, date, reactions}`, same shape/append pattern as task
        comments: `arrayUnion` to add, a full-array rewrite to edit an existing entry's fields)

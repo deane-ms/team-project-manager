@@ -670,14 +670,23 @@
            inside either pane. Empty (not shown at all) when nobody else is currently online. -->
       <div id="chat-online-strip" class="hidden items-center gap-2 mb-3 text-xs text-zinc-500 dark:text-zinc-400"></div>
       <div class="flex flex-col lg:flex-row gap-4 lg:gap-0">
-        <!-- Project list -- every project appears here (same names as the Projects tab), not
-             just ones with a chat already, so "+ Create" is reachable in one place. Width is
-             fixed (w-64) below the lg breakpoint's two-column layout, and JS-controlled (see
-             applyChatListWidth) at lg and above -- the drag handle only makes sense once the
-             panes actually sit side by side. -->
+        <!-- Project list -- only projects with an existing chat are listed here; creating one
+             is its own explicit action (chat-new-btn) rather than an inline row for every
+             project on the board, so this reads as "your conversations," not a full project
+             directory. Width is fixed (w-64) below the lg breakpoint's two-column layout, and
+             JS-controlled (see applyChatListWidth) at lg and above -- the drag handle only makes
+             sense once the panes actually sit side by side. -->
         <div id="chat-project-list-pane" class="w-full lg:w-64 shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
-          <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700">
-            <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Projects</p>
+          <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between gap-2 relative">
+            <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Chats</p>
+            <button type="button" id="chat-new-btn" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              New chat
+            </button>
+            <div id="chat-new-menu" class="hidden absolute right-2 top-full mt-1 z-20 w-56 max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+          </div>
+          <div class="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-700">
+            <button type="button" id="chat-mine-toggle" title="Show only chats you've posted in" class="w-full text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">My chats</button>
           </div>
           <div id="chat-project-list" class="divide-y divide-zinc-100 dark:divide-zinc-700 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto"></div>
         </div>
@@ -713,6 +722,7 @@
             <div class="px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">
               <div class="relative">
                 <textarea id="project-chat-input" rows="2" maxlength="2000" placeholder="Message the team about this project… (@name to mention)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-3 pr-10 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+                <div id="project-chat-mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
                 <button type="button" id="project-chat-emoji-toggle" title="Insert emoji" aria-expanded="false" aria-controls="project-chat-emoji-picker" class="absolute right-2 bottom-2 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-600">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
                 </button>
@@ -1504,51 +1514,134 @@
     });
   })();
 
-  // Every project appears here, same names as the Projects tab (grouped from the task list, not
-  // from projectDocs -- a project with no deadline and no chat yet still has no projectDocs entry
-  // at all), so "no chat yet" projects are reachable in the same place as ones that already have
-  // one, rather than only surfacing once someone's created something.
-  function renderChatProjectList() {
-    var listEl = document.getElementById('chat-project-list');
+  // All project names on the board, from the task list (not projectDocs -- a project with
+  // neither a deadline nor a chat yet has no projectDocs entry at all). Shared by the list below
+  // and the "New chat" picker, which need the complementary halves of the same set.
+  function allProjectNames() {
     var names = {};
     tasks.concat(archivedTasks).forEach(function (t) { if (t.project) names[t.project] = true; });
-    var sorted = Object.keys(names).sort(function (a, b) { return a.localeCompare(b); });
-    listEl.innerHTML = sorted.length
-      ? sorted.map(function (name) {
+    return Object.keys(names).sort(function (a, b) { return a.localeCompare(b); });
+  }
+
+  // Session-local, not persisted -- a quick narrow-down while looking, not a standing
+  // preference like the board filters. Defaults off (show everything), same reasoning the
+  // People filter elsewhere in this app defaults to "show everyone" rather than opt-in-only.
+  var chatShowMineOnly = false;
+
+  function syncChatMineToggleUI() {
+    var btn = document.getElementById('chat-mine-toggle');
+    btn.classList.toggle('border-brand-300', chatShowMineOnly);
+    btn.classList.toggle('dark:border-brand-500/40', chatShowMineOnly);
+    btn.classList.toggle('bg-brand-50', chatShowMineOnly);
+    btn.classList.toggle('dark:bg-brand-500/10', chatShowMineOnly);
+    btn.classList.toggle('text-brand-700', chatShowMineOnly);
+    btn.classList.toggle('dark:text-brand-300', chatShowMineOnly);
+    btn.classList.toggle('border-zinc-200', !chatShowMineOnly);
+    btn.classList.toggle('dark:border-zinc-700', !chatShowMineOnly);
+    btn.classList.toggle('text-zinc-500', !chatShowMineOnly);
+    btn.classList.toggle('dark:text-zinc-400', !chatShowMineOnly);
+  }
+
+  document.getElementById('chat-mine-toggle').addEventListener('click', function () {
+    chatShowMineOnly = !chatShowMineOnly;
+    syncChatMineToggleUI();
+    renderChatProjectList();
+  });
+
+  // Only projects with an existing chat are listed -- reported directly ("if no chat is
+  // created, it should not be listed"). This used to list every project on the board with a
+  // "no chat yet" placeholder row doubling as the create affordance; now creating one lives
+  // entirely behind the explicit "New chat" button/picker instead, so this reads as an actual
+  // list of conversations rather than a directory of every project whether or not it has one.
+  //
+  // filters.search (the shared search box, now enabled for this view) matches on project name;
+  // "My chats" narrows further to chats this person has actually posted in -- "involved in the
+  // chat" was read literally as participated, not merely assigned to a task in that project.
+  function renderChatProjectList() {
+    var listEl = document.getElementById('chat-project-list');
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    var search = (filters.search || '').trim().toLowerCase();
+    var everyChat = allProjectNames().filter(function (name) {
+      var pdoc = projectDeadlineDoc(name);
+      return !!(pdoc && Array.isArray(pdoc.chat));
+    });
+    var withChat = everyChat.filter(function (name) {
+      if (search && name.toLowerCase().indexOf(search) === -1) return false;
+      if (chatShowMineOnly) {
+        var pdoc = projectDeadlineDoc(name);
+        var mine = myName && pdoc.chat.some(function (m) { return m.author === myName; });
+        if (!mine) return false;
+      }
+      return true;
+    });
+    var emptyMessage = !everyChat.length
+      ? 'No group chats yet — use "New chat" above to start one.'
+      : 'No chats match ' + (search && chatShowMineOnly ? 'your search and "My chats" filter' : search ? 'your search' : '"My chats"') + '.';
+    listEl.innerHTML = withChat.length
+      ? withChat.map(function (name) {
           var pdoc = projectDeadlineDoc(name);
-          var hasChat = !!(pdoc && Array.isArray(pdoc.chat));
           var selected = name === currentChatProjectName;
-          var subtitle = hasChat
-            ? (pdoc.chat.length ? pdoc.chat.length + ' message' + (pdoc.chat.length === 1 ? '' : 's') : 'No messages yet')
-            : 'No chat yet';
+          var subtitle = pdoc.chat.length ? pdoc.chat.length + ' message' + (pdoc.chat.length === 1 ? '' : 's') : 'No messages yet';
           return '<button type="button" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 ' +
             (selected ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50') +
-            '" data-project="' + escapeHtml(name) + '" data-has-chat="' + (hasChat ? '1' : '0') + '">' +
+            '" data-project="' + escapeHtml(name) + '">' +
             chatAvatarHtml(name, 'w-8 h-8', 'text-xs') +
             '<span class="min-w-0 flex-1">' +
               '<span class="block text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
               '<span class="block text-xs text-zinc-400 dark:text-zinc-500">' + subtitle + '</span>' +
             '</span>' +
-            (hasChat ? '' : svgIcon('plus', 'w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 shrink-0')) +
           '</button>';
         }).join('')
-      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6 px-3">No projects yet.</p>';
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6 px-3">' + escapeHtml(emptyMessage) + '</p>';
   }
 
   document.getElementById('chat-project-list').addEventListener('click', function (e) {
     var row = e.target.closest('.chat-project-row');
-    if (!row) return;
-    var name = row.getAttribute('data-project');
-    if (row.getAttribute('data-has-chat') === '1') {
-      selectChatProject(name);
-      return;
-    }
+    if (row) selectChatProject(row.getAttribute('data-project'));
+  });
+
+  // "New chat" -- a small dropdown of projects that DON'T have one yet (the complement of the
+  // list above), each one opening the same create-confirm the Projects tab's own "+ Group chat"
+  // button already uses. Closes on an outside click, same pattern as every other header-style
+  // dropdown in this app.
+  function renderNewChatMenu() {
+    var menuEl = document.getElementById('chat-new-menu');
+    var allNames = allProjectNames();
+    var withoutChat = allNames.filter(function (name) {
+      var pdoc = projectDeadlineDoc(name);
+      return !(pdoc && Array.isArray(pdoc.chat));
+    });
+    menuEl.innerHTML = withoutChat.length
+      ? withoutChat.map(function (name) {
+          return '<button type="button" class="chat-new-option w-full text-left px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 truncate" data-project="' + escapeHtml(name) + '">' + escapeHtml(name) + '</button>';
+        }).join('')
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500 px-3 py-2">' + (allNames.length ? 'Every project already has a chat.' : 'No projects on the board yet.') + '</p>';
+  }
+
+  document.getElementById('chat-new-btn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var menuEl = document.getElementById('chat-new-menu');
+    var willOpen = menuEl.classList.contains('hidden');
+    if (willOpen) renderNewChatMenu();
+    menuEl.classList.toggle('hidden', !willOpen);
+  });
+  document.getElementById('chat-new-menu').addEventListener('click', function (e) {
+    var opt = e.target.closest('.chat-new-option');
+    if (!opt) return;
+    var name = opt.getAttribute('data-project');
+    document.getElementById('chat-new-menu').classList.add('hidden');
     openConfirm(
       'Create a group chat for "' + name + '"?',
       'Gives this project its own message thread and pinned links, separate from task comments. Anyone on the team can post once it exists.',
       function () { createProjectChat(name); },
       { tone: 'question', confirmText: 'Create chat', cancelText: 'Cancel' }
     );
+  });
+  document.addEventListener('click', function (e) {
+    var menuEl = document.getElementById('chat-new-menu');
+    var btn = document.getElementById('chat-new-btn');
+    if (menuEl.classList.contains('hidden') || menuEl.contains(e.target) || btn.contains(e.target)) return;
+    menuEl.classList.add('hidden');
   });
 
   function renderChatDetail() {
@@ -1615,6 +1708,13 @@
     if (reactBtn) toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji'));
   });
 
+  // Instantiated here (not down with the rest of the mention-autocomplete wiring, which sits
+  // much further down the file with the task-comment box) so it's declared before
+  // sendProjectChatMessage below needs to call .close() on it -- `var` hoists the binding either
+  // way, but the factory call itself has to run after wireMentionAutocomplete is defined and
+  // after the DOM elements it reads exist, both already true this far into the module.
+  var projectChatMentions = wireMentionAutocomplete(document.getElementById('project-chat-input'), document.getElementById('project-chat-mention-menu'));
+
   function sendProjectChatMessage() {
     var input = document.getElementById('project-chat-input');
     var text = input.value.trim();
@@ -1625,6 +1725,7 @@
     var newMessage = { id: uid(), text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null };
     updateDoc(doc(projectsCol, pdoc.id), { chat: arrayUnion(newMessage) }).then(function () {
       input.value = '';
+      projectChatMentions.close();
       clearProjectChatTyping();
       notifyOnProjectChat(text, currentChatProjectName);
       logActivity('project_chat', 'Posted in the "' + currentChatProjectName + '" group chat');
@@ -4067,52 +4168,62 @@
     });
   }
 
-  var mentionState = null;
-  var mentionInput = document.getElementById('task-comment-input');
-  var mentionMenu = document.getElementById('mention-menu');
+  // Attach to any textarea + its sibling autocomplete menu -- @-triggered, shows up to 5
+  // teamRoster() matches, inserts "@Name " on click. Originally hardwired to just the
+  // task-comment box; generalized so the chat compose box could get the identical behavior
+  // (reported directly: "tagging people in the chat does not seem to work" -- a manually-typed
+  // exact "@FullName" still notified/highlighted fine via parseMentions/enrichCommentText, but
+  // with no discoverable @ menu at all, nobody would think to try that). Same name/shape as the
+  // sibling Content Hub's own wireMentionAutocomplete, which generalized this before Flowboard
+  // did -- worth keeping the two in sync if either changes.
+  function wireMentionAutocomplete(inputEl, menuEl) {
+    var state = null;
 
-  function closeMentionMenu() {
-    mentionState = null;
-    mentionMenu.classList.add('hidden');
-  }
-
-  function renderMentionMenu() {
-    var q = mentionState.query.toLowerCase();
-    var matches = teamRoster().filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; }).slice(0, 5);
-    if (!matches.length) { mentionMenu.classList.add('hidden'); return; }
-    mentionMenu.innerHTML = matches.map(function (n) {
-      return '<button type="button" class="mention-option w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/60 flex items-center gap-2" data-name="' + escapeHtml(n) + '">' +
-        avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[9px]') +
-        '<span class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(n) + '</span>' +
-      '</button>';
-    }).join('');
-    mentionMenu.classList.remove('hidden');
-  }
-
-  mentionInput.addEventListener('input', function () {
-    var pos = mentionInput.selectionStart;
-    var textBefore = mentionInput.value.slice(0, pos);
-    var at = textBefore.lastIndexOf('@');
-    if (at === -1 || textBefore.slice(at).indexOf('\n') !== -1 || textBefore.length - at > 30) {
-      closeMentionMenu();
-      return;
+    function close() {
+      state = null;
+      menuEl.classList.add('hidden');
     }
-    mentionState = { start: at, query: textBefore.slice(at + 1) };
-    renderMentionMenu();
-  });
-  mentionInput.addEventListener('blur', function () {
-    setTimeout(closeMentionMenu, 150);
-  });
-  mentionMenu.addEventListener('click', function (e) {
-    var opt = e.target.closest('.mention-option');
-    if (!opt || !mentionState) return;
-    var name = opt.getAttribute('data-name');
-    var before = mentionInput.value.slice(0, mentionState.start);
-    var after = mentionInput.value.slice(mentionState.start + 1 + mentionState.query.length);
-    mentionInput.value = before + '@' + name + ' ' + after;
-    closeMentionMenu();
-    mentionInput.focus();
-  });
+
+    function render() {
+      var q = state.query.toLowerCase();
+      var matches = teamRoster().filter(function (n) { return n.toLowerCase().indexOf(q) !== -1; }).slice(0, 5);
+      if (!matches.length) { menuEl.classList.add('hidden'); return; }
+      menuEl.innerHTML = matches.map(function (n) {
+        return '<button type="button" class="mention-option w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/60 flex items-center gap-2" data-name="' + escapeHtml(n) + '">' +
+          avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[9px]') +
+          '<span class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(n) + '</span>' +
+        '</button>';
+      }).join('');
+      menuEl.classList.remove('hidden');
+    }
+
+    inputEl.addEventListener('input', function () {
+      var pos = inputEl.selectionStart;
+      var textBefore = inputEl.value.slice(0, pos);
+      var at = textBefore.lastIndexOf('@');
+      if (at === -1 || textBefore.slice(at).indexOf('\n') !== -1 || textBefore.length - at > 30) {
+        close();
+        return;
+      }
+      state = { start: at, query: textBefore.slice(at + 1) };
+      render();
+    });
+    inputEl.addEventListener('blur', function () { setTimeout(close, 150); });
+    menuEl.addEventListener('click', function (e) {
+      var opt = e.target.closest('.mention-option');
+      if (!opt || !state) return;
+      var name = opt.getAttribute('data-name');
+      var before = inputEl.value.slice(0, state.start);
+      var after = inputEl.value.slice(state.start + 1 + state.query.length);
+      inputEl.value = before + '@' + name + ' ' + after;
+      close();
+      inputEl.focus();
+    });
+
+    return { close: close };
+  }
+
+  var taskCommentMentions = wireMentionAutocomplete(document.getElementById('task-comment-input'), document.getElementById('mention-menu'));
 
   document.getElementById('task-comment-add-btn').addEventListener('click', function () {
     var input = document.getElementById('task-comment-input');
@@ -4132,7 +4243,7 @@
       comments: arrayUnion(newComment)
     }).then(function () {
       input.value = '';
-      closeMentionMenu();
+      taskCommentMentions.close();
       notifyOnComment(text, t);
       var snippet = text.length > 60 ? text.slice(0, 60) + '…' : text;
       logActivity('task_comment', 'Commented on "' + (t ? t.name : editingTaskId) + '": "' + snippet + '"');
@@ -6047,7 +6158,10 @@
   // renderActivityFeed does its own match on the summary and the person). It joined the list in
   // the same pass that raised the feed's limit from 50 to 200: a longer history is only useful
   // if you can find anything in it.
-  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'activity'];
+  // Chat joined this list on request ("the search bar should work on the chat page") --
+  // like Activity, it doesn't route through applyFilters() (renderChatProjectList does its own
+  // match against project names, not tasks), but it's still a real, working search.
+  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'activity', 'chat'];
 
   function syncSearchAvailability() {
     var input = document.getElementById('filter-search');
@@ -6057,7 +6171,7 @@
     input.title = searchable ? '' : 'Search doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView);
     input.placeholder = !searchable
       ? 'Search doesn\'t apply here'
-      : (currentView === 'activity' ? 'Search activity…' : 'Search tasks, checklists, comments…');
+      : (currentView === 'activity' ? 'Search activity…' : currentView === 'chat' ? 'Search chats…' : 'Search tasks, checklists, comments…');
     input.classList.toggle('opacity-50', !searchable);
     input.classList.toggle('cursor-not-allowed', !searchable);
   }
@@ -6931,7 +7045,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T17:28:35Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T17:45:04Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
