@@ -1335,7 +1335,9 @@ to bottom:
        `#chat-search-bar` for the same reason — `flex` is deliberately absent from
        `#project-chat-link-form`'s static class list. `closeProjectChatLinkForm()` is also called
        from `selectChatProject`, alongside the existing reply/forward/search resets, so an open
-       "add a link" form doesn't silently carry over into a different project's chat.
+       "add a link" form doesn't silently carry over into a different project's chat. A pushpin
+       icon (`ICONS.pin`) sits next to the "Pinned links" label itself, requested directly right
+       after — the section header had no visual tie to what a literal pin means beyond its text.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via
