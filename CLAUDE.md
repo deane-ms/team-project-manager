@@ -1239,20 +1239,33 @@ to bottom:
        back, else a short date, mirroring `activityDateHeader`'s own "Today"/"Yesterday" idiom
        without the full weekday+year the Activity feed's version uses (this has to fit on one
        line next to the project name).
-     - **The chat list's default width was halved** (`CHAT_LIST_WIDTH_MIN`/`CHAT_LIST_WIDTH_DEFAULT`,
-       200/256 → 100/128, matching `#chat-project-list-pane`'s fallback class going from `lg:w-64`
-       to `lg:w-32`) — reported directly against a screenshot of the column at its old default,
-       taking up roughly half the two-pane row. Both constants were halved together, not just the
-       default, to preserve the original ~56px gap between the floor and the default (a drag can
-       still shrink the column by the same relative amount it always could).
-       - **This reads cramped out of the box** — at 128px, `#chat-project-list-pane`'s own header
-         row ("CHATS" + "New chat") and every row's project name/preview/timestamp all clip hard,
-         confirmed visually while testing this change. The column is still fully resizable via
-         the existing drag handle (up to `chatListMaxWidth()`, 50% of the row) and remembers
-         whatever width someone drags it to (`localStorage`), so this only affects the first
-         look before anyone touches the handle — flagged directly rather than silently building
-         around it, since going narrower than what actually reads well is a real trade-off this
-         request makes, not a bug to route around unasked.
+     - **The chat list's default width went 256 → 128 → 400.** 256 (`w-64`) first read as too
+       wide against a screenshot of the column at its old default; halving it to 128, a literal
+       reading of "make it 50% the default," turned out cramped in practice — confirmed visually
+       while testing that pass, `#chat-project-list-pane`'s own header row ("CHATS" + "New chat")
+       and every row's name/preview/timestamp all clipped hard. 400 is the number that actually
+       stuck, on request after being offered as the recommendation: it matches WhatsApp Web's own
+       real list-pane proportions (roughly 380-420px against a typical window), which this whole
+       chat feature has been modeled on throughout, and gives each row's now-denser content
+       (avatar, name, completed tag, unread dot, star, timestamp, preview line) real room.
+       `CHAT_LIST_WIDTH_MIN` ended back at its original 200 — a sensible floor the width debate
+       never actually had a reason to change.
+       - **A real bug surfaced while landing on 400: the default was silently getting clamped
+         down to the 200px floor on every fresh sign-in**, only correcting itself once someone
+         manually dragged the column. Root cause: `chatListMaxWidth()` (the 50%-of-row cap) falls
+         back to `CHAT_LIST_WIDTH_MIN` when `#chat-panes-row` measures 0-wide, which it reliably
+         does at module load and on every `resize` — both of which can fire while the Chat tab
+         isn't the active view. `applyChatListWidth()` used to assign that fallback straight back
+         into `chatListWidth` itself (`chatListWidth = Math.min(chatListWidth, chatListMaxWidth())`),
+         permanently downgrading the real preference to 200 the first time it ran, with nothing
+         ever able to raise it back up afterward. Fixed two ways together: `applyChatListWidth`
+         now clamps into a local `display` variable for `pane.style.width` rather than overwriting
+         `chatListWidth`, and `loadChatListWidth` dropped its own upper-bound check against
+         `chatListMaxWidth()` at load time (which had the same 0-wide-row problem, and could
+         silently discard a perfectly valid wider *saved* width in favour of the default on
+         reload). `setView('chat')` also now calls `applyChatListWidth()` once on entry, so the
+         very first time someone opens the tab in a session it re-measures against the row's real
+         width immediately rather than waiting for the next resize.
      - **Favourite chats and unread tracking**, both requested directly in the same message
        ("make favourite chats a feature and it should sort alongside My chats. Unread chats
        should also be included in the sorting"):
@@ -1283,10 +1296,17 @@ to bottom:
          just a badge" alternative. Replaces the previous plain-alphabetical order entirely;
          `allProjectNames()` still supplies the starting list, `renderChatProjectList`'s own
          `.sort()` reorders it into these three tiers afterward.
-       - **The "Favourites" filter toggle is session-local, like "My chats"** (`chatShowFavoritesOnly`,
-         not persisted) — only the favourite *status* itself persists (on the person doc above);
-         the button that narrows the visible list to just those chats resets on reload, same as
-         "My chats" already did.
+       - **My chats / Favourites / Unread are mutually exclusive, one shared `chatListFilterMode`
+         (`null | 'mine' | 'favorites' | 'unread'`) rather than three independent booleans** —
+         built independently-combinable first, then corrected directly right after ("only one
+         chat sort can be allowed at a given time"). `setChatListFilterMode(mode)` toggles: picking
+         a new mode always clears whichever was active, clicking the currently-active one clears
+         back to `null` (show everything) — same on/off feel each pill had standalone, just
+         exclusive now. All three buttons share one `syncChatFilterToggleUI` that styles whichever
+         one matches the current mode and un-styles the other two, rather than three near-identical
+         per-button sync functions. Still session-local, like "My chats" always was — only the
+         favourite *status* and read-state themselves persist (on the person doc above); which
+         filter is currently narrowing the list resets on reload.
        - **The row had to stop being a real `<button>`** (`role="button" tabindex="0"` `<div>`
          now) to host the star toggle as a real nested `<button>` — a `<button>` inside another
          `<button>` is invalid HTML that browsers hoist/break unpredictably. The delegated click

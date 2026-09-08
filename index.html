@@ -682,10 +682,12 @@
         <!-- Project list -- only projects with an existing chat are listed here; creating one
              is its own explicit action (chat-new-btn) rather than an inline row for every
              project on the board, so this reads as "your conversations," not a full project
-             directory. Width is fixed (w-32) below the lg breakpoint's two-column layout, and
+             directory. Width is fixed (w-full) below the lg breakpoint's two-column layout, and
              JS-controlled (see applyChatListWidth) at lg and above -- the drag handle only makes
-             sense once the panes actually sit side by side. -->
-        <div id="chat-project-list-pane" class="w-full lg:w-32 shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
+             sense once the panes actually sit side by side. The lg:w-[400px] here is only the
+             flash-of-unstyled-size fallback matching CHAT_LIST_WIDTH_DEFAULT; applyChatListWidth
+             overrides it with an inline style as soon as the script runs. -->
+        <div id="chat-project-list-pane" class="w-full lg:w-[400px] shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
           <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between gap-2">
             <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Chats</p>
             <button type="button" id="chat-new-btn" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
@@ -693,15 +695,17 @@
               New chat
             </button>
           </div>
-          <!-- Stacked, not side-by-side -- the column's new 128px default (see
-               CHAT_LIST_WIDTH_DEFAULT) doesn't leave room for two pills across, and both
-               toggles need to stay readable at that width without forcing someone to widen the
-               column just to tell them apart. -->
-          <div class="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-700 flex flex-col gap-1.5">
-            <button type="button" id="chat-mine-toggle" title="Show only chats you've posted in" class="w-full text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">My chats</button>
-            <button type="button" id="chat-favorites-toggle" title="Show only favourite chats" class="w-full flex items-center justify-center gap-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">
+          <!-- Side by side -- the column's 400px default (see CHAT_LIST_WIDTH_DEFAULT) has
+               room for all three across; requested directly once that width landed. -->
+          <div class="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5">
+            <button type="button" id="chat-mine-toggle" title="Show only chats you've posted in" class="flex-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">My chats</button>
+            <button type="button" id="chat-favorites-toggle" title="Show only favourite chats" class="flex-1 flex items-center justify-center gap-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">
               <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
               Favourites
+            </button>
+            <button type="button" id="chat-unread-toggle" title="Show only unread chats" class="flex-1 flex items-center justify-center gap-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">
+              <span class="w-1.5 h-1.5 rounded-full bg-current shrink-0"></span>
+              Unread
             </button>
           </div>
           <div id="chat-project-list" class="divide-y divide-zinc-100 dark:divide-zinc-700 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto"></div>
@@ -1628,30 +1632,43 @@
      the board. Persisted the same way `filters` is (a bare localStorage read/write, no
      Firestore) -- this is a personal display preference, not shared team state. ---- */
   var CHAT_LIST_WIDTH_KEY = 'flowboard_chat_list_width';
-  // Both halved from the original 200/256 -- reported directly against a screenshot ("this
-  // should not be the default width, make it 50% the default") after w-64 read as too wide for
-  // a list that's really just an avatar + one truncated line. Matches the new w-32 fallback
-  // class on #chat-project-list-pane below, so there's no flash of the old wider size before
+  // The default went 256 -> 128 -> 400. 256 (w-64) read as too wide against a screenshot; halving
+  // it to 128 (matching a literal "make it 50% the default") turned out cramped in practice --
+  // confirmed visually while testing, the row's own header ("New chat") and every row's
+  // name/preview/timestamp all clipped hard at that width. 400 is the number that actually
+  // stuck: it matches WhatsApp Web's own real list-pane proportions (roughly 380-420px against
+  // a typical window), which this whole chat feature has been modeled on throughout, and gives
+  // each row's now-denser content (avatar, name, completed tag, unread dot, star, timestamp,
+  // preview line) real room. MIN went back to its original 200 -- a sensible floor, not
+  // something this pass had a reason to change. Matches the `lg:w-[400px]` fallback class on
+  // #chat-project-list-pane below, so there's no flash of a different size before
   // applyChatListWidth's inline style takes over on load.
-  var CHAT_LIST_WIDTH_MIN = 100;
-  var CHAT_LIST_WIDTH_DEFAULT = 128;
+  var CHAT_LIST_WIDTH_MIN = 200;
+  var CHAT_LIST_WIDTH_DEFAULT = 400;
 
   // The cap is relative (up to half the row), not a fixed pixel ceiling -- reported directly
   // ("make the width extendable to up to 50% of the space allowed"). A flat 440px read as
   // arbitrarily restrictive on a wide monitor where 50% of the row would be much more; on a
   // narrow one, capping at half still leaves the detail pane a usable width instead of letting
   // the list swallow the whole row. Falls back to CHAT_LIST_WIDTH_MIN if the row isn't in the DOM
-  // yet (e.g. computing this before the Chat tab has ever rendered).
+  // yet, or isn't currently visible (e.g. computing this while some other tab is open) -- this
+  // return value must never be used to permanently overwrite the stored preference (see
+  // applyChatListWidth's own comment on why), only to clamp what's actually painted right now.
   function chatListMaxWidth() {
     var row = document.getElementById('chat-panes-row');
     var rowWidth = row ? row.getBoundingClientRect().width : 0;
     return Math.max(CHAT_LIST_WIDTH_MIN, Math.round(rowWidth * 0.5) || CHAT_LIST_WIDTH_MIN);
   }
 
+  // No upper-bound check against chatListMaxWidth() here (unlike the floor check) -- the row is
+  // reliably 0-wide at this point on a fresh load (the Chat tab isn't the active view yet), which
+  // made chatListMaxWidth() return its own invisible-row fallback and silently discard a
+  // perfectly valid wider saved width in favour of the default. The real upper bound is enforced
+  // live, non-destructively, every time applyChatListWidth actually paints the pane.
   function loadChatListWidth() {
     try {
       var v = parseInt(localStorage.getItem(CHAT_LIST_WIDTH_KEY), 10);
-      if (v >= CHAT_LIST_WIDTH_MIN && v <= chatListMaxWidth()) return v;
+      if (v >= CHAT_LIST_WIDTH_MIN) return v;
     } catch (e) { /* ignore */ }
     return CHAT_LIST_WIDTH_DEFAULT;
   }
@@ -1661,13 +1678,18 @@
 
   // Only actually applies the inline width at the lg breakpoint the two-column layout (and the
   // handle) exists at -- clearing it below that lets the plain w-full Tailwind class govern the
-  // stacked mobile layout instead of an inline style permanently overriding it. Re-clamps against
-  // the current 50% cap every time (not just at drag-time), so a saved width from a wider window
-  // doesn't silently push the detail pane too narrow after the browser itself is resized down.
+  // stacked mobile layout instead of an inline style permanently overriding it. Clamps against
+  // the current 50% cap into a LOCAL variable rather than overwriting `chatListWidth` itself --
+  // confirmed as a real bug while testing the 400px default: this function already runs once at
+  // module load and on every resize, both of which can fire while the Chat tab isn't the active
+  // view (so chatListMaxWidth() sees a 0-wide row and returns its own fallback floor). Assigning
+  // that transient fallback back into `chatListWidth` permanently downgraded the real preference
+  // to CHAT_LIST_WIDTH_MIN the first time this ran, with nothing ever able to raise it back up
+  // again afterward -- every fresh sign-in silently got the floor width, never the real default.
   function applyChatListWidth() {
     var pane = document.getElementById('chat-project-list-pane');
-    chatListWidth = Math.min(chatListWidth, chatListMaxWidth());
-    pane.style.width = chatListDesktopQuery.matches ? (chatListWidth + 'px') : '';
+    var display = Math.min(chatListWidth, chatListMaxWidth());
+    pane.style.width = chatListDesktopQuery.matches ? (display + 'px') : '';
   }
   applyChatListWidth();
   chatListDesktopQuery.addEventListener('change', applyChatListWidth);
@@ -1706,29 +1728,42 @@
   }
 
   // Session-local, not persisted -- a quick narrow-down while looking, not a standing
-  // preference like the board filters. Defaults off (show everything), same reasoning the
+  // preference like the board filters. Defaults to null (show everything), same reasoning the
   // People filter elsewhere in this app defaults to "show everyone" rather than opt-in-only.
-  var chatShowMineOnly = false;
+  //
+  // One shared mode instead of three independent booleans -- confirmed directly ("only one chat
+  // sort can be allowed at a given time") after building My chats/Favourites/Unread as
+  // independently combinable filters. Picking a new one always clears whichever was active;
+  // clicking the currently-active one turns it off (back to showing everything), same toggle
+  // feel each pill already had on its own, just mutually exclusive with the other two now.
+  var chatListFilterMode = null; // null | 'mine' | 'favorites' | 'unread'
 
-  function syncChatMineToggleUI() {
-    var btn = document.getElementById('chat-mine-toggle');
-    btn.classList.toggle('border-brand-300', chatShowMineOnly);
-    btn.classList.toggle('dark:border-brand-500/40', chatShowMineOnly);
-    btn.classList.toggle('bg-brand-50', chatShowMineOnly);
-    btn.classList.toggle('dark:bg-brand-500/10', chatShowMineOnly);
-    btn.classList.toggle('text-brand-700', chatShowMineOnly);
-    btn.classList.toggle('dark:text-brand-300', chatShowMineOnly);
-    btn.classList.toggle('border-zinc-200', !chatShowMineOnly);
-    btn.classList.toggle('dark:border-zinc-700', !chatShowMineOnly);
-    btn.classList.toggle('text-zinc-500', !chatShowMineOnly);
-    btn.classList.toggle('dark:text-zinc-400', !chatShowMineOnly);
+  var CHAT_FILTER_TOGGLE_IDS = { mine: 'chat-mine-toggle', favorites: 'chat-favorites-toggle', unread: 'chat-unread-toggle' };
+
+  function syncChatFilterToggleUI() {
+    Object.keys(CHAT_FILTER_TOGGLE_IDS).forEach(function (mode) {
+      var btn = document.getElementById(CHAT_FILTER_TOGGLE_IDS[mode]);
+      var active = chatListFilterMode === mode;
+      btn.classList.toggle('border-brand-300', active);
+      btn.classList.toggle('dark:border-brand-500/40', active);
+      btn.classList.toggle('bg-brand-50', active);
+      btn.classList.toggle('dark:bg-brand-500/10', active);
+      btn.classList.toggle('text-brand-700', active);
+      btn.classList.toggle('dark:text-brand-300', active);
+      btn.classList.toggle('border-zinc-200', !active);
+      btn.classList.toggle('dark:border-zinc-700', !active);
+      btn.classList.toggle('text-zinc-500', !active);
+      btn.classList.toggle('dark:text-zinc-400', !active);
+    });
   }
 
-  document.getElementById('chat-mine-toggle').addEventListener('click', function () {
-    chatShowMineOnly = !chatShowMineOnly;
-    syncChatMineToggleUI();
+  function setChatListFilterMode(mode) {
+    chatListFilterMode = chatListFilterMode === mode ? null : mode;
+    syncChatFilterToggleUI();
     renderChatProjectList();
-  });
+  }
+
+  document.getElementById('chat-mine-toggle').addEventListener('click', function () { setChatListFilterMode('mine'); });
 
   // Favourite chats and unread tracking -- both requested directly ("make favourite chats a
   // feature and it should sort alongside My chats. Unread chats should also be included in the
@@ -1806,29 +1841,8 @@
     updateDoc(doc(peopleCol, uid), { chatLastRead: entries }).catch(function () { /* best-effort, see registerPresence's own comment */ });
   }
 
-  function syncChatFavoritesToggleUI() {
-    var btn = document.getElementById('chat-favorites-toggle');
-    btn.classList.toggle('border-brand-300', chatShowFavoritesOnly);
-    btn.classList.toggle('dark:border-brand-500/40', chatShowFavoritesOnly);
-    btn.classList.toggle('bg-brand-50', chatShowFavoritesOnly);
-    btn.classList.toggle('dark:bg-brand-500/10', chatShowFavoritesOnly);
-    btn.classList.toggle('text-brand-700', chatShowFavoritesOnly);
-    btn.classList.toggle('dark:text-brand-300', chatShowFavoritesOnly);
-    btn.classList.toggle('border-zinc-200', !chatShowFavoritesOnly);
-    btn.classList.toggle('dark:border-zinc-700', !chatShowFavoritesOnly);
-    btn.classList.toggle('text-zinc-500', !chatShowFavoritesOnly);
-    btn.classList.toggle('dark:text-zinc-400', !chatShowFavoritesOnly);
-  }
-
-  // Session-local, same as chatShowMineOnly -- the toggle is a quick view filter; the underlying
-  // favourite status it filters on is what actually persists (on the person doc, see above).
-  var chatShowFavoritesOnly = false;
-
-  document.getElementById('chat-favorites-toggle').addEventListener('click', function () {
-    chatShowFavoritesOnly = !chatShowFavoritesOnly;
-    syncChatFavoritesToggleUI();
-    renderChatProjectList();
-  });
+  document.getElementById('chat-favorites-toggle').addEventListener('click', function () { setChatListFilterMode('favorites'); });
+  document.getElementById('chat-unread-toggle').addEventListener('click', function () { setChatListFilterMode('unread'); });
 
   // WhatsApp-style compact timestamp for the chat list row: a bare time for anything sent
   // today (the date would be redundant), "Yesterday" for exactly one day back, and a short
@@ -1864,12 +1878,13 @@
     });
     var withChat = everyChat.filter(function (name) {
       if (search && name.toLowerCase().indexOf(search) === -1) return false;
-      if (chatShowMineOnly) {
+      if (chatListFilterMode === 'mine') {
         var pdoc = projectDeadlineDoc(name);
         var mine = myName && pdoc.chat.some(function (m) { return m.author === myName; });
         if (!mine) return false;
       }
-      if (chatShowFavoritesOnly && !isFavoriteChat(name)) return false;
+      if (chatListFilterMode === 'favorites' && !isFavoriteChat(name)) return false;
+      if (chatListFilterMode === 'unread' && !isChatUnread(name)) return false;
       return true;
     });
     // Favourites float to the top regardless of read state, then unread, then everything else --
@@ -6967,6 +6982,13 @@
     syncSearchAvailability();
     syncSortAvailability();
     syncToolbarLayout();
+    // Re-measure the chat list column the first time it's actually visible -- applyChatListWidth
+    // ran once already at module load, but #chat-panes-row was 0-wide back then (the Chat view
+    // wasn't the active one yet), so chatListMaxWidth's own "row isn't in the DOM yet" fallback
+    // silently clamped the real default down to CHAT_LIST_WIDTH_MIN. Confirmed directly while
+    // testing the column's new 400px default: without this, every fresh sign-in landed on the
+    // 200px floor the first time someone opened Chat, not 400.
+    if (view === 'chat') applyChatListWidth();
     renderCurrentSecondaryView();
   }
 
@@ -7890,7 +7912,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T19:27:47Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T19:37:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
