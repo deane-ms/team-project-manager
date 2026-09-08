@@ -921,6 +921,11 @@
     setDoc(doc(peopleCol, user.uid), {
       name: user.displayName || user.email,
       email: user.email || '',
+      // Google's own account photo -- see "Profile photos" in CLAUDE.md for why this is the
+      // source rather than a custom-upload feature. `|| null`, not `|| ''`, so avatarHtml's
+      // truthiness check treats "never had one" the same as "explicitly cleared" rather than
+      // rendering a broken <img src=""> for accounts with no photo set.
+      photoURL: user.photoURL || null,
       lastSeen: new Date().toISOString()
     }, { merge: true }).catch(function (e) {
       // Not surfaced as a toast: a failure here degrades the roster for *other* people (this
@@ -1629,6 +1634,36 @@
     var hash = 0;
     for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
     return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+  }
+
+  // Matched by display name against the roster, same as every other name-based lookup in this
+  // app (ownership rules, ASSIGNEE, notifications) -- most call sites only ever have a name
+  // string (t.assignee, comment.author, ...), never a uid, so matching any other way would mean
+  // plumbing a uid through call sites that don't have one today. `photoURL` itself is the
+  // person's Google account photo, saved on their roster doc by registerPresence() at sign-in --
+  // see that function and the "Profile photos" note in CLAUDE.md for why that's the source
+  // rather than an upload feature.
+  function personPhotoUrl(name) {
+    if (!name) return null;
+    var match = teamPeople.find(function (p) { return p.name === name; });
+    return (match && match.photoURL) ? match.photoURL : null;
+  }
+
+  // One shared renderer for every small avatar circle in this app (comments, time entries,
+  // mentions, Focus of the Day, People cards, suggestions, archived rows) -- a real photo when
+  // the person has one, the existing colored-initials circle otherwise. `className` should carry
+  // every sizing/spacing class the call site needs (w-*, h-*, shrink-0, any margin utility) --
+  // this only appends what actually differs between the photo and initials cases, so it isn't
+  // guessing at a call site's own layout.
+  function avatarHtml(name, className, textSizeClass) {
+    var photoUrl = personPhotoUrl(name);
+    if (photoUrl) {
+      // referrerpolicy="no-referrer": Google's photo URLs can 403 when the request carries this
+      // page's own URL as a referrer -- a known quirk of hotlinking Google account photos, not
+      // something specific to this app.
+      return '<img src="' + escapeHtml(photoUrl) + '" alt="" referrerpolicy="no-referrer" class="' + className + ' rounded-full object-cover">';
+    }
+    return '<span class="' + className + ' rounded-full ' + avatarColor(name) + ' text-white ' + textSizeClass + ' font-bold flex items-center justify-center">' + initials(name || '?') + '</span>';
   }
 
   // Same hash, PROJECT_BADGE_PALETTE instead of AVATAR_PALETTE -- lets the Gantt's flat,
@@ -2470,7 +2505,7 @@
         '<div class="' + (depth > 0 ? 'ml-4 mt-2 pl-3 border-l-2 border-zinc-200 dark:border-zinc-700' : '') + '">' +
           '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
             '<div class="flex items-center gap-1.5 mb-1">' +
-              '<span class="w-4 h-4 rounded-full ' + avatarColor(c.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(c.author || '?') + '</span>' +
+              avatarHtml(c.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
               '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(c.date)) + ', ' + formatTimeOnly(c.date) + '</span>' +
               '<div class="ml-auto flex items-center gap-0.5">' +
                 '<button type="button" class="comment-reply p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Reply">' + svgIcon('reply', 'w-3 h-3') + '</button>' +
@@ -2495,7 +2530,7 @@
       ? list.map(function (e, i) {
           var linkedItem = e.checklistItemId ? currentChecklist.find(function (item) { return item.id === e.checklistItemId; }) : null;
           return '<div class="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
-            '<span class="w-4 h-4 rounded-full ' + avatarColor(e.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">' + initials(e.author || '?') + '</span>' +
+            avatarHtml(e.author || '', 'w-4 h-4 shrink-0 mt-0.5', 'text-[9px]') +
             '<div class="min-w-0 flex-1">' +
               '<div class="flex items-center gap-1.5">' +
                 '<span class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
@@ -3178,7 +3213,7 @@
     if (!matches.length) { mentionMenu.classList.add('hidden'); return; }
     mentionMenu.innerHTML = matches.map(function (n) {
       return '<button type="button" class="mention-option w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/60 flex items-center gap-2" data-name="' + escapeHtml(n) + '">' +
-        '<span class="w-4 h-4 rounded-full ' + avatarColor(n) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(n) + '</span>' +
+        avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[9px]') +
         '<span class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(n) + '</span>' +
       '</button>';
     }).join('');
@@ -3756,7 +3791,7 @@
           '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-2">' + escapeHtml(t.project) + '</p>' +
           '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
-            '<span class="w-5 h-5 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[10px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            avatarHtml(t.assignee, 'w-5 h-5 shrink-0', 'text-[10px]') +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
         '</button>'
@@ -3885,7 +3920,7 @@
         // (the dot's w-2 plus the top line's gap-2.5), leaving the dot alone on the left edge.
         '<div class="pl-[18px]">' +
           '<div class="flex items-center gap-1.5 mt-1.5">' +
-            '<span class="w-4 h-4 rounded-full ' + avatarColor(t.assignee) + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+            avatarHtml(t.assignee, 'w-4 h-4 shrink-0', 'text-[9px]') +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
           '</div>' +
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
@@ -4473,7 +4508,7 @@
       return (
         '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
           '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
-            '<span class="w-8 h-8 rounded-full ' + avatarColor(p.name) + ' text-white text-sm font-bold flex items-center justify-center shrink-0">' + initials(p.name) + '</span>' +
+            avatarHtml(p.name, 'w-8 h-8 shrink-0', 'text-sm') +
             '<div class="min-w-0 flex-1">' +
               '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
               '<div class="flex items-center gap-1.5 mt-0.5">' +
@@ -4841,7 +4876,7 @@
     var replies = s.replies || [];
     var repliesHtml = replies.map(function (r, i) {
       return '<div class="flex items-start gap-2">' +
-        '<span class="w-5 h-5 rounded-full ' + avatarColor(r.author || '') + ' text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">' + initials(r.author || '?') + '</span>' +
+        avatarHtml(r.author || '', 'w-5 h-5 shrink-0 mt-0.5', 'text-[9px]') +
         '<div class="min-w-0 flex-1 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500"><span class="font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(r.author || 'Unknown') + '</span> · ' + formatShortDate(localDateOf(r.date)) + '</p>' +
           '<p class="text-sm text-zinc-700 dark:text-zinc-200 mt-0.5">' + escapeHtml(r.text) + '</p>' +
@@ -4853,7 +4888,7 @@
     return (
       '<div class="suggestion-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">' +
         '<div class="flex items-start gap-2.5">' +
-          '<span class="w-7 h-7 rounded-full ' + avatarColor(s.author || '') + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(s.author || '?') + '</span>' +
+          avatarHtml(s.author || '', 'w-7 h-7 shrink-0', 'text-xs') +
           '<div class="min-w-0 flex-1">' +
             '<p class="text-xs text-zinc-400 dark:text-zinc-500"><span class="font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(s.author || 'Unknown') + '</span> · ' + formatShortDate(localDateOf(s.date)) + '</p>' +
             '<p class="text-sm text-zinc-800 dark:text-zinc-100 mt-0.5 whitespace-pre-wrap">' + escapeHtml(s.text) + '</p>' +
@@ -4980,7 +5015,7 @@
         lastYear = year;
       }
       html += '<div class="flex items-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
-        '<span class="w-6 h-6 rounded-full ' + avatarColor(t.assignee) + ' text-white text-xs font-bold flex items-center justify-center shrink-0">' + initials(t.assignee) + '</span>' +
+        avatarHtml(t.assignee, 'w-6 h-6 shrink-0', 'text-xs') +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) + '</p>' +
@@ -5717,9 +5752,19 @@
     document.getElementById('digest-bell-wrap').classList.remove('hidden');
     var displayName = user.displayName || user.email;
     userChipName.textContent = displayName;
+    // Not routed through avatarHtml()/personPhotoUrl() -- this fires from onAuthStateChanged,
+    // possibly before this session's own `people` snapshot has arrived with the photoURL
+    // registerPresence (below) is about to write, so looking it up via the roster right here
+    // could race and miss it. user.photoURL is the same value, available immediately with no
+    // snapshot dependency at all.
     var userChipAvatar = document.getElementById('user-chip-avatar');
-    userChipAvatar.innerHTML = svgIcon('user', 'w-3.5 h-3.5');
-    userChipAvatar.className = 'w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-300';
+    if (user.photoURL) {
+      userChipAvatar.innerHTML = '<img src="' + escapeHtml(user.photoURL) + '" alt="" referrerpolicy="no-referrer" class="w-full h-full rounded-full object-cover">';
+      userChipAvatar.className = 'w-7 h-7 rounded-full shrink-0 overflow-hidden';
+    } else {
+      userChipAvatar.innerHTML = svgIcon('user', 'w-3.5 h-3.5');
+      userChipAvatar.className = 'w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-zinc-200 dark:bg-zinc-600 text-zinc-500 dark:text-zinc-300';
+    }
     // Before startListeners, so this session's own roster snapshot already includes them -- a
     // first-time signer-in can assign themselves a task without reloading.
     registerPresence(user);
@@ -5736,7 +5781,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T06:10:37Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T06:40:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

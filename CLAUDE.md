@@ -937,9 +937,34 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         an on-chart version that doesn't exist yet -- this is that, tuned to what this team
         actually finds worth a warning rather than a straight port of TeamGantt's own metric.
 - **`people`** — the **team roster**: one doc per teammate, **doc ID = their Firebase uid**,
-  `{name, email, lastSeen}`, upserted by `registerPresence(user)` on every sign-in
+  `{name, email, photoURL, lastSeen}`, upserted by `registerPresence(user)` on every sign-in
   (`onAuthStateChanged`, deliberately *before* `startListeners` so a first-time signer-in is
   already in their own session's snapshot and can assign themselves a task without reloading).
+  - **Profile photos are pulled from the person's Google account (`user.photoURL`), not an
+    upload feature.** Requested directly ("insert a profile image"); the choice between
+    auto-pulling Google's photo vs. building a real upload flow (Firebase Storage, a new
+    `storage.rules` file with its own deploy step, upload/crop UI) was put to the user rather
+    than assumed — Google's photo won as the zero-infrastructure option, with real upload noted
+    as a possible later layer on top if anyone actually wants to override it. `null`, not `''`,
+    for "no photo" — `avatarHtml()`'s truthiness check would otherwise render a broken
+    `<img src="">` for every account with none set.
+    - **`avatarHtml(name, className, textSizeClass)`** is the one shared renderer for every small
+      avatar circle in the app (comments, time entries, mentions, Focus of the Day, Board rows,
+      People cards, suggestions, archived rows) — a real `<img>` when `personPhotoUrl(name)` finds
+      one, the pre-existing colored-initials `<span>` (`avatarColor`/`initials`) otherwise. Matched
+      by **display name** against `teamPeople`, same as every other name-based lookup in this file
+      — most call sites only ever have a name string (`t.assignee`, `comment.author`, ...), never
+      a uid. `className` carries whatever sizing/spacing the call site needs; the function only
+      appends what differs between the photo and initials cases.
+    - Google photo URLs get `referrerpolicy="no-referrer"` on the `<img>` — a known quirk where
+      Google can 403 the request when it carries this page's own URL as a referrer, unrelated to
+      anything specific to this app.
+    - **The sidebar's own user-chip avatar reads `user.photoURL` directly, not through
+      `avatarHtml()`/`personPhotoUrl()`.** It's set from `onAuthStateChanged`, which can fire
+      before this session's own `people` snapshot has arrived with the value `registerPresence`
+      (called right after, in the same handler) is about to write — looking it up via the roster
+      at that exact moment could race and miss it. `user.photoURL` is the identical value,
+      available immediately with no snapshot dependency.
   - **Why it exists.** Before it, the only answer to "who is on this team" was inferred from the
     board itself (`uniqueValues('assignee')`), so a new joiner did not exist to the app until
     someone hand-typed their name onto a task — they could not be picked, and could not be
