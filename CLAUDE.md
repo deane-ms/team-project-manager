@@ -784,6 +784,34 @@ needs revisiting.
   a tiny stand-in wiring only the collapse/drawer/nav-click behavior under test, screenshotted in
   light, dark, collapsed, and mobile-drawer states. Still not a live-browser/Firestore check (no
   emulator in this environment) — worth a real click-through after deploying.
+- **Floating tooltips (`data-tooltip` + a `tooltip-right`/`tooltip-top` class) are JS-driven, not
+  CSS.** Requested directly, for two spots reported in the same message: the sidebar's icon-only
+  collapsed rail (nothing labels an icon once `.sidebar-label` is hidden) and a truncated Gantt
+  project badge (`projectColor` — see the Gantt section below).
+  - **A pure `::after`-based tooltip was the first attempt, and it doesn't work here.** The
+    sidebar's own `<nav>` (`overflow-y-auto`) and each Gantt row's label cell (`overflow-hidden`)
+    both clip an absolutely-positioned pseudo-element the moment it visually pokes outside their
+    box — this is true *regardless* of the fact that the pseudo-element's own containing block
+    (for `left`/`top` purposes) is the hovered element itself, not that ancestor. Overflow clips
+    rendered descendants unconditionally; it has nothing to do with what establishes their
+    positioning context. Confirmed with an isolated two-case test (a button inside a
+    scroll-clipped `<nav>`, a badge inside an `overflow-hidden` cell) before writing the real
+    fix, since this is exactly the kind of thing that looks correct in the markup and is silently
+    invisible in the browser.
+  - **The fix: one tooltip `<div>` appended directly to `<body>`**, moved with real pixel
+    coordinates (`position: fixed`, computed from `getBoundingClientRect()` on hover) rather than
+    living inside either clipped ancestor's DOM subtree at all. `positionTooltip()` reads a
+    `tooltip-top`/`tooltip-right` class off the *target* to decide which side to render on;
+    `tooltipSuppressed()` gates sidebar tooltips to only fire while `#sidebar` actually has
+    `.collapsed` — expanded, a nav item's own visible label already says what it is, and (more
+    importantly) the collapse button's tooltip text ("Expand sidebar") would otherwise describe
+    the wrong action while the sidebar is still expanded, since clicking it there collapses,
+    not expands.
+  - Delayed on the way in (`setTimeout(..., 300)`, so an incidental mouse pass doesn't flash a
+    tooltip) but instant on the way out (`hideTooltip()` called directly from `mouseout`), same
+    asymmetry native browser tooltips use. Re-verified the real fix with the same isolated
+    two-case test before wiring it into this file — both now render the full text outside their
+    respective clipped ancestor, escaping correctly in both directions.
 
 ### No mock/sample data
 
