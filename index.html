@@ -1493,7 +1493,9 @@
       : addDoc(projectsCol, { name: name, deadline: null, chat: [], links: [] });
     return write.then(function () {
       showToast('Group chat created for ' + name, 'success');
-      logActivity('project_chat_created', 'Created a group chat for "' + name + '"');
+      // No logActivity call -- creating/deleting a chat used to log here, but on request ("remove
+      // these in activity") chat events of every kind (post, create, delete) are now excluded
+      // from the Activity feed entirely. See renderActivityFeed's HIDDEN_ACTIVITY_TYPES.
       selectChatProject(name);
     }).catch(function (err) {
       showToast('Could not create the group chat: ' + err.message, 'error');
@@ -1515,7 +1517,7 @@
     if (!pdoc) return;
     updateDoc(doc(projectsCol, pdoc.id), { chat: deleteField(), links: deleteField() }).then(function () {
       showToast('Deleted the group chat for ' + name, 'info');
-      logActivity('project_chat_deleted', 'Deleted the group chat for "' + name + '"');
+      // No logActivity call -- see createProjectChat's comment above.
       if (currentChatProjectName === name) {
         currentChatProjectName = null;
         document.getElementById('chat-detail').classList.add('hidden');
@@ -6524,18 +6526,28 @@
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
 
+  // Chat-related activity types are excluded from the feed entirely, on request ("remove these
+  // in activity" against a screenshot of "Posted/Created/Deleted... group chat" entries). Nothing
+  // logs these three any more (see createProjectChat/deleteProjectChat/sendProjectChatMessage),
+  // but `activity` is an append-only collection -- firestore.rules denies update/delete outright
+  // so the audit trail can't be silently erased -- so the entries already written before this
+  // change still exist in Firestore and would otherwise keep showing forever. Filtering them out
+  // here hides them from the feed without touching the underlying (immutable) documents.
+  var HIDDEN_ACTIVITY_TYPES = { project_chat: true, project_chat_created: true, project_chat_deleted: true };
+
   function renderActivityFeed() {
     var container = document.getElementById('activity-feed');
+    var visible = activityLog.filter(function (a) { return !HIDDEN_ACTIVITY_TYPES[a.type]; });
     // Its own match rather than applyFilters(): an activity row isn't a task, and the only two
     // things it shows are the summary line and who did it. The priority/project/assignee filters
     // are deliberately ignored here -- they describe tasks, and silently applying them to a log
     // of "X renamed Y" entries would hide rows for reasons the row itself never displays.
     var q = filters.search.trim().toLowerCase();
     var feed = q
-      ? activityLog.filter(function (a) {
+      ? visible.filter(function (a) {
           return ((a.summary || '') + ' ' + (a.user || '')).toLowerCase().indexOf(q) !== -1;
         })
-      : activityLog;
+      : visible;
     if (!feed.length) {
       container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
         (q ? 'No activity matches “' + escapeHtml(filters.search.trim()) + '”.' : 'No activity yet.') +
@@ -7701,7 +7713,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T19:06:08Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T19:13:31Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
