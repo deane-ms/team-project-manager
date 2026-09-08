@@ -552,6 +552,25 @@ to bottom:
        typing on Archived changed nothing and read as "there is no such task in the archive" — a
        wrong answer rather than no answer. If you make another view searchable, add it to
        `SEARCHABLE_VIEWS` and it picks this up automatically.
+     - **The Sort dropdown had the same gap, reported directly as "sorting isn't working" on
+       Activity and Projects.** Neither ever read `filters.sortBy`: Projects always sorts Ongoing
+       by soonest deadline and Completed by most recently archived (one true order, not a user
+       choice), and Activity is a chronological log with no priority/deadline/project fields to
+       sort by in the first place. Fixed two different ways per view rather than one: Projects
+       gets the same disable-with-a-reason treatment as search (`SORT_DISABLED_VIEWS`,
+       `syncSortAvailability()`); Activity got a real sort instead, because "newest first" /
+       "oldest first" is a meaningful choice for a log, just not the same choice a task list
+       offers. So the dropdown's own `<option>` list swaps per view (`TASK_SORT_OPTIONS` vs
+       `ACTIVITY_SORT_OPTIONS`, rebuilt into the live `<select>` and re-synced through
+       `sortByPill.rebuild()`) rather than reusing `sortBy`'s focus/priority/deadline/project
+       values for something they don't mean. The new choice persists in its own
+       `filters.activitySort` field, not a repurposed `sortBy`, so switching back to Board
+       doesn't inherit a stray "oldest" value that means nothing there.
+       - `enhanceSelect()` gained a `setDisabled()` method for this (`sort-by` needed one, `search`
+         didn't). The real `<select>` is `sr-only` and out of tab order — the visible trigger
+         button is what clicks and Tab actually reach — so disabling the select alone would have
+         left the pill fully clickable while looking disabled from a color change alone; `.disabled`
+         has to go on both elements.
    - **Task dependencies were removed** (they shipped in `7ca02d4` and were taken out again).
      The whole editor is gone: the modal's Dependencies section, `wouldCreateCycle`,
      `renderDependenciesEditor`, `addDependency`, `currentTasksForDeps`, the board card's amber

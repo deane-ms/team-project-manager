@@ -1403,7 +1403,7 @@
   // copies, so every consumer below overrides `assignees` with its OWN fresh `[]`; sharing this
   // literal instead would let one caller's array mutations quietly corrupt every other caller
   // that ever fell back to this default in the same page load).
-  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus' };
+  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus', activitySort: 'newest' };
 
   function loadFilters() {
     try {
@@ -1419,7 +1419,11 @@
         priority: typeof raw.priority === 'string' ? raw.priority : '',
         project: typeof raw.project === 'string' ? raw.project : '',
         assignees: assignees,
-        sortBy: typeof raw.sortBy === 'string' ? raw.sortBy : 'focus'
+        sortBy: typeof raw.sortBy === 'string' ? raw.sortBy : 'focus',
+        // Own field, not a repurposed sortBy value -- Activity's two options (newest/oldest
+        // first) don't mean anything on a task list, and vice versa for focus/priority/deadline/
+        // project on a log entry, so switching views can't just reinterpret the same string.
+        activitySort: raw.activitySort === 'oldest' ? 'oldest' : 'newest'
       };
     } catch (e) {
       return Object.assign({}, DEFAULT_FILTERS, { assignees: [] });
@@ -2886,8 +2890,19 @@
       else if (e.key === 'Tab') { closeEnhancedSelectMenu(entry); }
     });
 
+    // The real <select> is sr-only (see above) -- disabling it alone leaves the visible trigger
+    // button fully clickable, since that button is what tab order and clicks actually reach.
+    // Both have to be disabled together for a disabled enhanced select to actually be inert.
+    function setDisabled(disabled) {
+      select.disabled = disabled;
+      trigger.disabled = disabled;
+      trigger.classList.toggle('opacity-50', disabled);
+      trigger.classList.toggle('cursor-not-allowed', disabled);
+      if (disabled) closeEnhancedSelectMenu(entry);
+    }
+
     rebuild();
-    return { sync: sync, rebuild: rebuild };
+    return { sync: sync, rebuild: rebuild, setDisabled: setDisabled };
   }
 
   var filterPriorityPill = enhanceSelect('filter-priority');
@@ -4865,6 +4880,14 @@
           return ((a.summary || '') + ' ' + (a.user || '')).toLowerCase().indexOf(q) !== -1;
         })
       : activityLog;
+    // activityLog itself already arrives newest-first (the Firestore query is ordered that way)
+    // -- this re-sort is what makes "Oldest first" real rather than decorative, and is cheap
+    // enough to just always do rather than skip it on the (already-true) assumption the feed is
+    // still in query order after the search filter above.
+    feed = feed.slice().sort(function (a, b) {
+      var diff = new Date(a.at) - new Date(b.at);
+      return filters.activitySort === 'oldest' ? diff : -diff;
+    });
     if (!feed.length) {
       container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
         (q ? 'No activity matches “' + escapeHtml(filters.search.trim()) + '”.' : 'No activity yet.') +
@@ -5105,6 +5128,7 @@
     appRoot.classList.remove('sidebar-open');
     document.getElementById('sidebar-backdrop').classList.add('hidden');
     syncSearchAvailability();
+    syncSortAvailability();
     renderCurrentSecondaryView();
   }
 
@@ -5129,6 +5153,41 @@
       : (currentView === 'activity' ? 'Search activity…' : 'Search tasks, checklists, comments…');
     input.classList.toggle('opacity-50', !searchable);
     input.classList.toggle('cursor-not-allowed', !searchable);
+  }
+
+  // Same "control present but wired to nothing" gap the search box used to have, reported
+  // directly for Sort on Activity and Projects: neither reads filters.sortBy at all. Projects
+  // always sorts Ongoing by soonest deadline and Completed by most recently archived -- one
+  // true order, not a user choice -- so Sort is disabled there rather than left clickable and
+  // inert. Activity actually got a real sort out of this instead of a disable, since "newest
+  // first" / "oldest first" is a meaningful choice for a log, just not the same choice
+  // (Focus/Priority/Deadline/Project) a task list offers -- so the dropdown's own option list
+  // swaps per view rather than reusing options that don't mean anything there.
+  var TASK_SORT_OPTIONS = [
+    { value: 'focus', label: 'Sort: Focus' },
+    { value: 'priority', label: 'Sort: Priority' },
+    { value: 'deadline', label: 'Sort: Deadline' },
+    { value: 'project', label: 'Sort: Project' }
+  ];
+  var ACTIVITY_SORT_OPTIONS = [
+    { value: 'newest', label: 'Sort: Newest first' },
+    { value: 'oldest', label: 'Sort: Oldest first' }
+  ];
+  var SORT_DISABLED_VIEWS = ['projects'];
+
+  function syncSortAvailability() {
+    var select = document.getElementById('sort-by');
+    if (!select) return;
+    var disabled = SORT_DISABLED_VIEWS.indexOf(currentView) !== -1;
+    var isActivity = currentView === 'activity';
+    var options = isActivity ? ACTIVITY_SORT_OPTIONS : TASK_SORT_OPTIONS;
+    select.innerHTML = options.map(function (o) {
+      return '<option value="' + o.value + '">' + o.label + '</option>';
+    }).join('');
+    select.value = isActivity ? filters.activitySort : filters.sortBy;
+    select.title = disabled ? 'Sort doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView) : '';
+    sortByPill.rebuild();
+    sortByPill.setDisabled(disabled);
   }
 
   document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
@@ -5264,7 +5323,8 @@
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('sort-by').addEventListener('change', function (e) {
-    filters.sortBy = e.target.value;
+    if (currentView === 'activity') filters.activitySort = e.target.value;
+    else filters.sortBy = e.target.value;
     persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
@@ -5274,8 +5334,7 @@
     // every later push()/splice() on filters.assignees would silently mutate the default too.
     filters = Object.assign({}, DEFAULT_FILTERS, { assignees: [] });
     persistFilters();
-    document.getElementById('sort-by').value = 'focus';
-    sortByPill.sync();
+    syncSortAvailability();
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-priority').value = '';
     filterPriorityPill.sync();
@@ -5903,7 +5962,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T09:14:40Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T09:56:32Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -5945,13 +6004,13 @@
   ========================================================= */
   // Pushes the persisted `filters` back into the actual inputs. The project/assignee selects
   // aren't touched here -- their options don't exist yet at init time; renderFilterOptions()
-  // restores those (and drops any that no longer match a real project/person).
+  // restores those (and drops any that no longer match a real project/person). Sort isn't
+  // touched here either, for the same reason: init() calls setView('board') right after this,
+  // which runs syncSortAvailability() and sets sort-by's value from the correct field itself.
   function restoreFilterControls() {
     document.getElementById('filter-search').value = filters.search;
     document.getElementById('filter-priority').value = filters.priority;
     filterPriorityPill.sync();
-    document.getElementById('sort-by').value = filters.sortBy;
-    sortByPill.sync();
   }
 
   function init() {
