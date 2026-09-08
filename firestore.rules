@@ -103,7 +103,12 @@ service cloud.firestore {
       allow update: if isMediashock() && (
         isAdmin()
         || isAssignee(resource.data)
-        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
+        // reviewAudience joined this carve-out for the same reason status/completedAt did:
+        // it's set from promptReviewAudience(), fired either by dragging a card into Review
+        // (anyone's drag) or by clicking the card's own review-label badge to change it
+        // (also open to anyone, not just the assignee) -- neither is "editing the task," so
+        // neither should need to be the assignee or an admin.
+        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt', 'reviewAudience'])
       );
       // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and
       // deletes it from here. Both halves land in the same batch, so existsAfter() -- which

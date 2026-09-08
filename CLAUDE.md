@@ -689,6 +689,59 @@ to bottom:
        state isn't reachable from `window.*` for a Playwright smoke test either). Verified via
        `node scripts/check-syntax.mjs` and a careful manual re-read of the diff only. Worth an
        emulator-backed pass before/after the next deploy if anything here looks off in practice.
+   - **Review audience** (`reviewAudience` field, `promptReviewAudience`, `reviewAudienceBadgeHtml`)
+     — a task entering the Review column gets asked whether the review is for the client or
+     internal, and the answer shows as a label on its Board card for as long as it stays there.
+     Requested directly, then a direct follow-up ("make it editable as well") turned the label
+     from a one-time stamp into something you can click to change your mind.
+     - **`promptReviewAudience(onChoose)` reuses the confirm modal instead of building a second
+       one** — it already has two independently-labeled buttons (`confirmText`/`cancelText`) plus
+       an `onCancel` callback, which is exactly a two-choice prompt's shape. "Cancel" here is a
+       real equal choice ("Internal review"), not an abort: dismissing via backdrop click or
+       Escape calls neither callback, so `onChoose` simply never fires and whatever
+       `reviewAudience` already had (usually nothing, for a fresh move into Review) is left
+       alone — asking never forces an answer.
+     - **Three separate triggers, all funneling into the same `promptReviewAudience`:**
+       (1) dropping a card onto the Review column on the Board — fires *after* `updateTaskStatus`
+       completes the move, not before, so the drop itself never waits on a modal decision, then a
+       follow-up bare `updateDoc({ reviewAudience })`; (2) flipping the task modal's Status
+       dropdown to Review — a `change` listener on `#task-status` prompts immediately and stashes
+       the answer in `pendingReviewAudience` (a module var, since Save can't itself await an async
+       modal choice), read back into `taskData` at save time; (3) clicking the card's own label,
+       any time, via `data-set-review-audience` in the global click delegation — checked *before*
+       `data-open-task` there, so clicking the label re-prompts instead of opening the full task
+       modal underneath it.
+     - **Clearing is centralized in `statusTransitionEffects`, not duplicated at each call
+       site** — `if (newStatus !== 'Review' && oldStatus === 'Review') patch.reviewAudience =
+       null`, same shared-helper pattern `completedAt` already uses for entering/leaving Done. A
+       card leaving Review and coming back later starts blank again rather than silently
+       reusing a stale answer nobody just gave.
+     - **`openTaskModal()` only carries `pendingReviewAudience` forward when the task being
+       opened is *already* in Review** (`task.status === 'Review' ? (task.reviewAudience ||
+       null) : null`) — editing a Pipeline task doesn't inherit a leftover value from whatever
+       task the modal last had open, and the dropdown's `change` event only fires on an actual
+       user interaction, not on `openTaskModal()` setting the initial value — so opening an
+       existing Review task and clicking Save without touching Status never re-prompts.
+     - **`firestore.rules` needed a matching change**: `reviewAudience` joined the `tasks`
+       `update` rule's existing `changedKeys().hasOnly([...])` carve-out (alongside `status`/
+       `completedAt`/`updatedAt`) — both the drag-and-drop prompt and the click-to-edit badge
+       write it standalone, for anyone on the team, not just the task's assignee or an admin,
+       the identical reasoning that carve-out already documents for `status` itself. **Remember
+       the separate manual step**: pushing this file's change to the repo does not deploy the
+       rule — see "Firestore rules/index deploys are separate from shipping the site" in the
+       top-level `CLAUDE.md`. Until that manual deploy happens, a non-assignee/non-admin
+       teammate's attempt to set or change the label will fail silently (the write is caught and
+       swallowed on purpose — see the next point), while it keeps working for the assignee and
+       admins, who can write anything on the task regardless.
+     - Both standalone writes (the drag-and-drop follow-up and the badge-click handler) swallow
+       their own errors rather than surfacing every one as a toast — a declined/failed label
+       write is not worth interrupting anyone over; the badge just stays whatever it was.
+     - **Two colors, deliberately not reused from anywhere else that colors a Board card**: blue
+       for Client, zinc for Internal. Every other status/priority hue already means something
+       specific on this exact row (rose/amber/sky = High/Medium/Low, purple = ready-for-review,
+       emerald = Done) or on the project badge above it (the orange/teal/indigo/fuchsia/cyan/
+       lime/pink/violet hash palette) — reusing any of those here would have read as a second,
+       false signal riding along with the real one.
    - **Overtime is manually tagged** (`task-time-overtime`, `setOvertimeToggle`) — a plain toggle
      button next to Billable, same shape and pattern. It used to be auto-detected: crossing
      `OVERTIME_DAILY_MINUTES` (8h) in a person's cumulative logged time for the day popped an

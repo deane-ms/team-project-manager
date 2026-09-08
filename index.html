@@ -2070,6 +2070,21 @@
   confirmModal.addEventListener('click', function (e) { if (e.target === confirmModal) closeConfirm(); });
   confirmModal.addEventListener('keydown', trapFocus(confirmModal));
 
+  // Reuses the confirm modal rather than building a second one -- it already has two
+  // independently-labeled buttons and an onCancel callback, which is exactly a two-choice
+  // prompt's shape. "Cancel" here is a real equal choice (Internal), not an abort: dismissing
+  // via backdrop click or Escape calls neither callback, so onChoose simply never fires and
+  // whatever reviewAudience already had (usually nothing, for a fresh move into Review) is left
+  // alone -- asking doesn't force an answer.
+  function promptReviewAudience(onChoose) {
+    openConfirm(
+      'Who is this review for?',
+      'Labels the card in the Review column so the team knows at a glance. You can change this later by clicking the label.',
+      function () { onChoose('client'); },
+      { tone: 'question', confirmText: 'Client review', cancelText: 'Internal review', onCancel: function () { onChoose('internal'); } }
+    );
+  }
+
   /* =========================================================
      TASK MODAL
   ========================================================= */
@@ -2082,6 +2097,11 @@
   // task's existing `dependsOn` from load to save so a routine edit doesn't wipe it.
   var currentDependsOn = [];
   var timeEntryEditIndex = null;
+  // Set from openTaskModal() (carrying over an existing task's value) and updated live if the
+  // status dropdown gets flipped to Review while the modal is open (see the #task-status change
+  // listener below) -- read at save time rather than prompted for then, since promptReviewAudience
+  // is async and the Save button click can't itself await a modal choice.
+  var pendingReviewAudience = null;
   // Snapshot of the whole form as of modal-open time, used to detect unsaved edits so an
   // accidental backdrop click / Escape / Cancel doesn't silently discard in-progress work.
   var formBaseline = '{}';
@@ -2168,6 +2188,9 @@
     taskPriorityPill.sync();
     document.getElementById('task-status').value = task ? task.status : 'Pipeline';
     taskStatusPill.sync();
+    // Carries over an existing Review task's audience untouched; a new task or one that isn't
+    // currently in Review starts with nothing to carry, since it hasn't been asked yet.
+    pendingReviewAudience = (task && task.status === 'Review') ? (task.reviewAudience || null) : null;
     document.getElementById('task-start').value = task ? task.startDate : toDateInputValue(todayMidnight());
     var hasDeadline = !task || !!task.deadline;
     document.getElementById('task-deadline').value = task ? (task.deadline || '') : '';
@@ -3116,6 +3139,16 @@
     deadlineEl.disabled = e.target.checked;
     if (e.target.checked) deadlineEl.value = '';
   });
+  // Fires on a real change event, including the one enhanceSelect()'s custom pill dispatches on
+  // the real (sr-only) <select> when an item is clicked -- so this fires the same way whether
+  // someone uses the pill or (rarely) the underlying select directly. Only prompts on an actual
+  // flip to Review, not on the initial value openTaskModal() sets when the modal opens (that's a
+  // property assignment, not a user interaction, so no change event fires for it) -- editing an
+  // already-Review task and leaving it there never re-asks.
+  document.getElementById('task-status').addEventListener('change', function (e) {
+    if (e.target.value !== 'Review') return;
+    promptReviewAudience(function (audience) { pendingReviewAudience = audience; });
+  });
   document.getElementById('task-modal-close').addEventListener('click', requestCloseTaskModal);
   document.getElementById('task-cancel-btn').addEventListener('click', requestCloseTaskModal);
   taskModal.addEventListener('click', function (e) { if (e.target === taskModal) requestCloseTaskModal(); });
@@ -3206,6 +3239,10 @@
       checklist: currentChecklist,
       timeEntries: currentTimeEntries,
       dependsOn: currentDependsOn,
+      // Overridden back to null by statusEffect.patch below on the leaving-Review path -- this
+      // is the staying-in/entering-Review value, already resolved before Save was ever clicked
+      // (see the #task-status change listener and openTaskModal(), above).
+      reviewAudience: pendingReviewAudience,
       updatedAt: new Date().toISOString()
     }, statusEffect.patch);
     if (!isEditing) {
@@ -3399,6 +3436,12 @@
     var patch = {};
     if (enteringDone) patch.completedAt = new Date().toISOString();
     else if (leavingDone) patch.completedAt = null;   // moved back out -- it isn't "completed" anymore
+    // Leaving Review clears which audience it was for -- the label only means something while
+    // the card is actually sitting in that column, and a stale "Client review" surviving a move
+    // to In Progress and then back to Review later would describe a decision nobody just made.
+    // Setting it happens elsewhere (promptReviewAudience(), fired from wherever a task actually
+    // enters Review), not here -- this function is synchronous and the choice needs a person.
+    if (newStatus !== 'Review' && oldStatus === 'Review') patch.reviewAudience = null;
 
     return { patch: patch, enteringDone: enteringDone, willFinishProject: willFinishProject, projectName: taskProject };
   }
@@ -3925,6 +3968,27 @@
     return order.map(function (key) { return { project: key, tasks: byProject[key] }; });
   }
 
+  // Client vs internal review -- set by promptReviewAudience() (drag-and-drop into Review, or
+  // flipping the modal's status dropdown to Review), cleared by statusTransitionEffects() the
+  // moment a task leaves Review. Rendered only in that column (reviewAudienceBadgeHtml returns
+  // '' for every other status) because that's the only place the distinction still means
+  // anything; it isn't shown as a Focus of the Day/Gantt/People badge, just here.
+  function reviewAudienceBadgeHtml(t) {
+    if (t.status !== 'Review') return '';
+    var audience = t.reviewAudience;
+    var cls = audience === 'client'
+      ? 'bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/25'
+      : audience === 'internal'
+        ? 'bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600'
+        : 'border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500';
+    var label = audience === 'client' ? 'Client review' : audience === 'internal' ? 'Internal review' : 'Set review type';
+    // A <button>, not a <span> -- editable, per direct follow-up request, so a wrong or missing
+    // answer doesn't require dragging the card back out of Review and in again to fix. Checked
+    // ahead of data-open-task in the click delegation below, same ordering as edit/delete/archive,
+    // so clicking it re-prompts instead of opening the task modal underneath it.
+    return '<button type="button" data-set-review-audience="' + t.id + '" title="Click to change" class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + cls + '">' + label + '</button>';
+  }
+
   // One compact row per task, meant to live inside projectGroupCardHtml's wrapper below -- not
   // a shrunken version of the old full task-card, a different, deliberately narrower format.
   // Checklist/time/comment counts and the Drive-link shortcut stay dropped -- reachable by
@@ -3972,6 +4036,7 @@
           '</div>' +
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
+            reviewAudienceBadgeHtml(t) +
             '<span class="flex items-center gap-1 text-xs ' + dateClass + '">' + svgIcon('calendar', 'w-3 h-3') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
             (timeMinutes ? '<span class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3 h-3') + formatDuration(timeMinutes) + '</span>' : '') +
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
@@ -4069,7 +4134,21 @@
         e.preventDefault();
         col.classList.remove('col-drop-target');
         var status = col.getAttribute('data-column');
-        if (draggedTaskId) updateTaskStatus(draggedTaskId, status);
+        if (!draggedTaskId) return;
+        // Read before the write, not after -- updateTaskStatus() no-ops (and tasks won't reflect
+        // the new status until Firestore round-trips) if this waits for its promise instead.
+        var droppedTask = tasks.find(function (x) { return x.id === draggedTaskId; });
+        var enteringReview = droppedTask && droppedTask.status !== 'Review' && status === 'Review';
+        var idDropped = draggedTaskId;
+        updateTaskStatus(draggedTaskId, status);
+        // Asked after the move completes, not before -- the drop itself shouldn't wait on a
+        // modal decision. Declining leaves reviewAudience unset; the card's own label is
+        // clickable afterward if someone wants to set it later.
+        if (enteringReview) {
+          promptReviewAudience(function (audience) {
+            updateDoc(doc(tasksCol, idDropped), { reviewAudience: audience }).catch(function () { /* non-critical -- label just stays unset */ });
+          });
+        }
       });
     });
   }
@@ -5259,7 +5338,17 @@
     var archiveBtn = e.target.closest('[data-archive-completed]');
     var archiveTaskBtn = e.target.closest('[data-archive-task]');
     var unarchiveBtn = e.target.closest('[data-unarchive-task]');
+    var reviewAudienceBtn = e.target.closest('[data-set-review-audience]');
 
+    if (reviewAudienceBtn) {
+      var idRA = reviewAudienceBtn.getAttribute('data-set-review-audience');
+      promptReviewAudience(function (audience) {
+        updateDoc(doc(tasksCol, idRA), { reviewAudience: audience }).catch(function (err) {
+          showToast('Could not update: ' + err.message, 'error');
+        });
+      });
+      return;
+    }
     if (archiveBtn) {
       handleArchiveCompletedClick(archiveBtn);
       return;
@@ -5991,7 +6080,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:29:12Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:39:01Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
