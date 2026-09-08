@@ -680,7 +680,7 @@
              directory. Width is fixed (w-64) below the lg breakpoint's two-column layout, and
              JS-controlled (see applyChatListWidth) at lg and above -- the drag handle only makes
              sense once the panes actually sit side by side. -->
-        <div id="chat-project-list-pane" class="w-full lg:w-64 shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
+        <div id="chat-project-list-pane" class="w-full lg:w-32 shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
           <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between gap-2">
             <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Chats</p>
             <button type="button" id="chat-new-btn" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
@@ -1493,9 +1493,10 @@
       : addDoc(projectsCol, { name: name, deadline: null, chat: [], links: [] });
     return write.then(function () {
       showToast('Group chat created for ' + name, 'success');
-      // No logActivity call -- creating/deleting a chat used to log here, but on request ("remove
-      // these in activity") chat events of every kind (post, create, delete) are now excluded
-      // from the Activity feed entirely. See renderActivityFeed's HIDDEN_ACTIVITY_TYPES.
+      // Creating/deleting the chat thread itself still logs -- a project-level event, unlike the
+      // individual messages inside it (see renderActivityFeed's HIDDEN_ACTIVITY_TYPES, which
+      // hides only the per-message `project_chat` type, not these two).
+      logActivity('project_chat_created', 'Created a group chat for "' + name + '"');
       selectChatProject(name);
     }).catch(function (err) {
       showToast('Could not create the group chat: ' + err.message, 'error');
@@ -1517,7 +1518,7 @@
     if (!pdoc) return;
     updateDoc(doc(projectsCol, pdoc.id), { chat: deleteField(), links: deleteField() }).then(function () {
       showToast('Deleted the group chat for ' + name, 'info');
-      // No logActivity call -- see createProjectChat's comment above.
+      logActivity('project_chat_deleted', 'Deleted the group chat for "' + name + '"');
       if (currentChatProjectName === name) {
         currentChatProjectName = null;
         document.getElementById('chat-detail').classList.add('hidden');
@@ -1614,8 +1615,13 @@
      the board. Persisted the same way `filters` is (a bare localStorage read/write, no
      Firestore) -- this is a personal display preference, not shared team state. ---- */
   var CHAT_LIST_WIDTH_KEY = 'flowboard_chat_list_width';
-  var CHAT_LIST_WIDTH_MIN = 200;
-  var CHAT_LIST_WIDTH_DEFAULT = 256; // matches the original w-64
+  // Both halved from the original 200/256 -- reported directly against a screenshot ("this
+  // should not be the default width, make it 50% the default") after w-64 read as too wide for
+  // a list that's really just an avatar + one truncated line. Matches the new w-32 fallback
+  // class on #chat-project-list-pane below, so there's no flash of the old wider size before
+  // applyChatListWidth's inline style takes over on load.
+  var CHAT_LIST_WIDTH_MIN = 100;
+  var CHAT_LIST_WIDTH_DEFAULT = 128;
 
   // The cap is relative (up to half the row), not a fixed pixel ceiling -- reported directly
   // ("make the width extendable to up to 50% of the space allowed"). A flat 440px read as
@@ -6526,14 +6532,17 @@
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
 
-  // Chat-related activity types are excluded from the feed entirely, on request ("remove these
-  // in activity" against a screenshot of "Posted/Created/Deleted... group chat" entries). Nothing
-  // logs these three any more (see createProjectChat/deleteProjectChat/sendProjectChatMessage),
-  // but `activity` is an append-only collection -- firestore.rules denies update/delete outright
-  // so the audit trail can't be silently erased -- so the entries already written before this
-  // change still exist in Firestore and would otherwise keep showing forever. Filtering them out
-  // here hides them from the feed without touching the underlying (immutable) documents.
-  var HIDDEN_ACTIVITY_TYPES = { project_chat: true, project_chat_created: true, project_chat_deleted: true };
+  // Individual chat messages don't belong in a task-focused audit log -- reported directly ("chat
+  // messages should not appear in Activity"). `project_chat` is the old per-message type (posting/
+  // removing/forwarding a message); nothing logs it any more (see sendProjectChatMessage/
+  // removeChatMessage/forwardChatMessage), but `activity` is an append-only collection --
+  // firestore.rules denies update/delete outright so the audit trail can't be silently erased --
+  // so entries already written under this type before that fix still exist in Firestore and would
+  // otherwise keep showing forever. Filtering it out here hides those rows from the feed without
+  // touching the underlying (immutable) documents. Creating/deleting the chat thread itself
+  // (`project_chat_created`/`project_chat_deleted`) is a project-level event, not message traffic
+  // -- confirmed directly to keep logging after a brief pass where it was excluded too.
+  var HIDDEN_ACTIVITY_TYPES = { project_chat: true };
 
   function renderActivityFeed() {
     var container = document.getElementById('activity-feed');
@@ -7713,7 +7722,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T19:13:31Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T19:16:06Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

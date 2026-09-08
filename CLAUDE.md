@@ -1089,28 +1089,31 @@ to bottom:
          the message menu**, not after — `openChatForwardMenu`/`openChatReactionPicker` compute
          their own position from `getBoundingClientRect()` on the button that opened them, which
          returns a meaningless all-zero rect once that button's ancestor menu is `hidden`.
-     - **No chat activity of any kind appears in the Activity feed** — reported directly ("chat
-       messages should not appear in Activity"), first for individual messages only. `logActivity`
-       calls for posting, removing, and forwarding a message were removed outright (they'd have
-       flooded a task-focused audit log with routine chat traffic, and surfaced message *snippets*
-       somewhere well beyond the chat itself). Creating/deleting an entire chat thread
-       (`project_chat_created`/`project_chat_deleted`) originally kept logging, on the reasoning
-       that it's a project-level event closer in kind to a deadline change than to the message
-       traffic inside the thread — reversed on a second, more direct pass ("remove these in
-       activity", against a screenshot of a feed dominated by "Posted/Created/Deleted... group
-       chat" rows): in practice, a team actively setting up and tearing down chats while testing
-       generates exactly the same kind of noise the first fix was trying to avoid, so `logActivity`
-       was dropped from `createProjectChat`/`deleteProjectChat` too.
-       - **The entries already written before this second fix can't be deleted through the app.**
-         `activity` is append-only by design (`allow update, delete: if false` in
-         `firestore.rules`, same convention as every audit log in this codebase — see the
-         top-level `CLAUDE.md`'s "two rules conventions" section) specifically so nobody can erase
-         the record of what they did. `renderActivityFeed` instead filters `activityLog` against
-         `HIDDEN_ACTIVITY_TYPES` (`project_chat`/`project_chat_created`/`project_chat_deleted`)
-         before rendering, hiding these rows from the feed without touching the underlying
-         (immutable) Firestore documents — the only entries a real admin could still fully purge
-         are the ones already in Firestore, and only by deleting them directly in the Firebase
-         console (bypassing the app), not through anything this codebase exposes.
+     - **Individual chat messages don't appear in the Activity feed; creating/deleting a whole
+       chat thread does.** First reported for messages only ("chat messages should not appear in
+       Activity") — `logActivity` calls for posting, removing, and forwarding a message
+       (`project_chat`) were removed outright, since they'd have flooded a task-focused audit log
+       with routine chat traffic and surfaced message *snippets* well beyond the chat itself.
+       - **Briefly extended to creating/deleting the thread too, then reverted the same day.**
+         A screenshot of a feed dominated by "Posted/Created/Deleted... group chat" rows (from a
+         team actively testing the chat feature) first read as "all of this is noise" — `logActivity`
+         was dropped from `createProjectChat`/`deleteProjectChat` and `renderActivityFeed` was
+         changed to filter out all three types. Corrected directly right after ("create and delete
+         project chat should still log under activity"): creating/deleting a thread is a
+         project-level event, closer in kind to a deadline change than to the message traffic
+         inside it, and stays rare enough not to be noise on its own — it was only *adjacent* noise
+         while sitting in the same feed as dozens of per-message rows. Both `logActivity` calls
+         are back in `createProjectChat`/`deleteProjectChat`; only `project_chat` stays in
+         `HIDDEN_ACTIVITY_TYPES` now.
+       - **The stale `project_chat`-type entries already written before the messages fix can't be
+         deleted through the app.** `activity` is append-only by design (`allow update, delete: if
+         false` in `firestore.rules`, same convention as every audit log in this codebase — see
+         the top-level `CLAUDE.md`'s "two rules conventions" section) specifically so nobody can
+         erase the record of what they did. `renderActivityFeed` filters `activityLog` against
+         `HIDDEN_ACTIVITY_TYPES` before rendering instead, hiding those rows from the feed without
+         touching the underlying (immutable) documents — the only way to actually remove them from
+         Firestore is deleting them directly in the Firebase console, not through anything this
+         codebase exposes.
      - **Typing indicators and reactions were asked for directly, then the free-tier constraint
        was clarified before building either.** Both are plain Firestore field writes with no
        Cloud Storage dependency, so both fit inside Spark's free quota (50k reads/20k writes per
