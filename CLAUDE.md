@@ -753,6 +753,85 @@ to bottom:
        the rest of it (past the date/time icons) sat empty. Moving it to the end and giving it
        `ml-auto` pushes just that one badge to the row's right edge without disturbing the
        left-packed order of Priority/date/time/overdue before it.
+   - **Project group chat** (`createProjectChat`, `openProjectChat`, `renderProjectChatModal`,
+     `PROJECT_CHAT_REACTIONS`) — a dedicated message thread + pinned-links list per project,
+     requested directly as "something equivalent to a WhatsApp/Google Chat group" for housing a
+     project's links, images and conversation in one place, separate from task comments.
+     - **Manual, not automatic on a project's first task** — explicitly called out by the user
+       mid-build ("this is something to be created manually and not automatically when a user
+       creates a task"). Most projects never need a dedicated thread, so `projectCardHtml` shows
+       a quiet `+ Group chat` button (same progressive-disclosure pattern as `+ Deadline` above
+       it) until someone deliberately creates one via `openConfirm`; only then does it become
+       `Group chat (N)`, an open button. `Array.isArray(projectDoc.chat)` is the one signal a
+       chat exists — no separate boolean flag to keep in sync with it.
+     - **Lives on the same `projects/{id}` doc as the deadline**, not a new collection —
+       `chat` (array of `{id, text, author, date, reactions}`, same shape/append pattern as task
+       comments: `arrayUnion` to add, a full-array rewrite to edit an existing entry's fields)
+       and `links` (array of `{id, label, url}`). `createProjectChat` reuses
+       `projectDeadlineDoc(name)`'s existing find-or-create logic rather than adding a second
+       lookup — the function predates chat but was never deadline-specific in what it does, just
+       in what it was originally written for.
+     - **Reuses `enrichCommentText`/`parseMentions` wholesale** for @mentions and auto-linking
+       pasted URLs — a chat message is rendered exactly like a task comment's text, so "links and
+       images" just means "paste the Drive/image URL and it becomes clickable," the same as
+       comments already do. No separate URL-linkifying code.
+     - **Only @mentions notify, unlike a task comment** — there's no single "assignee" a project
+       chat message could default to notifying (`notifyOnProjectChat`, mirroring
+       `notifyOnComment` minus that fallback). The notification doc carries a new `chatProject`
+       field instead of `taskId`/`taskName`; `renderNotificationBell` and the notification-list
+       click handler both branch on its presence — the sentence reads "mentioned you in the '…'
+       group chat" instead of "…on '…'", and clicking opens `openProjectChat(chatProject)`
+       instead of a task.
+     - **Typing indicators and reactions were asked for directly, then the free-tier constraint
+       was clarified before building either.** Both are plain Firestore field writes with no
+       Cloud Storage dependency, so both fit inside Spark's free quota (50k reads/20k writes per
+       day) — an 11-person team posting and reacting in one project chat comes nowhere close.
+       The one genuine free-tier wall in this app is images/file *uploads*: Cloud Storage for
+       Firebase stopped supporting the Spark plan for new buckets in a 2024 policy change, which
+       is why links stay paste-only (see above) rather than a real upload/attach flow.
+       - **Reactions** (`PROJECT_CHAT_REACTIONS`, `toggleProjectChatReaction`) are a small fixed
+         set (Like/Love/Noted — `thumbsUp`/`heart`/`check` SVGs), not a free emoji picker: this
+         app never uses emoji anywhere (always inline SVG, see the parent `Claude
+         Projects/CLAUDE.md`), so a normal chat app's 👍/❤️ reaction picker isn't available and
+         needed its own icon set instead. Toggling is a full-array rewrite of `chat` (same reason
+         `removeCommentAt` rewrites the whole array) — `arrayUnion` can only append a new
+         element, never mutate a field on one already in the array.
+       - **Typing presence** (`projectTyping/{projectId}`, same doc id as the project doc) is
+         `{entries: [{name, at}]}`, a plain array rather than a map keyed by display name — a
+         name containing "." would otherwise be read as a nested field path by `setDoc`/
+         `updateDoc`'s dotted-key handling (e.g. "J. Tan"), silently writing to the wrong place.
+         The chat modal keeps its own local cache of the latest snapshot
+         (`latestChatTypingEntries`) rather than calling `getDoc` fresh on every heartbeat — the
+         modal has to already be open (and therefore already subscribed) for anyone to type into
+         it, so the cache is never actually stale when a heartbeat needs it. Entries age out
+         after `PROJECT_CHAT_TYPING_TTL_MS` (8s); a person's own entry also clears immediately on
+         blur/send/close rather than waiting out the TTL, and a plain `setInterval` re-render
+         (`chatTypingTickTimer`, every 2s) is what actually hides a stale entry for everyone else
+         once nobody's written a newer heartbeat over it — nothing server-side expires it.
+       - **Firestore rules needed a new, deliberately wide-open collection block**
+         (`projectTyping` in `firestore.rules`) — enumerated explicitly rather than folded into
+         an existing rule, per this app's "never `match /{document=**}`" convention. Whole-team
+         read/write, same as `projects` itself: there's no per-message ownership to scope here,
+         just a small rolling presence list.
+     - **An open chat re-renders live from the same `projects` listener that already drives the
+       deadline UI** — `unsubProjects`'s `onSnapshot` calls `renderProjectChatModal()` whenever
+       the modal is open, the same way the `tasks` listener already re-renders an open task
+       modal. A teammate's new message, reaction or pinned link shows up without needing its own
+       listener.
+   - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
+     specific task card," built alongside the project chat above (a message can reference a
+     task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via
+     `history.replaceState` (not `pushState`, so opening/closing tasks doesn't spam browser
+     history) for every existing task it opens — not only when Copy Link is clicked — so the
+     address bar is always a valid share link for whatever's open, and `closeTaskModal` clears
+     it back to the plain path. `copyTaskLink` (the modal header's new link-icon button, next to
+     the close button, hidden on a fresh "Add Task") just writes that same URL to the clipboard.
+     - **Consuming the link on load has to wait for the first real `tasks` snapshot** — `tasks`
+       starts as `[]`, so checking `location.hash` any earlier would always miss. Guarded by a
+       one-time `deepLinkOpened` flag inside the `tasks` `onSnapshot` handler so a *later*
+       snapshot (someone else's unrelated edit landing live) can't reopen a task the person
+       already closed. A `hashchange` listener separately covers pasting a fresh `#task=` link
+       into a tab that's already open, guarded against re-opening the task that's already open.
    - **Overtime is manually tagged** (`task-time-overtime`, `setOvertimeToggle`) — a plain toggle
      button next to Billable, same shape and pattern. It used to be auto-detected: crossing
      `OVERTIME_DAILY_MINUTES` (8h) in a person's cumulative logged time for the day popped an
@@ -1183,6 +1262,10 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 - **`suggestions`** — one doc per suggestion, with replies as an embedded array
   (`{text, author, date}` objects, updated via full-array-rewrite on `updateDoc`) rather than a
   subcollection. Shared read/write like `tasks`.
+- **`projectTyping`** — ephemeral "who's typing" presence for a project's group chat (see
+  "Project group chat" above), one doc per project sharing that project's own `projects/{id}`
+  doc id: `{entries: [{name, at}]}`. Whole-team read/write, same as `projects`. Not queried with
+  `where`/`orderBy`, so it needs no index entry.
 
 Any *new* top-level collection needs both a `firestore.rules` block and, if it's ever queried with
 `where` + `orderBy` together, an entry in `firestore.indexes.json` — and neither deploys with the

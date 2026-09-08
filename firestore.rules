@@ -165,6 +165,15 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // Ephemeral "who's typing" presence for a project's group chat (see PROJECT GROUP CHAT in
+    // index.html) -- one doc per project, same id as its `projects/{projectId}` doc, holding
+    // {entries: [{name, at}]}. Whole-team read/write like `projects` itself: there's no
+    // per-message ownership here to scope, just a small rolling presence list nobody has a
+    // reason to see or change for anyone but themselves in practice.
+    match /projectTyping/{projectId} {
+      allow read, write: if isMediashock();
+    }
+
     // Suggestions are a shared feedback board, same "whole team edits everything" model as
     // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
     // on the doc, not a subcollection, so there's nothing further to scope here).

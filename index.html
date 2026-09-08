@@ -698,9 +698,14 @@
   <div class="bg-white dark:bg-zinc-800 w-full max-w-5xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">
     <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
       <h3 id="task-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Add Task</h3>
-      <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
-        <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
+      <div class="flex items-center gap-1">
+        <button id="task-copy-link-btn" type="button" class="hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" title="Copy a link to this task card">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+        </button>
+        <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
+          <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
     </div>
     <form id="task-form" class="px-4 sm:px-5 py-4 space-y-4 overflow-y-auto">
       <input type="hidden" id="task-id">
@@ -862,6 +867,36 @@
         <button id="task-cancel-btn" type="button" class="text-sm font-medium px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700">Cancel</button>
         <button id="task-save-btn" form="task-form" type="submit" class="text-sm font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card">Save Task</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PROJECT CHAT MODAL ============ -->
+<div id="project-chat-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="project-chat-title">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">
+    <div class="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+      <div class="min-w-0">
+        <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
+        <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
+      </div>
+      <button id="project-chat-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 shrink-0">
+        <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
+      <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
+      <div id="project-chat-links" class="flex flex-col gap-1.5"></div>
+      <div class="flex items-center gap-1.5">
+        <input id="project-chat-link-label" type="text" maxlength="60" placeholder="Label (optional)" class="w-28 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <input id="project-chat-link-url" type="text" placeholder="Paste a link (Drive, Figma, image…)" class="flex-1 min-w-0 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <button type="button" id="project-chat-link-add-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
+      </div>
+    </div>
+    <div id="project-chat-log" class="flex-1 overflow-y-auto px-4 sm:px-5 py-3 space-y-2"></div>
+    <p id="project-chat-typing" class="px-4 sm:px-5 text-xs italic text-zinc-400 dark:text-zinc-500 h-4"></p>
+    <div class="flex items-end gap-2 px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">
+      <textarea id="project-chat-input" rows="1" maxlength="2000" placeholder="Message the team about this project… (@name to mention)" class="flex-1 min-w-0 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+      <button type="button" id="project-chat-send-btn" class="shrink-0 text-sm font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Send</button>
     </div>
   </div>
 </div>
@@ -1067,6 +1102,9 @@
   var unsubProjects = null;
   var projectDocs = [];
 
+  // The one project doc per name -- originally just {name, deadline}, now also the backing
+  // store for the group chat's `chat`/`links` fields (see PROJECT GROUP CHAT below). Kept as
+  // one lookup rather than a second one, since it's the same "find by name" either way.
   function projectDeadlineDoc(name) {
     return projectDocs.find(function (p) { return p.name === name; }) || null;
   }
@@ -1093,6 +1131,302 @@
       showToast('Could not save the project deadline: ' + err.message, 'error');
     });
   }
+
+  /* =========================================================
+     PROJECT GROUP CHAT -- one dedicated message thread + pinned-links
+     list per project, living on the same `projects/{id}` doc as the
+     deadline above (`chat`, `links` fields). Deliberately NOT created
+     automatically when a project first appears from a task -- most
+     projects don't need one, so it's an explicit "+ Group chat" action
+     a person takes (projectCardHtml), same progressive-disclosure
+     reasoning as the deadline field itself. `Array.isArray(doc.chat)`
+     is the one signal "has a chat been created" -- no separate boolean
+     flag to keep in sync with it.
+
+     Typing indicators and reactions are scoped to this chat only, not
+     task comments -- both are plain Firestore writes with no Storage
+     dependency, so neither needs Spark's paid Blaze tier. Images/files
+     are pasted links only (enrichCommentText already linkifies them),
+     same reasoning as everywhere else in this app: Cloud Storage for
+     Firebase no longer supports the free plan for new buckets.
+  ========================================================= */
+  var projectTypingCol = collection(db, "projectTyping");
+  var currentChatProjectName = null;
+  var projectChatModal = document.getElementById('project-chat-modal');
+  var projectChatTypingUnsub = null;
+  var chatTypingTickTimer = null;
+  var lastTypingHeartbeatAt = 0;
+  // The typing doc's own local cache -- both the render (every 2s, to age out a stale entry
+  // even with no new snapshot) and the heartbeat write (to dedupe/replace this person's own
+  // entry) read from here instead of a fresh getDoc, since the chat modal has to be open --
+  // and therefore already subscribed -- for anyone to be typing into it in the first place.
+  var latestChatTypingEntries = [];
+  var PROJECT_CHAT_TYPING_TTL_MS = 8000;
+  var PROJECT_CHAT_TYPING_HEARTBEAT_MS = 3000;
+
+  // Small fixed set, not a free emoji picker -- this app never uses emoji (always inline SVG,
+  // see the parent Claude Projects/CLAUDE.md), so reactions need their own icon set rather than
+  // the usual 👍/❤️ picker every chat app ships.
+  var PROJECT_CHAT_REACTIONS = [
+    { key: 'like', icon: 'thumbsUp', label: 'Like' },
+    { key: 'love', icon: 'heart', label: 'Love' },
+    { key: 'done', icon: 'check', label: 'Noted' }
+  ];
+
+  function projectChatEnabled(name) {
+    var d = projectDeadlineDoc(name);
+    return !!(d && Array.isArray(d.chat));
+  }
+
+  function createProjectChat(name) {
+    var existing = projectDeadlineDoc(name);
+    var write = existing
+      ? updateDoc(doc(projectsCol, existing.id), { chat: [], links: [] })
+      : addDoc(projectsCol, { name: name, deadline: null, chat: [], links: [] });
+    return write.then(function () {
+      showToast('Group chat created for ' + name, 'success');
+      logActivity('project_chat_created', 'Created a group chat for "' + name + '"');
+      openProjectChat(name);
+    }).catch(function (err) {
+      showToast('Could not create the group chat: ' + err.message, 'error');
+    });
+  }
+
+  function openProjectChat(name) {
+    currentChatProjectName = name;
+    document.getElementById('project-chat-title').textContent = name;
+    renderProjectChatModal();
+    projectChatModal.classList.remove('hidden');
+    projectChatModal.classList.add('flex');
+    document.getElementById('project-chat-input').value = '';
+    subscribeProjectChatTyping(name);
+    setTimeout(function () { document.getElementById('project-chat-input').focus(); }, 30);
+  }
+
+  function closeProjectChat() {
+    projectChatModal.classList.add('hidden');
+    projectChatModal.classList.remove('flex');
+    clearProjectChatTyping();
+    if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
+    if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
+    document.getElementById('project-chat-typing').textContent = '';
+    latestChatTypingEntries = [];
+    currentChatProjectName = null;
+  }
+
+  function renderProjectChatModal() {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var links = (pdoc && pdoc.links) || [];
+    var chat = (pdoc && pdoc.chat) || [];
+
+    var linksEl = document.getElementById('project-chat-links');
+    linksEl.innerHTML = links.length
+      ? links.map(function (l) {
+          var safeUrl = escapeHtml(normalizeUrl(l.url));
+          return '<div class="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-2.5 py-1.5">' +
+            svgIcon('link', 'w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0') +
+            '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline truncate flex-1" title="' + escapeHtml(l.url) + '">' + escapeHtml(l.label || l.url) + '</a>' +
+            '<button type="button" class="project-chat-link-remove p-0.5 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-link-id="' + l.id + '" aria-label="Remove link">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+          '</div>';
+        }).join('')
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No links pinned yet.</p>';
+
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    var logEl = document.getElementById('project-chat-log');
+    logEl.innerHTML = chat.length
+      ? chat.map(function (m) {
+          var reactionsHtml = PROJECT_CHAT_REACTIONS.map(function (r) {
+            var names = (m.reactions && m.reactions[r.key]) || [];
+            var mine = names.indexOf(myName) !== -1;
+            return '<button type="button" class="project-chat-reaction flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full border ' +
+              (mine
+                ? 'border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-600') +
+              '" data-message-id="' + m.id + '" data-reaction-key="' + r.key + '" title="' + r.label + (names.length ? ': ' + names.map(escapeHtml).join(', ') : '') + '">' +
+              svgIcon(r.icon, 'w-3 h-3') + (names.length ? names.length : '') +
+            '</button>';
+          }).join('');
+          return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
+            '<div class="flex items-center gap-1.5 mb-1">' +
+              avatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
+              '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
+              '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+            '</div>' +
+            '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
+            '<div class="flex items-center gap-1.5 mt-1.5">' + reactionsHtml + '</div>' +
+          '</div>';
+        }).join('')
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No messages yet. Say hello.</p>';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function sendProjectChatMessage() {
+    var input = document.getElementById('project-chat-input');
+    var text = input.value.trim();
+    if (!text || !currentChatProjectName) return;
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    if (!pdoc) return;
+    var user = auth.currentUser;
+    var newMessage = { id: uid(), text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null };
+    updateDoc(doc(projectsCol, pdoc.id), { chat: arrayUnion(newMessage) }).then(function () {
+      input.value = '';
+      clearProjectChatTyping();
+      notifyOnProjectChat(text, currentChatProjectName);
+      logActivity('project_chat', 'Posted in the "' + currentChatProjectName + '" group chat');
+    }).catch(function (err) {
+      showToast('Could not send: ' + err.message, 'error');
+    });
+  }
+
+  // Only @mentions get notified here -- unlike a task comment, a project chat message has no
+  // single "assignee" to default to, so silence (no mention) means nobody's pinged, same as
+  // Suggestions.
+  function notifyOnProjectChat(text, projectName) {
+    var user = auth.currentUser;
+    var myName = user ? (user.displayName || user.email) : null;
+    var mentioned = {};
+    parseMentions(text).forEach(function (name) { mentioned[name] = true; });
+    delete mentioned[myName];
+    Object.keys(mentioned).forEach(function (name) {
+      setDoc(doc(notificationsCol), {
+        recipient: name,
+        type: 'mention',
+        taskId: null,
+        taskName: '',
+        chatProject: projectName,
+        author: myName || 'unknown',
+        snippet: text.slice(0, 140),
+        at: new Date().toISOString(),
+        read: false
+      }).catch(function (e) { console.error('Failed to notify project chat mention', e); });
+    });
+  }
+
+  // Full-array rewrite, same as removeCommentAt/task comment edits -- arrayUnion can only add a
+  // new element, never mutate an existing one's fields, and toggling a reaction changes a field
+  // on a message that's already in the array.
+  function toggleProjectChatReaction(messageId, key) {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    if (!pdoc || !myName) return;
+    var chat = (pdoc.chat || []).map(function (m) {
+      if (m.id !== messageId) return m;
+      var reactions = Object.assign({}, m.reactions);
+      var names = (reactions[key] || []).slice();
+      var idx = names.indexOf(myName);
+      if (idx === -1) names.push(myName); else names.splice(idx, 1);
+      if (names.length) reactions[key] = names; else delete reactions[key];
+      return Object.assign({}, m, { reactions: reactions });
+    });
+    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).catch(function (err) {
+      showToast('Could not update reaction: ' + err.message, 'error');
+    });
+  }
+
+  function addProjectChatLink() {
+    var labelEl = document.getElementById('project-chat-link-label');
+    var urlEl = document.getElementById('project-chat-link-url');
+    if (!urlEl.value.trim()) return;
+    var url = normalizeUrl(urlEl.value.trim());
+    if (!/^https?:\/\/.+\..+/.test(url)) { showToast('That link doesn\'t look valid', 'error'); return; }
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    if (!pdoc) return;
+    var label = labelEl.value.trim() || url.replace(/^https?:\/\//i, '');
+    updateDoc(doc(projectsCol, pdoc.id), { links: arrayUnion({ id: uid(), label: label, url: url }) }).then(function () {
+      labelEl.value = '';
+      urlEl.value = '';
+      urlEl.focus();
+    }).catch(function (err) {
+      showToast('Could not add link: ' + err.message, 'error');
+    });
+  }
+
+  function removeProjectChatLink(linkId) {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    if (!pdoc) return;
+    var links = (pdoc.links || []).filter(function (l) { return l.id !== linkId; });
+    updateDoc(doc(projectsCol, pdoc.id), { links: links }).catch(function (err) {
+      showToast('Could not remove link: ' + err.message, 'error');
+    });
+  }
+
+  // Presence doc is keyed by the SAME id as the project doc (one typing doc per project, like
+  // the chat/links fields live on one project doc) -- {entries: [{name, at}]}, a plain array
+  // rather than a map keyed by display name, since a name containing "." would otherwise be
+  // read as a nested field path by setDoc/updateDoc's dotted-key handling.
+  function subscribeProjectChatTyping(name) {
+    var pdoc = projectDeadlineDoc(name);
+    if (!pdoc) return;
+    latestChatTypingEntries = [];
+    projectChatTypingUnsub = onSnapshot(doc(projectTypingCol, pdoc.id), function (snap) {
+      latestChatTypingEntries = (snap.exists() && Array.isArray(snap.data().entries)) ? snap.data().entries : [];
+      renderProjectChatTypingIndicator();
+    }, function () { /* presence is best-effort, never worth surfacing an error toast for */ });
+    // Re-renders on a plain timer too, not just on a new snapshot -- someone can stop typing
+    // (close the tab, lose connection) without ever sending a "stopped" write, so the only way
+    // an entry reliably disappears for everyone else is aging out locally past the TTL.
+    chatTypingTickTimer = setInterval(renderProjectChatTypingIndicator, 2000);
+  }
+
+  function renderProjectChatTypingIndicator() {
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    var now = Date.now();
+    var names = latestChatTypingEntries
+      .filter(function (e) { return e.name !== myName && (now - e.at) < PROJECT_CHAT_TYPING_TTL_MS; })
+      .map(function (e) { return e.name; });
+    document.getElementById('project-chat-typing').textContent = !names.length ? ''
+      : names.length === 1 ? names[0] + ' is typing…'
+      : names.join(', ') + ' are typing…';
+  }
+
+  function sendProjectChatTypingHeartbeat() {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    if (!pdoc || !myName) return;
+    var now = Date.now();
+    var entries = latestChatTypingEntries.filter(function (e) { return e.name !== myName && (now - e.at) < PROJECT_CHAT_TYPING_TTL_MS; });
+    entries.push({ name: myName, at: now });
+    setDoc(doc(projectTypingCol, pdoc.id), { entries: entries }).catch(function () { /* best-effort */ });
+  }
+
+  // Clears this person's own entry immediately (blur, send, or closing the modal) rather than
+  // waiting out the TTL -- otherwise "stopped typing" would lag up to 8s behind actually
+  // stopping, every single time.
+  function clearProjectChatTyping() {
+    if (!currentChatProjectName) return;
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    if (!pdoc || !myName) return;
+    var entries = latestChatTypingEntries.filter(function (e) { return e.name !== myName; });
+    setDoc(doc(projectTypingCol, pdoc.id), { entries: entries }).catch(function () { /* best-effort */ });
+  }
+
+  document.getElementById('project-chat-close').addEventListener('click', closeProjectChat);
+  projectChatModal.addEventListener('click', function (e) { if (e.target === projectChatModal) closeProjectChat(); });
+  projectChatModal.addEventListener('keydown', trapFocus(projectChatModal));
+
+  document.getElementById('project-chat-send-btn').addEventListener('click', sendProjectChatMessage);
+  document.getElementById('project-chat-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendProjectChatMessage(); }
+  });
+  document.getElementById('project-chat-input').addEventListener('input', function () {
+    var now = Date.now();
+    if (now - lastTypingHeartbeatAt < PROJECT_CHAT_TYPING_HEARTBEAT_MS) return;
+    lastTypingHeartbeatAt = now;
+    sendProjectChatTypingHeartbeat();
+  });
+  document.getElementById('project-chat-input').addEventListener('blur', clearProjectChatTyping);
+
+  document.getElementById('project-chat-log').addEventListener('click', function (e) {
+    var btn = e.target.closest('.project-chat-reaction');
+    if (!btn) return;
+    toggleProjectChatReaction(btn.getAttribute('data-message-id'), btn.getAttribute('data-reaction-key'));
+  });
+  document.getElementById('project-chat-link-add-btn').addEventListener('click', addProjectChatLink);
+  document.getElementById('project-chat-links').addEventListener('click', function (e) {
+    var btn = e.target.closest('.project-chat-link-remove');
+    if (btn) removeProjectChatLink(btn.getAttribute('data-link-id'));
+  });
 
   // A matched name must END where the name ends. Without MENTION_TAIL, an assignee name that
   // happens to be a prefix of a longer word notifies the wrong person: with "Dee" on the board,
@@ -1389,7 +1723,9 @@
     reply: '<polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>',
-    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>'
+    sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>',
+    thumbsUp: '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>',
+    heart: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -1404,6 +1740,10 @@
   var currentView = 'board';
   var pendingImportData = null;
   var draggedTaskId = null;
+  // Consumes a #task=<id> deep link (see copyTaskLink/openTaskModal) exactly once, the first
+  // time tasks finish loading -- a later live update to the same task must not reopen a modal
+  // the person already closed.
+  var deepLinkOpened = false;
 
   // Completion motivators (Done column tint, card pulse, "N completed today" counter, and the
   // whole-project celebration toast) -- see updateTaskStatus. justCompletedIds is id -> timestamp,
@@ -2199,6 +2539,12 @@
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
     syncDriveLinkButtons();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
+    document.getElementById('task-copy-link-btn').classList.toggle('hidden', !task);
+    // Makes every open task shareable via the address bar for free, not just through the
+    // explicit Copy-link button -- replaceState so opening/closing tasks doesn't spam browser
+    // history with an entry per card. Only ever set for an existing task; a new "Add Task" has
+    // no id yet to link to.
+    if (task) history.replaceState(null, '', '#task=' + task.id);
     document.getElementById('task-comments-section').classList.toggle('hidden', !task);
     document.getElementById('task-comment-input').value = '';
     if (task) {
@@ -2245,7 +2591,20 @@
     taskModal.classList.remove('flex');
     editingTaskId = null;
     taskForm.reset();
+    if (location.hash.indexOf('#task=') === 0) history.replaceState(null, '', location.pathname + location.search);
   }
+
+  function copyTaskLink(taskId) {
+    var url = location.origin + location.pathname + '#task=' + taskId;
+    navigator.clipboard.writeText(url).then(function () {
+      showToast('Link copied', 'success');
+    }).catch(function () {
+      showToast('Could not copy link', 'error');
+    });
+  }
+  document.getElementById('task-copy-link-btn').addEventListener('click', function () {
+    if (editingTaskId) copyTaskLink(editingTaskId);
+  });
 
   // Project and Google Drive Link used to be two separate fields that a single Drive pick
   // filled in together, which read as two things to fill instead of one. They're now one
@@ -3098,6 +3457,22 @@
       var name = archiveBtn.getAttribute('data-project');
       var count = tasks.filter(function (t) { return t.project === name && !t.archivedAt; }).length;
       confirmArchiveProject(name, count);
+      return;
+    }
+    var chatCreateBtn = e.target.closest('.project-chat-create');
+    if (chatCreateBtn) {
+      var chatName = chatCreateBtn.getAttribute('data-project');
+      openConfirm(
+        'Create a group chat for "' + chatName + '"?',
+        'Gives this project its own message thread and pinned links, separate from task comments. Anyone on the team can post once it exists.',
+        function () { createProjectChat(chatName); },
+        { tone: 'question', confirmText: 'Create chat', cancelText: 'Cancel' }
+      );
+      return;
+    }
+    var chatOpenBtn = e.target.closest('.project-chat-open');
+    if (chatOpenBtn) {
+      openProjectChat(chatOpenBtn.getAttribute('data-project'));
       return;
     }
     var addBtn = e.target.closest('.project-deadline-add');
@@ -4808,6 +5183,21 @@
     // Distinguishes "still being worked on" from "finished but nobody's archived it yet" --
     // the latter only ever applies to an Ongoing card (a Completed card has activeCount 0, so
     // openCount is trivially 0 too and this branch never fires for it).
+    // Manual, not automatic on a project's first task -- most projects never need a dedicated
+    // thread, so this stays a deliberate action rather than something every project gets by
+    // default. Array.isArray(chatDoc.chat) is the only signal a chat exists; there's no
+    // separate boolean to drift out of sync with it.
+    var chatDoc = projectDeadlineDoc(p.name);
+    var chatRow = (chatDoc && Array.isArray(chatDoc.chat))
+      ? '<button type="button" class="project-chat-open text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1 mt-1.5" ' +
+        'data-project="' + escapeHtml(p.name) + '" title="Open this project\'s group chat">' +
+        svgIcon('message', 'w-3 h-3') + 'Group chat' + (chatDoc.chat.length ? ' (' + chatDoc.chat.length + ')' : '') +
+      '</button>'
+      : '<button type="button" class="project-chat-create text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1 mt-1.5" ' +
+        'data-project="' + escapeHtml(p.name) + '" title="Create a dedicated group chat for this project">' +
+        svgIcon('plus', 'w-3 h-3') + 'Group chat' +
+      '</button>';
+
     var readyToArchive = p.activeCount > 0 && p.openCount === 0;
     var taskCountLabel = readyToArchive
       ? '<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">All ' + p.activeCount + ' task' + (p.activeCount === 1 ? '' : 's') + ' done</span>'
@@ -4825,6 +5215,7 @@
               badges +
             '</div>' +
             deadlineRow +
+            chatRow +
             (readyToArchive
               ? '<button type="button" class="project-archive-btn text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1.5" ' +
                 'data-project="' + escapeHtml(p.name) + '" title="Archive every task in this project and move it to Completed">' +
@@ -5913,6 +6304,16 @@
           renderCommentsLog(backfillCommentThreading(freshTask.comments), document.getElementById('task-comments-log'));
         }
       }
+      // Opens a task linked via #task=<id> (Copy link / a shared URL), once, the moment tasks
+      // actually load -- doing this before the first snapshot arrives would always miss, since
+      // `tasks` starts as an empty array. Guarded so a later snapshot (someone else's edit
+      // landing live) can't re-trigger it after the person already closed the modal.
+      if (!deepLinkOpened && location.hash.indexOf('#task=') === 0) {
+        deepLinkOpened = true;
+        var deepLinkTask = tasks.find(function (t) { return t.id === location.hash.slice(6); });
+        if (deepLinkTask) openTaskModal(deepLinkTask);
+        else showToast('That task link is no longer valid', 'info');
+      }
       renderAll();
       checkProjectDeadlinePopups();
     }, function (err) {
@@ -5952,6 +6353,9 @@
       // Full re-render, not just the Projects tab: project deadlines drive the Gantt's grouped
       // rows and the deadline popups too, so any of them can be on screen when this fires.
       renderAll();
+      // Keeps an open chat live for everyone in it -- a teammate's new message, reaction or
+      // pinned link lands here the same way an edited task lands in the tasks listener above.
+      if (currentChatProjectName && !projectChatModal.classList.contains('hidden')) renderProjectChatModal();
     }, function (err) {
       showToast('Project deadlines aren\'t loading: ' + err.message, 'error');
     });
@@ -5971,10 +6375,14 @@
           // needs attention" at a glance -- add an explicit dot (a transparent one on read
           // items, to keep every row's text aligned to the same left edge) plus bolder,
           // brighter text for unread vs muted grey for read.
-          return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
+          // Project chat mentions carry chatProject instead of taskName/taskId (there's no
+          // single task to point at), so the sentence and the click target both branch on it.
+          var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
+          var verb = n.chatProject ? 'mentioned you in' : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
+          return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on') + ' "' + escapeHtml(n.taskName) + '"</p>' +
+              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject + '</p>' +
               '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
             '</div>' +
           '</button>';
@@ -6021,9 +6429,11 @@
     if (!item) return;
     var notifId = item.getAttribute('data-notification-id');
     updateDoc(doc(notificationsCol, notifId), { read: true }).catch(function () {});
+    notificationPanel.classList.add('hidden');
+    var chatProject = item.getAttribute('data-notification-chat-project');
+    if (chatProject) { openProjectChat(chatProject); return; }
     var taskId = item.getAttribute('data-notification-task');
     var t = taskId ? tasks.find(function (x) { return x.id === taskId; }) : null;
-    notificationPanel.classList.add('hidden');
     if (t) openTaskModal(t);
     else if (taskId) showToast('That task no longer exists', 'info');
   });
@@ -6098,7 +6508,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:51:22Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T16:15:54Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -6148,6 +6558,18 @@
     document.getElementById('filter-priority').value = filters.priority;
     filterPriorityPill.sync();
   }
+
+  // Lets a #task=<id> link work when pasted into a tab that's already open, not just on first
+  // load -- e.g. someone pastes a teammate's Copy-link URL into the address bar of a tab they
+  // already had open. Ignored while that exact task is already the one open, so this can't
+  // fight with a normal in-app openTaskModal call (which itself sets this same hash).
+  window.addEventListener('hashchange', function () {
+    if (location.hash.indexOf('#task=') !== 0) return;
+    var id = location.hash.slice(6);
+    if (id === editingTaskId) return;
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (t) openTaskModal(t);
+  });
 
   function init() {
     restoreFilterControls();
