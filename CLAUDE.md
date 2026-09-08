@@ -722,20 +722,26 @@ to bottom:
        task the modal last had open, and the dropdown's `change` event only fires on an actual
        user interaction, not on `openTaskModal()` setting the initial value — so opening an
        existing Review task and clicking Save without touching Status never re-prompts.
-     - **`firestore.rules` needed a matching change**: `reviewAudience` joined the `tasks`
-       `update` rule's existing `changedKeys().hasOnly([...])` carve-out (alongside `status`/
-       `completedAt`/`updatedAt`) — both the drag-and-drop prompt and the click-to-edit badge
-       write it standalone, for anyone on the team, not just the task's assignee or an admin,
-       the identical reasoning that carve-out already documents for `status` itself. **Remember
-       the separate manual step**: pushing this file's change to the repo does not deploy the
-       rule — see "Firestore rules/index deploys are separate from shipping the site" in the
-       top-level `CLAUDE.md`. Until that manual deploy happens, a non-assignee/non-admin
-       teammate's attempt to set or change the label will fail silently (the write is caught and
-       swallowed on purpose — see the next point), while it keeps working for the assignee and
-       admins, who can write anything on the task regardless.
-     - Both standalone writes (the drag-and-drop follow-up and the badge-click handler) swallow
-       their own errors rather than surfacing every one as a toast — a declined/failed label
-       write is not worth interrupting anyone over; the badge just stays whatever it was.
+     - **`reviewAudience` is deliberately NOT in `tasks`' `update` rule carve-out** — restricted
+       to the assignee or an admin, on request (a first pass briefly opened it to the whole team,
+       matching `status`'s own carve-out, before being asked to keep it assignee/admin-only).
+       Anyone can still drag a task into Review (that write is just `status`/`completedAt`/
+       `updatedAt`, already in the carve-out); the follow-up prompt asking who the review is for
+       only actually saves if the person dragging is the assignee or an admin. Since the intended
+       restriction was already what the live rules enforced (the brief wider-open version was
+       only ever committed, never deployed — see "Firestore rules/index deploys are separate from
+       shipping the site" in the top-level `CLAUDE.md`), reverting it in the repo needed no
+       redeploy to take effect.
+     - **The two write paths handle a permission denial differently, on purpose.** The
+       click-to-edit badge (`data-set-review-audience`) surfaces `writeErrorMessage(err, task)` —
+       the same assignee-or-admin explanation every other restricted task edit in this app already
+       gives — because clicking the label is a deliberate act someone should get real feedback on.
+       The drag-and-drop follow-up swallows its error silently instead: dragging a card into
+       Review is open to the whole team, so a teammate who isn't the assignee gets asked the
+       question and then has the answer quietly rejected *every single time they drag anything
+       into Review* — an error toast there would be near-constant noise for an outcome that was
+       never really their permission to have in the first place. The assignee or an admin can
+       always set it properly afterward via the label itself.
      - **Two colors, deliberately not reused from anywhere else that colors a Board card**: blue
        for Client, zinc for Internal. Every other status/priority hue already means something
        specific on this exact row (rose/amber/sky = High/Medium/Low, purple = ready-for-review,

@@ -100,15 +100,17 @@ service cloud.firestore {
     match /tasks/{taskId} {
       allow read: if isMediashock();
       allow create: if isMediashock();
+      // reviewAudience (client/internal review label) is deliberately NOT in this carve-out --
+      // unlike status, it's restricted to the assignee or an admin, on request. Anyone can still
+      // drag a task into Review (that write is just `status`/`completedAt`/`updatedAt`, already
+      // covered below); the follow-up prompt asking who the review is for only actually saves if
+      // the person doing the dragging is the assignee or an admin. See CLAUDE.md's "Review
+      // audience" section for the UI-side reasoning (writeErrorMessage on the badge-click path,
+      // silent no-op on the drag-and-drop path).
       allow update: if isMediashock() && (
         isAdmin()
         || isAssignee(resource.data)
-        // reviewAudience joined this carve-out for the same reason status/completedAt did:
-        // it's set from promptReviewAudience(), fired either by dragging a card into Review
-        // (anyone's drag) or by clicking the card's own review-label badge to change it
-        // (also open to anyone, not just the assignee) -- neither is "editing the task," so
-        // neither should need to be the assignee or an admin.
-        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt', 'reviewAudience'])
+        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
       );
       // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and
       // deletes it from here. Both halves land in the same batch, so existsAfter() -- which

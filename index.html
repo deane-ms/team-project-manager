@@ -4144,9 +4144,17 @@
         // Asked after the move completes, not before -- the drop itself shouldn't wait on a
         // modal decision. Declining leaves reviewAudience unset; the card's own label is
         // clickable afterward if someone wants to set it later.
+        //
+        // Silently swallowed on purpose, unlike the badge-click path's writeErrorMessage toast:
+        // reviewAudience is restricted to the assignee/admins (firestore.rules), but dragging a
+        // card into Review is open to the whole team -- so any teammate who isn't the assignee
+        // gets asked this question and then has the answer quietly rejected, every single time
+        // they drag something into Review. An error toast on that would be near-constant noise
+        // for an outcome that isn't really "their" permission problem; the assignee or an admin
+        // can always set it properly afterward via the label itself.
         if (enteringReview) {
           promptReviewAudience(function (audience) {
-            updateDoc(doc(tasksCol, idDropped), { reviewAudience: audience }).catch(function () { /* non-critical -- label just stays unset */ });
+            updateDoc(doc(tasksCol, idDropped), { reviewAudience: audience }).catch(function () { /* see comment above -- deliberately silent */ });
           });
         }
       });
@@ -5342,9 +5350,14 @@
 
     if (reviewAudienceBtn) {
       var idRA = reviewAudienceBtn.getAttribute('data-set-review-audience');
+      // Restricted to the assignee/admins, on request -- unlike status itself (anyone can drag a
+      // card into Review), the label naming who the review is *for* is not open to the whole
+      // team. writeErrorMessage() turns Firestore's bare permission-denied into the same
+      // assignee-or-admin explanation every other restricted task edit in this app already gives.
+      var tRA = tasks.find(function (x) { return x.id === idRA; });
       promptReviewAudience(function (audience) {
         updateDoc(doc(tasksCol, idRA), { reviewAudience: audience }).catch(function (err) {
-          showToast('Could not update: ' + err.message, 'error');
+          showToast(writeErrorMessage(err, tRA), 'error');
         });
       });
       return;
@@ -6080,7 +6093,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:39:01Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:45:15Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
