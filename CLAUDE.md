@@ -788,6 +788,18 @@ needs revisiting.
   CSS.** Requested directly, for two spots reported in the same message: the sidebar's icon-only
   collapsed rail (nothing labels an icon once `.sidebar-label` is hidden) and a truncated Gantt
   project badge (`projectColor` — see the Gantt section below).
+  - **First shipped covering only the Gantt badge, then reported back as still not working —
+    it wasn't broken, it just didn't cover what "long titles" actually meant.** The request read
+    as one bug about one already-demonstrated spot; it was actually "cards with long titles" in
+    general, which the Gantt row (not visually a card) never implied covering. Verified the
+    shipped Gantt tooltip really did work first — a real-DOM Playwright test against this exact
+    file (auth gate forced open, `#app` unhidden, a synthetic row injected into `#gantt-wrap`)
+    showed the full text rendering correctly — before concluding the gap was coverage, not a
+    regression. Extended `data-tooltip`/`tooltip-top` to every truncated card/title in the same
+    pass: `boardTaskRowHtml`'s task name, `projectGroupCardHtml`'s project header, the Focus of
+    the Day card name, and the People and Projects tab card headers (`p.name`/`g.project`). If a
+    new card shows a name with `truncate` or `line-clamp-*`, give it `data-tooltip` too — this
+    class of "the label just got cut off" report has now happened twice.
   - **A pure `::after`-based tooltip was the first attempt, and it doesn't work here.** The
     sidebar's own `<nav>` (`overflow-y-auto`) and each Gantt row's label cell (`overflow-hidden`)
     both clip an absolutely-positioned pseudo-element the moment it visually pokes outside their

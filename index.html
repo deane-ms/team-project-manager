@@ -3799,7 +3799,7 @@
             '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
             '<span class="text-xs font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
           '</div>' +
-          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-2">' + escapeHtml(t.project) + '</p>' +
           '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
             avatarHtml(t.assignee, 'w-5 h-5 shrink-0', 'text-[10px]') +
@@ -3915,7 +3915,7 @@
         // them was empty space. That squeeze is what pushed logged time onto a line of its own.
         '<div class="flex items-center gap-2.5">' +
           '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
-          '<p class="min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<div class="flex items-center gap-0.5 shrink-0">' +
             '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
@@ -3953,7 +3953,7 @@
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
         '<div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
-          '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
+          '<p data-tooltip="' + escapeHtml(g.project) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
         '</div>' +
         '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700">' + g.tasks.map(boardTaskRowHtml).join('') + '</div>' +
       '</div>'
@@ -4536,7 +4536,7 @@
           '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
             avatarHtml(p.name, 'w-8 h-8 shrink-0', 'text-sm') +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
               '<div class="flex items-center gap-1.5 mt-0.5">' +
                 '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.active.length + ' active</span>' +
                 chips +
@@ -4691,7 +4691,7 @@
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
         '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
           '<div class="min-w-0 flex-1">' +
-            '<p class="text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
+            '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
             '<div class="flex items-center gap-1.5 mt-0.5">' +
               taskCountLabel +
               badges +
@@ -5437,9 +5437,13 @@
   /* =========================================================
      FLOATING TOOLTIPS -- any element with data-tooltip="..." plus a
      tooltip-right or tooltip-top class gets a small dark pill on hover,
-     naming the sidebar's icon-only collapsed nav items and a couple of
-     long titles the layout truncates (a Gantt project badge so far).
-     Reported directly, both in the same message.
+     naming the sidebar's icon-only collapsed nav items and every card/row
+     title the layout truncates: the Gantt project badge, Board task-card
+     and project-group-card names, Focus of the Day cards, and the People
+     and Projects tab card headers. First shipped covering only the Gantt
+     badge -- reported back that card titles elsewhere still had nothing,
+     so it was extended to every truncated card title in one pass rather
+     than one more single-spot fix.
 
      Not a pure-CSS ::after-based tooltip, which was the first attempt --
      that broke because the sidebar's own <nav> (overflow-y-auto) and
@@ -5899,7 +5903,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T07:55:07Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T09:14:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
