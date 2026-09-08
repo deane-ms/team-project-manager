@@ -846,6 +846,41 @@ to bottom:
        `{close}` handle rather than sharing one global `closeMentionMenu()`, so sending a chat
        message can't accidentally leave the *task* comment box's menu in a stale state or
        vice versa.
+     - **Deleting a message vs. deleting the whole chat — asked for directly, with an explicit
+       permission split ("delete a single message yes. Delete entire project should only be
+       available for admin").** Two different actions, two different rules-level boundaries, not
+       just two different buttons:
+       - **A single message** (`removeChatMessage`, the `x` on each message next to its
+         timestamp) is open to the whole team, same as removing a task comment
+         (`removeCommentAt`) — a full-array rewrite dropping exactly the one entry, confirmed via
+         the same `openConfirm` wording task comments already use ("This removes it for everyone
+         on the team").
+       - **The whole chat** (`deleteProjectChat`, the trash icon in the thread header, hidden
+         entirely unless `isAdminUser()`) uses `deleteField()` on both `chat` and `links` rather
+         than writing empty arrays — this is what makes `Array.isArray(doc.chat)` go back to
+         `false`, so the project actually disappears from the Chat tab's list and becomes
+         eligible for "New chat" again, instead of lingering as a visible-but-empty conversation.
+         If the deleted chat was the one currently open, the view falls back to the empty state
+         and tears down its typing subscription, the same cleanup `stopListeners` does at sign-out.
+       - **The client-side `isAdminUser()` check is UX only — the real boundary is in
+         `firestore.rules`.** `projects`' `update` rule now reads `chat`'s size before and after a
+         write: anyone can grow it (post), leave it unchanged (react), or shrink it by exactly one
+         entry (a single delete); only `isAdmin()` can shrink it by more than that in one write,
+         which is exactly what wiping the whole thing does. This is the same "count what actually
+         changed" trick `tasks`' own `changedKeys().hasOnly([...])` carve-out uses, just measuring
+         array length instead of which fields changed. `!('chat' in resource.data)` is there so a
+         project creating its **first** chat (a field appearing where it didn't exist) doesn't
+         get misread as a shrink and blocked for non-admins — that path has to stay open to
+         everyone, unchanged from before this rule existed.
+     - **Archived/completed projects keep their chat fully visible and functional, with a quiet
+       "Completed" tag** (`isProjectFullyArchived`, same `activeCount === 0` definition
+       `renderProjects`' own Ongoing/Completed split already uses) — asked directly ("how about
+       projects that are archived?"). Nothing about a project wrapping up should make its chat
+       disappear or go read-only: people reference a finished project's thread for exactly the
+       reason the Archived *task* view stays browsable instead of being a graveyard ("what did
+       the client say back in Q1"). The Chat tab now calls `ensureArchivedTasksListener()` on
+       entry (mirroring the Projects tab) so `archivedTasks` is actually loaded for this check,
+       not just whichever tasks happen to already be in memory from an earlier view.
      - **Lives on the same `projects/{id}` doc as the deadline**, not a new collection —
        `chat` (array of `{id, text, author, date, reactions}`, same shape/append pattern as task
        comments: `arrayUnion` to add, a full-array rewrite to edit an existing entry's fields)

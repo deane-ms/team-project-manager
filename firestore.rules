@@ -158,11 +158,32 @@ service cloud.firestore {
     }
 
     // One doc per project, holding the project-level deadline (separate from any task's own
-    // deadline). Auto-ID docs with the project name as a *field*, not as the doc ID -- project
-    // names are free text typed into the task modal, and a name containing "/" is not a legal
-    // document ID. Shared read/write like tasks: the whole team works one board.
+    // deadline) and, once created, its group chat's `chat`/`links` fields (see PROJECT GROUP
+    // CHAT in index.html). Auto-ID docs with the project name as a *field*, not as the doc ID --
+    // project names are free text typed into the task modal, and a name containing "/" is not a
+    // legal document ID.
     match /projects/{projectId} {
-      allow read, write: if isMediashock();
+      allow read: if isMediashock();
+      allow create: if isMediashock();
+      // Same "everyone does the normal thing, only an admin does the destructive thing" split as
+      // `tasks`' own update rule -- narrower than a blanket allow specifically because `chat` is
+      // the one field on this doc real data loss is possible on, on request ("delete entire
+      // project [chat] should only be available for admin"). Anyone can grow `chat` (post a
+      // message), leave its length unchanged (react to one), or shrink it by exactly one entry
+      // (remove a single message, index.html's removeChatMessage). Only an admin can shrink it
+      // by more than one entry in a single write -- exactly what deleting the whole chat does
+      // (deleteProjectChat wipes the field with deleteField() instead of emptying the array, so
+      // "chat in resource.data" also covers a project creating its first chat: that write adds
+      // the field where it didn't exist before, which isn't a shrink at all and stays open to
+      // everyone). Every other field on this doc (deadline, links, name) is untouched by this and
+      // stays exactly as open as it's always been.
+      allow update: if isMediashock() && (
+        isAdmin()
+        || !changedKeys().hasAny(['chat'])
+        || !('chat' in resource.data)
+        || request.resource.data.chat.size() >= resource.data.chat.size() - 1
+      );
+      allow delete: if isMediashock();
     }
 
     // Ephemeral "who's typing" presence for a project's group chat (see PROJECT GROUP CHAT in

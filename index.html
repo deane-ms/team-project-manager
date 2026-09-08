@@ -703,10 +703,16 @@
           <div id="chat-detail" class="hidden flex-col">
             <div class="flex items-center gap-2.5 px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
               <span id="project-chat-avatar"></span>
-              <div class="min-w-0">
+              <div class="min-w-0 flex-1">
                 <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
                 <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
               </div>
+              <!-- Admin-only: wiping the whole thread (not one message) is real data loss for
+                   the whole team, so it stays behind the same isAdminUser() gate as every other
+                   admin-only action in this app -- hidden by default, shown by selectChatProject. -->
+              <button type="button" id="chat-delete-btn" title="Delete this entire chat (admin only)" class="hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
             </div>
             <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
               <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
@@ -987,8 +993,8 @@
     getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, connectAuthEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
-    getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
-    query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
+    getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, deleteField, onSnapshot,
+    writeBatch, query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   /* =========================================================
@@ -1403,6 +1409,47 @@
     });
   }
 
+  // Wipes the whole thread (every message and pinned link) rather than setting them to empty
+  // arrays -- deleteField() removes `chat`/`links` entirely so Array.isArray(doc.chat) goes back
+  // to false, which is the one signal the Chat tab's list and "New chat" picker both key off of.
+  // A plain `{chat: [], links: []}` write would have left the project showing up as an empty-but-
+  // existing chat instead of actually disappearing, and would still count as "having a chat" the
+  // next time someone opened "New chat". Admin-only on request ("delete entire project should
+  // only be available for admin") -- the client check here is UX, not the boundary; see
+  // firestore.rules' projects match for the real enforcement (anyone can shrink `chat` by at most
+  // one entry per write -- a single message delete -- but only an admin can drop it by more than
+  // that in one write).
+  function deleteProjectChat(name) {
+    var pdoc = projectDeadlineDoc(name);
+    if (!pdoc) return;
+    updateDoc(doc(projectsCol, pdoc.id), { chat: deleteField(), links: deleteField() }).then(function () {
+      showToast('Deleted the group chat for ' + name, 'info');
+      logActivity('project_chat_deleted', 'Deleted the group chat for "' + name + '"');
+      if (currentChatProjectName === name) {
+        currentChatProjectName = null;
+        document.getElementById('chat-detail').classList.add('hidden');
+        document.getElementById('chat-detail').classList.remove('flex');
+        document.getElementById('chat-empty-state').classList.remove('hidden');
+        if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
+        if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
+      }
+      renderChatProjectList();
+    }).catch(function (err) {
+      showToast('Could not delete the chat: ' + err.message, 'error');
+    });
+  }
+
+  document.getElementById('chat-delete-btn').addEventListener('click', function () {
+    if (!currentChatProjectName) return;
+    var name = currentChatProjectName;
+    openConfirm(
+      'Delete the "' + name + '" group chat?',
+      'Permanently removes every message and pinned link in this chat for the whole team. This cannot be undone.',
+      function () { deleteProjectChat(name); },
+      { confirmText: 'Delete chat', cancelText: 'Cancel' }
+    );
+  });
+
   // Switching the tab's selected project, not opening/closing a modal -- the typing subscription
   // is torn down for whichever project was selected before (using the OLD currentChatProjectName,
   // so clearProjectChatTyping clears the right presence doc) and re-established for the new one.
@@ -1418,6 +1465,7 @@
     currentChatProjectName = name;
     document.getElementById('project-chat-title').textContent = name;
     document.getElementById('project-chat-avatar').innerHTML = chatAvatarHtml(name, 'w-10 h-10', 'text-sm');
+    document.getElementById('chat-delete-btn').classList.toggle('hidden', !isAdminUser());
     document.getElementById('chat-empty-state').classList.add('hidden');
     document.getElementById('chat-detail').classList.remove('hidden');
     document.getElementById('chat-detail').classList.add('flex');
@@ -1582,17 +1630,36 @@
           var pdoc = projectDeadlineDoc(name);
           var selected = name === currentChatProjectName;
           var subtitle = pdoc.chat.length ? pdoc.chat.length + ' message' + (pdoc.chat.length === 1 ? '' : 's') : 'No messages yet';
+          // Archived/completed projects stay fully visible and functional here -- a wrapped-up
+          // project's chat is often exactly what someone needs to look back at ("what did the
+          // client say"), same reasoning the Archived task view is browsable rather than a
+          // graveyard. The only difference is this quiet tag, matching the Projects tab's own
+          // Ongoing/Completed wording, so it's clear at a glance which chats are historical.
+          var completed = isProjectFullyArchived(name);
           return '<button type="button" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 ' +
             (selected ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50') +
             '" data-project="' + escapeHtml(name) + '">' +
             chatAvatarHtml(name, 'w-8 h-8', 'text-xs') +
             '<span class="min-w-0 flex-1">' +
-              '<span class="block text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+              '<span class="flex items-center gap-1.5">' +
+                '<span class="text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+                (completed ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">Completed</span>' : '') +
+              '</span>' +
               '<span class="block text-xs text-zinc-400 dark:text-zinc-500">' + subtitle + '</span>' +
             '</span>' +
           '</button>';
         }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6 px-3">' + escapeHtml(emptyMessage) + '</p>';
+  }
+
+  // A project counts as "Completed" once every one of its tasks has been archived, same
+  // definition renderProjects' Ongoing/Completed split already uses (activeCount === 0) -- not
+  // derived from task `status`, since a project can be all-Done and still sit in Ongoing until
+  // someone actually archives it.
+  function isProjectFullyArchived(name) {
+    var mine = tasks.concat(archivedTasks).filter(function (t) { return t.project === name; });
+    if (!mine.length) return false;
+    return mine.every(function (t) { return !!t.archivedAt; });
   }
 
   document.getElementById('chat-project-list').addEventListener('click', function (e) {
@@ -1695,6 +1762,7 @@
         presenceAvatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
         '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
         '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+        '<button type="button" class="chat-message-remove ml-auto p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-message-id="' + m.id + '" aria-label="Remove message">' + svgIcon('x', 'w-3 h-3') + '</button>' +
       '</div>' +
       '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
       '<div class="flex items-center flex-wrap gap-1.5 mt-1.5">' + reactionsHtml + '</div>' +
@@ -1705,8 +1773,33 @@
     var addBtn = e.target.closest('.chat-reaction-add');
     if (addBtn) { openChatReactionPicker(addBtn.getAttribute('data-message-id'), addBtn); return; }
     var reactBtn = e.target.closest('.project-chat-reaction');
-    if (reactBtn) toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji'));
+    if (reactBtn) { toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji')); return; }
+    var removeBtn = e.target.closest('.chat-message-remove');
+    if (removeBtn) {
+      var messageId = removeBtn.getAttribute('data-message-id');
+      openConfirm('Remove this message?', 'This removes it for everyone on the team. This cannot be undone.', function () {
+        removeChatMessage(messageId);
+      });
+    }
   });
+
+  // Open to the whole team, same as removing a task comment (removeCommentAt) -- not restricted
+  // to the message's own author or an admin. A full-array rewrite dropping exactly one entry;
+  // firestore.rules allows any single-message shrink like this one for anyone, and only blocks a
+  // write that drops more than one entry at once (the admin-only "delete this whole chat" action)
+  // to non-admins.
+  function removeChatMessage(messageId) {
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    if (!pdoc) return;
+    var removed = (pdoc.chat || []).find(function (m) { return m.id === messageId; });
+    var chat = (pdoc.chat || []).filter(function (m) { return m.id !== messageId; });
+    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).then(function () {
+      var snippet = removed && removed.text ? (removed.text.length > 60 ? removed.text.slice(0, 60) + '…' : removed.text) : '';
+      logActivity('project_chat', 'Removed a message in the "' + currentChatProjectName + '" group chat: "' + snippet + '"');
+    }).catch(function (err) {
+      showToast('Could not remove message: ' + err.message, 'error');
+    });
+  }
 
   // Instantiated here (not down with the rest of the mention-autocomplete wiring, which sits
   // much further down the file with the task-comment box) so it's declared before
@@ -6348,7 +6441,10 @@
     // stale/empty archived data (0 completed projects, an empty Archived list) until this
     // listener's first snapshot lands and calls this function again.
     if (currentView === 'projects') { ensureArchivedTasksListener(); renderProjects(); }
-    if (currentView === 'chat') renderChatView();
+    // Needed so the "Completed" tag on a fully-archived project's chat row (see
+    // renderChatProjectList) has real data to check -- archivedTasks otherwise only loads once
+    // someone's actually visited Projects or Archived this session.
+    if (currentView === 'chat') { ensureArchivedTasksListener(); renderChatView(); }
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
     if (currentView === 'archived') { ensureArchivedTasksListener(); renderArchived(); }
@@ -7045,7 +7141,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T17:45:04Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T17:54:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
