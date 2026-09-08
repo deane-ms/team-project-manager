@@ -4427,9 +4427,17 @@
       '</span>';
     }).join('');
 
-    var editor = '';
+    // Split into a header-row toggle (title left, action right) and a below-content editor
+    // form, rather than one "editor" blob stacked under the label -- "+ Time off" sitting on
+    // its own line under "None booked." read as an afterthought, not an action tied to the
+    // "Time off" heading above it. Reported directly against a screenshot. The full add-period
+    // form (start/end/note/Add/Cancel) still goes below the content, not into the header row --
+    // four inputs plus two buttons don't fit next to a label without wrapping awkwardly, and
+    // "header row has an action, form appears below" is still one consistent, intuitive shape.
+    var toggleBtn = '';
+    var editorForm = '';
     if (editable && leaveEditingFor === name) {
-      editor =
+      editorForm =
         '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">' +
           '<input type="date" class="leave-start text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
           '<span class="text-xs text-zinc-400 dark:text-zinc-500">to</span>' +
@@ -4439,15 +4447,18 @@
           '<button type="button" class="leave-cancel text-xs font-medium px-2 py-1 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>' +
         '</div>';
     } else if (editable) {
-      editor = '<button type="button" class="leave-add-toggle text-xs font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 mt-1"' +
+      toggleBtn = '<button type="button" class="leave-add-toggle text-xs font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 shrink-0"' +
         (hasRosterDoc ? '' : ' disabled title="' + escapeHtml(name + ' has not signed in yet, so there is no roster entry to attach time off to.') + '"') +
         ' data-leave-name="' + escapeHtml(name) + '">+ Time off</button>';
     }
 
     return '<div class="px-4 py-2.5 border-t border-zinc-100 dark:border-zinc-700">' +
-      '<p class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 mb-1">Time off</p>' +
-      (rows ? '<div class="flex flex-wrap gap-1">' + rows + '</div>' : '<p class="text-xs text-zinc-400 dark:text-zinc-500">None booked.</p>') +
-      editor +
+      '<div class="flex items-center justify-between gap-2">' +
+        '<p class="text-xs font-semibold text-zinc-400 dark:text-zinc-500">Time off</p>' +
+        toggleBtn +
+      '</div>' +
+      '<div class="mt-1">' + (rows ? '<div class="flex flex-wrap gap-1">' + rows + '</div>' : '<p class="text-xs text-zinc-400 dark:text-zinc-500">None booked.</p>') + '</div>' +
+      editorForm +
     '</div>';
   }
 
@@ -5781,7 +5792,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T06:40:17Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T07:26:58Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -1050,6 +1050,14 @@ decides what to move.
   always-visible pair of empty date boxes on every person card reads as a form you must fill in,
   for a value most people don't have set at any moment. Handlers are delegated on `#people-grid`
   since `renderPeople` replaces its innerHTML.
+  - **`+ Time off` sits top-right of a "Time off" header row, not stacked below "None booked."**
+    — the original layout stacked label / status / button in one column, which read as the
+    button being an afterthought rather than an action tied to the heading above it (reported
+    directly against a screenshot). `personLeaveSectionHtml` now builds a `toggleBtn` (header row,
+    right-aligned via `flex justify-between`) separately from the full add-period `editorForm`
+    (start/end/note/Add/Cancel), which still renders below the status content once
+    `leaveEditingFor === name` — four inputs plus two buttons don't fit next to a label without
+    wrapping badly, so only the toggle moved, not the whole editor.
 - **`canEditLeaveFor`** mirrors the `people` rule — yourself, or an admin. `ADMIN_EMAILS` in
   index.html is **UI gating only, not the boundary**; keep it identical to `admins()` in
   `firestore.rules`.
