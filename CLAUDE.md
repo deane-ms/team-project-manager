@@ -976,14 +976,16 @@ to bottom:
        - **Reactions were asked for separately ("I want more reactions"), on the same message
          that asked for the emoji picker** — read as one request, not two: reactions became real
          emoji rather than the small fixed SVG icon set (Like/Love/Noted) this shipped with
-         first. `PROJECT_CHAT_QUICK_REACTIONS` (👍❤️😂🎉👀✅, doubled from the original 3) shows
-         as one-click pills on every message; a dashed "+" opens a *second* instance of the same
-         `createEmojiPickerPanel` (`#chat-reaction-picker`, a single shared panel, not one per
-         message) to react with anything else, so the effective set is unlimited rather than a
-         fixed short list. `activeReactionMessageId` tracks which message the shared panel is
-         currently open for. A reaction picked from the full picker still has to keep showing
-         (and stay re-clickable) afterward, not just work once — `chatMessageHtml` appends
-         whichever already-used emoji aren't in the quick set to the row it renders.
+         first. First version added a fixed 6-icon "quick reaction" row (`PROJECT_CHAT_QUICK_
+         REACTIONS`) shown on *every* message regardless of whether it had any reactions, plus a
+         dashed "+" opening the full picker for anything else — reported back directly as
+         cluttered/distracting, so the always-visible row was removed. `chatMessageHtml` now
+         renders only reactions someone has actually used, plus the same "+" — a fresh message
+         with no reactions shows just the quiet "+", not six icons nobody's touched yet. The "+"
+         opens `#chat-reaction-picker`, a *second* instance of the same `createEmojiPickerPanel`
+         (one shared panel, not one per message) — the emoji set stays effectively unlimited
+         either way, only the always-visible shortcut row was cut. `activeReactionMessageId`
+         tracks which message the shared panel is currently open for.
        - **The reaction picker positions itself with `position: fixed`, computed from the
          trigger's `getBoundingClientRect()`** (`openChatReactionPicker`), the same technique
          `positionTooltip` already uses elsewhere in this file — not a CSS-relative dropdown

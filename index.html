@@ -1362,11 +1362,11 @@
 
   // Reactions were asked for directly ("I want more reactions"), on the heels of asking for the
   // emoji feature above -- so reactions are real emoji too, not the small fixed SVG icon set
-  // this shipped with first. A handful of one-click quick reactions covers the common case;
-  // the "+" button opens the same category picker as the compose box for anything else, so the
-  // set is effectively unlimited rather than a fixed short list.
-  var PROJECT_CHAT_QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '✅'];
-
+  // this shipped with first. Originally paired with a fixed 6-icon "quick reaction" row shown on
+  // every message; that row was reported as cluttered/distracting and removed (see
+  // chatMessageHtml below) -- reacting at all now goes through this same picker, opened via the
+  // "+" on a message, so the set is effectively unlimited rather than a fixed short list either
+  // way.
   var chatReactionEmojiPicker = createEmojiPickerPanel(
     document.getElementById('chat-reaction-tabs'),
     document.getElementById('chat-reaction-grid'),
@@ -1764,15 +1764,14 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // Every quick reaction always shows (so the row reads the same on every message), plus
-  // whichever non-quick emoji someone's already reacted with via the "+" picker -- a reaction
-  // picked from the full set still has to be visible and re-clickable afterward, not just usable
-  // once.
+  // Only reactions someone has actually used show, plus a quiet "+" to add one -- a fixed
+  // 6-icon quick row used to show on every single message regardless of whether it had any
+  // reactions at all, which read as cluttered/distracting on an ordinary chat log (reported
+  // directly against a screenshot). Reacting at all now always goes through the "+" picker
+  // (openChatReactionPicker) rather than a one-click shortcut for a handful of presets.
   function chatMessageHtml(m, myName) {
     var reactions = m.reactions || {};
-    var used = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
-    var extra = used.filter(function (e) { return PROJECT_CHAT_QUICK_REACTIONS.indexOf(e) === -1; });
-    var shown = PROJECT_CHAT_QUICK_REACTIONS.concat(extra);
+    var shown = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
     var reactionsHtml = shown.map(function (emoji) {
       var names = reactions[emoji] || [];
       var mine = names.indexOf(myName) !== -1;
@@ -7200,7 +7199,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T18:16:41Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T18:27:14Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
