@@ -556,21 +556,31 @@ to bottom:
        Activity and Projects.** Neither ever read `filters.sortBy`: Projects always sorts Ongoing
        by soonest deadline and Completed by most recently archived (one true order, not a user
        choice), and Activity is a chronological log with no priority/deadline/project fields to
-       sort by in the first place. Fixed two different ways per view rather than one: Projects
-       gets the same disable-with-a-reason treatment as search (`SORT_DISABLED_VIEWS`,
-       `syncSortAvailability()`); Activity got a real sort instead, because "newest first" /
-       "oldest first" is a meaningful choice for a log, just not the same choice a task list
-       offers. So the dropdown's own `<option>` list swaps per view (`TASK_SORT_OPTIONS` vs
-       `ACTIVITY_SORT_OPTIONS`, rebuilt into the live `<select>` and re-synced through
-       `sortByPill.rebuild()`) rather than reusing `sortBy`'s focus/priority/deadline/project
-       values for something they don't mean. The new choice persists in its own
-       `filters.activitySort` field, not a repurposed `sortBy`, so switching back to Board
-       doesn't inherit a stray "oldest" value that means nothing there.
-       - `enhanceSelect()` gained a `setDisabled()` method for this (`sort-by` needed one, `search`
-         didn't). The real `<select>` is `sr-only` and out of tab order — the visible trigger
-         button is what clicks and Tab actually reach — so disabling the select alone would have
-         left the pill fully clickable while looking disabled from a color change alone; `.disabled`
-         has to go on both elements.
+       sort by in the first place. Projects gets the same disable-with-a-reason treatment as
+       search (`SORT_DISABLED_VIEWS`, `syncSortAvailability()`) — `enhanceSelect()` gained a
+       `setDisabled()` method for this (`sort-by` needed one, `search` didn't: the real `<select>`
+       is `sr-only` and out of tab order, so disabling it alone would have left the visible
+       trigger button — the thing clicks and Tab actually reach — fully clickable while merely
+       looking disabled; `.disabled` has to go on both elements).
+       - **Activity briefly got a real Newest/Oldest-first sort instead of a disable** (a
+         separate `filters.activitySort` field, its own `<option>` list swapped into the live
+         `<select>` per view), reasoning that "newest first" is a meaningful choice for a log even
+         though it isn't the same choice a task list offers. Shipped, then reported back on a
+         direct follow-up as not wanted on that page at all — pulled entirely rather than left as
+         a working-but-unwanted feature: no `activitySort` field, no option-swapping,
+         `renderActivityFeed` back to the log's natural (already newest-first) query order. Sort
+         is simply in `SORT_DISABLED_VIEWS` alongside Projects now — the difference is Activity
+         also hides the control outright (see `ACTIVITY_HIDDEN_FILTER_WRAP_IDS` below) rather
+         than leaving it greyed out the way Projects' Sort still is.
+     - **Priority/Project/People are hidden outright on Activity, not just left inert.** Same
+       "control present, wired to nothing" gap as search/sort above — `renderActivityFeed`
+       already had its own comment explaining why these three don't apply (an activity row isn't
+       a task). Reported directly once they sat there fully clickable and doing nothing.
+       `syncToolbarLayout()`, called alongside `syncSearchAvailability()`/`syncSortAvailability()`
+       from `setView()`, toggles `.hidden` on `ACTIVITY_HIDDEN_FILTER_WRAP_IDS` (`filter-priority-
+       wrap`/`filter-project-wrap`/`filter-people-wrap`/`sort-by-wrap`) and switches `#toolbar-row`
+       from `justify-end` to `justify-center` — with only Search left standing on that view, a
+       right-hugging row would read as "most of a toolbar went missing" rather than intentional.
    - **Task dependencies were removed** (they shipped in `7ca02d4` and were taken out again).
      The whole editor is gone: the modal's Dependencies section, `wouldCreateCycle`,
      `renderDependenciesEditor`, `addDependency`, `currentTasksForDeps`, the board card's amber

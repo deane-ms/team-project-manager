@@ -573,7 +573,7 @@
           <div id="filter-people-list" class="py-1"></div>
         </div>
       </div>
-      <div class="relative w-full sm:w-auto">
+      <div id="sort-by-wrap" class="relative w-full sm:w-auto">
         <select id="sort-by" title="Sort by" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
           <option value="focus">Sort: Focus</option>
           <option value="priority">Sort: Priority</option>
@@ -1428,7 +1428,7 @@
   // copies, so every consumer below overrides `assignees` with its OWN fresh `[]`; sharing this
   // literal instead would let one caller's array mutations quietly corrupt every other caller
   // that ever fell back to this default in the same page load).
-  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus', activitySort: 'newest' };
+  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus' };
 
   function loadFilters() {
     try {
@@ -1444,11 +1444,7 @@
         priority: typeof raw.priority === 'string' ? raw.priority : '',
         project: typeof raw.project === 'string' ? raw.project : '',
         assignees: assignees,
-        sortBy: typeof raw.sortBy === 'string' ? raw.sortBy : 'focus',
-        // Own field, not a repurposed sortBy value -- Activity's two options (newest/oldest
-        // first) don't mean anything on a task list, and vice versa for focus/priority/deadline/
-        // project on a log entry, so switching views can't just reinterpret the same string.
-        activitySort: raw.activitySort === 'oldest' ? 'oldest' : 'newest'
+        sortBy: typeof raw.sortBy === 'string' ? raw.sortBy : 'focus'
       };
     } catch (e) {
       return Object.assign({}, DEFAULT_FILTERS, { assignees: [] });
@@ -4905,14 +4901,6 @@
           return ((a.summary || '') + ' ' + (a.user || '')).toLowerCase().indexOf(q) !== -1;
         })
       : activityLog;
-    // activityLog itself already arrives newest-first (the Firestore query is ordered that way)
-    // -- this re-sort is what makes "Oldest first" real rather than decorative, and is cheap
-    // enough to just always do rather than skip it on the (already-true) assumption the feed is
-    // still in query order after the search filter above.
-    feed = feed.slice().sort(function (a, b) {
-      var diff = new Date(a.at) - new Date(b.at);
-      return filters.activitySort === 'oldest' ? diff : -diff;
-    });
     if (!feed.length) {
       container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
         (q ? 'No activity matches “' + escapeHtml(filters.search.trim()) + '”.' : 'No activity yet.') +
@@ -5184,46 +5172,32 @@
   // Same "control present but wired to nothing" gap the search box used to have, reported
   // directly for Sort on Activity and Projects: neither reads filters.sortBy at all. Projects
   // always sorts Ongoing by soonest deadline and Completed by most recently archived -- one
-  // true order, not a user choice -- so Sort is disabled there rather than left clickable and
-  // inert. Activity actually got a real sort out of this instead of a disable, since "newest
-  // first" / "oldest first" is a meaningful choice for a log, just not the same choice
-  // (Focus/Priority/Deadline/Project) a task list offers -- so the dropdown's own option list
-  // swaps per view rather than reusing options that don't mean anything there.
-  var TASK_SORT_OPTIONS = [
-    { value: 'focus', label: 'Sort: Focus' },
-    { value: 'priority', label: 'Sort: Priority' },
-    { value: 'deadline', label: 'Sort: Deadline' },
-    { value: 'project', label: 'Sort: Project' }
-  ];
-  var ACTIVITY_SORT_OPTIONS = [
-    { value: 'newest', label: 'Sort: Newest first' },
-    { value: 'oldest', label: 'Sort: Oldest first' }
-  ];
-  var SORT_DISABLED_VIEWS = ['projects'];
+  // true order, not a user choice. Activity briefly got a real Newest/Oldest-first sort instead
+  // of a disable, since that's a meaningful choice for a log -- shipped, then reported back as
+  // not wanted on that page at all, so it was pulled rather than just hidden: no
+  // filters.activitySort field, no option-swapping, `renderActivityFeed` back to the log's
+  // natural (already newest-first) query order. Sort is just disabled on both views now, same
+  // treatment as Search gets on the views it doesn't affect.
+  var SORT_DISABLED_VIEWS = ['projects', 'activity'];
 
   function syncSortAvailability() {
     var select = document.getElementById('sort-by');
     if (!select) return;
     var disabled = SORT_DISABLED_VIEWS.indexOf(currentView) !== -1;
-    var isActivity = currentView === 'activity';
-    var options = isActivity ? ACTIVITY_SORT_OPTIONS : TASK_SORT_OPTIONS;
-    select.innerHTML = options.map(function (o) {
-      return '<option value="' + o.value + '">' + o.label + '</option>';
-    }).join('');
-    select.value = isActivity ? filters.activitySort : filters.sortBy;
+    select.value = filters.sortBy;
     select.title = disabled ? 'Sort doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView) : '';
-    sortByPill.rebuild();
+    sortByPill.sync();
     sortByPill.setDisabled(disabled);
   }
 
   // Priority/Project/People describe tasks, and Activity isn't a task list -- same reasoning
   // renderActivityFeed already gives for skipping applyFilters() entirely (see its own comment).
   // Reported directly once the three dropdowns sat there doing nothing on this view: hide them
-  // rather than leave them clickable-and-inert, same call as Sort's disable above. Search and
-  // Sort both stay, since both genuinely work on Activity -- with only two controls left, the
-  // row re-centers instead of hugging the right edge, so it doesn't look like most of a toolbar
-  // went missing.
-  var ACTIVITY_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap'];
+  // rather than leave them clickable-and-inert, same call as Sort's disable above. Sort itself
+  // joined this hidden set on a direct follow-up ("no need for this in activity page") rather
+  // than staying merely greyed out like it is on Projects -- Activity's Sort is hidden outright,
+  // not just disabled, so only Search remains, centered alone.
+  var ACTIVITY_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap', 'sort-by-wrap'];
 
   function syncToolbarLayout() {
     var isActivity = currentView === 'activity';
@@ -5371,8 +5345,7 @@
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('sort-by').addEventListener('change', function (e) {
-    if (currentView === 'activity') filters.activitySort = e.target.value;
-    else filters.sortBy = e.target.value;
+    filters.sortBy = e.target.value;
     persistFilters();
     renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
@@ -6010,7 +5983,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:18:08Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:26:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
