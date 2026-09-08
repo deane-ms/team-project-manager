@@ -790,6 +790,19 @@ to bottom:
        shared component, not a chat-specific one, since `openConfirm` is reused for archive/
        delete/etc. confirmations elsewhere that insert task or project names the same way and
        were equally exposed to this, just not yet hit by a name long enough to show it.
+     - **Focus of the Day's card had the same overflow, a third place this naming convention
+       exposed the same class of bug** — its project-name line had no `truncate` at all
+       (`renderFocus`'s card template), so a long project name ran past the card's rounded border
+       into the empty space of whatever sat next to it, worse than the confirm modal's version
+       since there wasn't even an `overflow-hidden` boundary to stop at. Fixed with `truncate`
+       (ellipsis, matching how the chat project list already handles this) plus the same
+       `data-tooltip`/`tooltip-top` pair the card's task-name line above it already uses, so the
+       full name is still reachable on hover. Worth checking any other place a project or task
+       name renders as a bare `<p>`/`<span>` with no `truncate`/`break-words` for the same latent
+       bug — this convention's names are unusually good at finding rendering assumptions that
+       held for ordinary "Word Word Word" names.
+     - **The pinned-link "Label" input was too narrow to read anything typed into it**
+       (`w-28` → `w-44`) — reported directly against a screenshot.
      - **Manual, not automatic on a project's first task** — explicitly called out by the user
        mid-build ("this is something to be created manually and not automatically when a user
        creates a task"). Most projects never need a dedicated thread, so both `projectCardHtml`'s
@@ -901,6 +914,22 @@ to bottom:
        `PROJECT_BADGE_PALETTE`/`projectColor` (the Gantt's project-color badges), so a project's
        chat avatar always lands on the same hue as its badge elsewhere rather than being a third,
        independent color source for the same identity.
+       - **The letters shown are `projectInitials(name)`, not the plain `initials()` people use
+         — reported directly against a screenshot where nearly every avatar read "2-something".**
+         This team's project-naming convention stamps every project with a same-shaped leading
+         date ("271231[LittlePaddington]…", "260820[Lark]…"), so plain first-letter-of-first-word
+         degenerated to the same digit for almost every project on the board — exactly the
+         opposite of "easier identification." `projectInitials` instead pulls from the `[Client]`
+         bracket when one exists (confirmed directly: the bracket, not whatever follows it, is
+         the part people actually mean when they refer to a project — "the Lark one"), inserting
+         a space at camelCase boundaries first since these brackets run words together with no
+         spaces of their own ("LittlePaddington" → "Little"/"Paddington" → "LP"). No bracket at
+         all falls back to the same leading-date-strip against the whole name, then plain
+         `initials()` if that leaves nothing to work with. **Two projects sharing a client
+         bracket will share initials** ("[Mediashock]" appears on three of this board's real
+         projects) — accepted as correct, not a bug to route around, since the color underneath
+         still differs (it's hashed on the *full* name) and the client grouping itself is real
+         information, not a collision to hide.
      - **Online presence** (`isPersonOnline`, the green dot on message avatars, the "Online now"
        strip above the two panes) — also requested directly, decided as the cheap option over a
        Firebase Realtime Database `onDisconnect()` presence system (put to the user rather than

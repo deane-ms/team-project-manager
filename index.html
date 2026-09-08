@@ -703,7 +703,7 @@
               <p class="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Pinned links</p>
               <div id="project-chat-links" class="flex flex-col gap-1.5"></div>
               <div class="flex items-center gap-1.5">
-                <input id="project-chat-link-label" type="text" maxlength="60" placeholder="Label (optional)" class="w-28 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+                <input id="project-chat-link-label" type="text" maxlength="60" placeholder="Label (optional)" class="w-44 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
                 <input id="project-chat-link-url" type="text" placeholder="Paste a link (Drive, Figma, image…)" class="flex-1 min-w-0 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
                 <button type="button" id="project-chat-link-add-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
               </div>
@@ -2433,13 +2433,35 @@
     return PROJECT_AVATAR_PALETTE[hash % PROJECT_AVATAR_PALETTE.length];
   }
 
+  // Plain initials() degenerates to the same 1-2 letters for nearly every project here, because
+  // this team's naming convention starts every project with a same-shaped date stamp
+  // ("271231[LittlePaddington]...", "260820[Lark]...") -- reported directly against a
+  // screenshot where every avatar read "2-something". The team's own [Client] bracket is the
+  // actual identity people use when they talk about a project ("the Lark one"), so initials are
+  // drawn from there instead once one exists.
+  function projectInitials(name) {
+    var s = (name || '').trim();
+    var bracketMatch = s.match(/\[([^\]]+)\]/);
+    // No bracket at all -- still strip a leading date stamp before falling back to the plain
+    // whole-name logic, so an unbracketed project doesn't inherit the same "2" problem.
+    var source = bracketMatch ? bracketMatch[1] : s.replace(/^\d{4,8}[\s\-_]*/, '');
+    // These names run words together with no spaces even inside the bracket
+    // ("LittlePaddington"), so a capital-letter boundary is inserted before splitting, the same
+    // way a person would read it out loud.
+    var words = source.replace(/([a-z])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean);
+    if (!words.length) return initials(name);
+    if (words.length === 1) return (words[0].slice(0, 2) || words[0]).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
   // The group chat's "profile photo" -- requested directly, but a real upload needs Firebase
   // Storage, which no longer supports the free Spark plan for new buckets (same wall as every
   // other image feature in this app). This is the zero-infrastructure alternative: a solid
   // colored circle with the project's initials, same "colored initials" idea avatarHtml already
-  // uses for people with no photo, just keyed to the project name instead of a person's.
+  // uses for people with no photo, just keyed to the project name (via projectInitials, not the
+  // plain initials() people use) instead of a person's.
   function chatAvatarHtml(name, className, textSizeClass) {
-    return '<span class="' + className + ' rounded-full ' + projectAvatarColor(name) + ' text-white ' + textSizeClass + ' font-bold flex items-center justify-center shrink-0">' + initials(name) + '</span>';
+    return '<span class="' + className + ' rounded-full ' + projectAvatarColor(name) + ' text-white ' + textSizeClass + ' font-bold flex items-center justify-center shrink-0">' + projectInitials(name) + '</span>';
   }
 
   function normalizeUrl(url) {
@@ -4642,7 +4664,7 @@
             '<span class="text-xs font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
           '</div>' +
           '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-          '<p class="text-xs text-zinc-400 dark:text-zinc-500 mb-2">' + escapeHtml(t.project) + '</p>' +
+          '<p data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top text-xs text-zinc-400 dark:text-zinc-500 truncate mb-2">' + escapeHtml(t.project) + '</p>' +
           '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
             avatarHtml(t.assignee, 'w-5 h-5 shrink-0', 'text-[10px]') +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
@@ -6909,7 +6931,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T17:19:15Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T17:28:35Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
