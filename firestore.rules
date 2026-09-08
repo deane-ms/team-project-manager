@@ -157,6 +157,24 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // A non-admin write to `chat` may drop at most one entry, and if it does, that one entry's
+    // `author` must be the requester -- "delete a single message... should only apply to your
+    // own message, not to others" (removeChatMessage in index.html only ever offers the button
+    // on a message the signed-in name matches, but that's UI, not enforcement; this is). Isolates
+    // the removed entry with removeAll() (old minus new -- since a delete otherwise leaves every
+    // other entry byte-for-byte unchanged, this is exactly the one dropped message, not a diff
+    // approximation) rather than trying to compare arrays index-by-index, which breaks the
+    // moment an item's position shifts. Not exercised against a live emulator (none available
+    // while this was written) -- if `removeAll`/list indexing turns out to be wrong, Firestore
+    // will refuse to publish the rules file outright (a compile error) rather than silently
+    // misbehave, so worth a real test the next time this file gets touched.
+    function chatSingleOwnRemoval() {
+      let removed = resource.data.chat.removeAll(request.resource.data.chat);
+      return request.resource.data.chat.size() == resource.data.chat.size() - 1
+        && removed.size() == 1
+        && (removed[0].author == request.auth.token.name || removed[0].author == request.auth.token.email);
+    }
+
     // One doc per project, holding the project-level deadline (separate from any task's own
     // deadline) and, once created, its group chat's `chat`/`links` fields (see PROJECT GROUP
     // CHAT in index.html). Auto-ID docs with the project name as a *field*, not as the doc ID --
@@ -169,19 +187,21 @@ service cloud.firestore {
       // `tasks`' own update rule -- narrower than a blanket allow specifically because `chat` is
       // the one field on this doc real data loss is possible on, on request ("delete entire
       // project [chat] should only be available for admin"). Anyone can grow `chat` (post a
-      // message), leave its length unchanged (react to one), or shrink it by exactly one entry
-      // (remove a single message, index.html's removeChatMessage). Only an admin can shrink it
-      // by more than one entry in a single write -- exactly what deleting the whole chat does
-      // (deleteProjectChat wipes the field with deleteField() instead of emptying the array, so
-      // "chat in resource.data" also covers a project creating its first chat: that write adds
-      // the field where it didn't exist before, which isn't a shrink at all and stays open to
-      // everyone). Every other field on this doc (deadline, links, name) is untouched by this and
-      // stays exactly as open as it's always been.
+      // message) or leave its length unchanged (react to one); removing exactly their OWN single
+      // message (chatSingleOwnRemoval) is the only kind of shrink open to a non-admin. Only an
+      // admin can shrink it by more than one entry, or remove someone else's single message --
+      // both read as "the destructive thing." `deleteProjectChat` wipes the field entirely with
+      // `deleteField()` instead of emptying the array, so `!('chat' in resource.data)` also
+      // covers a project creating its first chat: that write adds the field where it didn't
+      // exist before, which isn't a shrink at all and stays open to everyone. Every other field
+      // on this doc (deadline, links, name) is untouched by this and stays exactly as open as
+      // it's always been.
       allow update: if isMediashock() && (
         isAdmin()
         || !changedKeys().hasAny(['chat'])
         || !('chat' in resource.data)
-        || request.resource.data.chat.size() >= resource.data.chat.size() - 1
+        || request.resource.data.chat.size() >= resource.data.chat.size()
+        || chatSingleOwnRemoval()
       );
       allow delete: if isMediashock();
     }

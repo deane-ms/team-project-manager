@@ -847,14 +847,19 @@ to bottom:
        message can't accidentally leave the *task* comment box's menu in a stale state or
        vice versa.
      - **Deleting a message vs. deleting the whole chat — asked for directly, with an explicit
-       permission split ("delete a single message yes. Delete entire project should only be
-       available for admin").** Two different actions, two different rules-level boundaries, not
-       just two different buttons:
-       - **A single message** (`removeChatMessage`, the `x` on each message next to its
-         timestamp) is open to the whole team, same as removing a task comment
-         (`removeCommentAt`) — a full-array rewrite dropping exactly the one entry, confirmed via
-         the same `openConfirm` wording task comments already use ("This removes it for everyone
-         on the team").
+       permission split, refined once more on a direct follow-up.** First pass: "delete a single
+       message yes. Delete entire project should only be available for admin." Second pass, once
+       single-message delete had shipped: "should only apply to your own message. Not to
+       others." Three tiers now, not two:
+       - **Your own message** (`removeChatMessage`, the `x` on each message next to its
+         timestamp) — `chatMessageHtml` only ever renders that button when `m.author === myName`,
+         so someone else's message has no delete affordance to click at all. Deliberately
+         *narrower* than removing a task comment (`removeCommentAt`, still open to the whole team
+         for tasks) — a later, more specific request than the comment behavior it otherwise
+         mirrors structurally (full-array rewrite dropping exactly one entry, same `openConfirm`
+         shape).
+       - **Someone else's single message, or the whole chat** — both admin-only, and both real
+         boundaries in `firestore.rules`, not just hidden buttons.
        - **The whole chat** (`deleteProjectChat`, the trash icon in the thread header, hidden
          entirely unless `isAdminUser()`) uses `deleteField()` on both `chat` and `links` rather
          than writing empty arrays — this is what makes `Array.isArray(doc.chat)` go back to
@@ -862,16 +867,25 @@ to bottom:
          eligible for "New chat" again, instead of lingering as a visible-but-empty conversation.
          If the deleted chat was the one currently open, the view falls back to the empty state
          and tears down its typing subscription, the same cleanup `stopListeners` does at sign-out.
-       - **The client-side `isAdminUser()` check is UX only — the real boundary is in
-         `firestore.rules`.** `projects`' `update` rule now reads `chat`'s size before and after a
-         write: anyone can grow it (post), leave it unchanged (react), or shrink it by exactly one
-         entry (a single delete); only `isAdmin()` can shrink it by more than that in one write,
-         which is exactly what wiping the whole thing does. This is the same "count what actually
-         changed" trick `tasks`' own `changedKeys().hasOnly([...])` carve-out uses, just measuring
-         array length instead of which fields changed. `!('chat' in resource.data)` is there so a
-         project creating its **first** chat (a field appearing where it didn't exist) doesn't
-         get misread as a shrink and blocked for non-admins — that path has to stay open to
-         everyone, unchanged from before this rule existed.
+       - **The client-side `isAdminUser()`/author-match checks are UX only — the real boundary is
+         in `firestore.rules`.** `projects`' `update` rule reads `chat`'s size before and after a
+         write (anyone can grow it — post; or leave it unchanged — react), and for a shrink,
+         isolates exactly which entry disappeared with `resource.data.chat.removeAll
+         (request.resource.data.chat)` (old minus new — safe specifically because a delete leaves
+         every *other* entry byte-for-byte unchanged, so this can't misidentify the wrong one).
+         `chatSingleOwnRemoval()` then requires the shrink to be by exactly one entry *and* that
+         entry's `author` to match the requester's own token name/email — anything else (someone
+         else's message, or more than one entry at once) falls through to `isAdmin()`. Same
+         "count what actually changed" spirit as `tasks`' own `changedKeys().hasOnly([...])`
+         carve-out, just measuring array contents instead of which fields changed.
+         `!('chat' in resource.data)` is there so a project creating its **first** chat (a field
+         appearing where it didn't exist) doesn't get misread as a shrink and blocked for
+         non-admins — that path stays open to everyone, unchanged from before this rule existed.
+         **`removeAll()` and list-indexing (`removed[0]`) were not exercised against a live
+         Firestore emulator** (none available in the environment this was written in) — if either
+         turns out to be invalid Rules syntax, the console will refuse to *publish* the file
+         outright (a compile error) rather than silently misenforcing, but this is worth an actual
+         test — two accounts, one deleting the other's message — the next time this file changes.
      - **Archived/completed projects keep their chat fully visible and functional, with a quiet
        "Completed" tag** (`isProjectFullyArchived`, same `activeCount === 0` definition
        `renderProjects`' own Ongoing/Completed split already uses) — asked directly ("how about

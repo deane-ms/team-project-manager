@@ -1762,7 +1762,7 @@
         presenceAvatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
         '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
         '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
-        '<button type="button" class="chat-message-remove ml-auto p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-message-id="' + m.id + '" aria-label="Remove message">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+        (m.author === myName ? '<button type="button" class="chat-message-remove ml-auto p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-message-id="' + m.id + '" aria-label="Remove your message">' + svgIcon('x', 'w-3 h-3') + '</button>' : '') +
       '</div>' +
       '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
       '<div class="flex items-center flex-wrap gap-1.5 mt-1.5">' + reactionsHtml + '</div>' +
@@ -1777,24 +1777,33 @@
     var removeBtn = e.target.closest('.chat-message-remove');
     if (removeBtn) {
       var messageId = removeBtn.getAttribute('data-message-id');
-      openConfirm('Remove this message?', 'This removes it for everyone on the team. This cannot be undone.', function () {
+      openConfirm('Remove your message?', 'This removes it for everyone on the team. This cannot be undone.', function () {
         removeChatMessage(messageId);
       });
     }
   });
 
-  // Open to the whole team, same as removing a task comment (removeCommentAt) -- not restricted
-  // to the message's own author or an admin. A full-array rewrite dropping exactly one entry;
-  // firestore.rules allows any single-message shrink like this one for anyone, and only blocks a
-  // write that drops more than one entry at once (the admin-only "delete this whole chat" action)
-  // to non-admins.
+  // Deliberately narrower than removing a task comment (removeCommentAt, open to the whole
+  // team) -- own messages only, on request ("delete a single message... should only apply to
+  // your own message, not to others"). chatMessageHtml only ever renders the remove button on a
+  // message whose author matches the signed-in name, so this guard is unreachable through the UI
+  // -- kept anyway as defense-in-depth against a stale render. The real boundary is
+  // firestore.rules: a non-admin write can drop at most one entry from `chat` per write (same
+  // "delete the whole chat" cap as before), *and* that one dropped entry's `author` has to match
+  // the requester's own token name/email -- so this isn't just a client-side nicety even though
+  // the button placement alone would already stop it in normal use.
   function removeChatMessage(messageId) {
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     if (!pdoc) return;
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     var removed = (pdoc.chat || []).find(function (m) { return m.id === messageId; });
+    if (!removed || removed.author !== myName) {
+      showToast('You can only remove your own messages.', 'error');
+      return;
+    }
     var chat = (pdoc.chat || []).filter(function (m) { return m.id !== messageId; });
     updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).then(function () {
-      var snippet = removed && removed.text ? (removed.text.length > 60 ? removed.text.slice(0, 60) + '…' : removed.text) : '';
+      var snippet = removed.text ? (removed.text.length > 60 ? removed.text.slice(0, 60) + '…' : removed.text) : '';
       logActivity('project_chat', 'Removed a message in the "' + currentChatProjectName + '" group chat: "' + snippet + '"');
     }).catch(function (err) {
       showToast('Could not remove message: ' + err.message, 'error');
@@ -7141,7 +7150,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T17:54:28Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T18:00:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
