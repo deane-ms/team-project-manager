@@ -864,10 +864,49 @@ to bottom:
        regardless of which view is on screen) — until the selection actually changes or the
        session signs out (`stopListeners` tears both down explicitly, since nothing else would).
      - **The Chat tab re-renders live from the same `projects` listener that already drives the
-       deadline UI** — `unsubProjects`'s `onSnapshot` calls `renderChatView()` whenever Chat is
-       the current tab, the same way the `tasks` listener already re-renders an open task modal.
-       A teammate's new message, reaction or pinned link shows up without needing its own
-       listener.
+       deadline UI** — `renderCurrentSecondaryView()` (called from `renderAll()`, which both
+       `unsubProjects` and `unsubPeople`'s `onSnapshot` handlers already call on every change)
+       calls `renderChatView()` whenever Chat is the current tab, the same way the `tasks`
+       listener already re-renders an open task modal. A teammate's new message, reaction,
+       pinned link, or presence heartbeat shows up without needing its own listener — resist
+       adding an explicit `renderChatView()` call inside either handler; it's already covered by
+       the `renderAll()` they call and would just render twice.
+     - **The chat's "photo"** (`chatAvatarHtml`, in the tab's project list and the selected
+       thread's header) — requested directly ("upload an image for the group chat profile"), but
+       a real upload needs Firebase Storage, which no longer supports the free Spark plan for new
+       buckets (same wall as every image feature in every Mediashock tool). Built as the
+       zero-infrastructure option instead: a solid colored circle with the project's initials,
+       the same "colored initials" idea `avatarHtml` already uses for a person with no photo, on
+       `PROJECT_AVATAR_PALETTE` — the same 8 hues and hash formula as the existing
+       `PROJECT_BADGE_PALETTE`/`projectColor` (the Gantt's project-color badges), so a project's
+       chat avatar always lands on the same hue as its badge elsewhere rather than being a third,
+       independent color source for the same identity.
+     - **Online presence** (`isPersonOnline`, the green dot on message avatars, the "Online now"
+       strip above the two panes) — also requested directly, decided as the cheap option over a
+       Firebase Realtime Database `onDisconnect()` presence system (put to the user rather than
+       assumed, same as the Google-photo-vs-upload choice on the `people` collection). Reuses
+       `people.lastSeen`, which `registerPresence` already wrote once per sign-in, rather than a
+       new field or collection: `startPresenceHeartbeat` now refreshes it every
+       `PRESENCE_HEARTBEAT_MS` (60s) for as long as the session stays open, plus immediately on
+       `visibilitychange` going visible (so reopening a laptop reads as "back online" right away,
+       not up to a minute later), and `stopListeners` stops the interval at sign-out.
+       `isPersonOnline(name)` treats "seen within `ONLINE_THRESHOLD_MS`" (2 minutes) as online.
+       - **This is approximate by design, not a bug**: a silent disconnect (closed lid, lost
+         wifi, killed tab) has no "I'm offline now" write to react to, so nobody finds out until
+         the heartbeat simply stops arriving. A real Realtime Database presence system would
+         catch this instantly via `onDisconnect()`, at the cost of adding a second Firebase
+         product (its own security rules, its own thing to keep in sync) to a stack that
+         currently only needs Firestore + Auth. Revisit if 2-minute staleness ever actually
+         bothers anyone; don't add it pre-emptively.
+       - **`renderChatOnlineStrip`'s own `setInterval` (30s) is what actually ages a teammate
+         back out to offline** for everyone else, since — per the point above — nothing writes a
+         new `people` doc when someone goes quiet, so no `onSnapshot` ever fires to trigger a
+         re-render on its own. 30s is deliberately coarser than the typing indicator's 2s tick;
+         online/offline doesn't need that grade of immediacy.
+       - **`presenceAvatarHtml` wraps `avatarHtml` rather than adding a parameter to it** — scoped
+         to Chat's message authors specifically (where online status was asked for), so every
+         other call site (task comments, time entries, People cards, Focus of the Day, …) is
+         completely untouched.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via

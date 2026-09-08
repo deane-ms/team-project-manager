@@ -666,6 +666,9 @@
 
     <!-- ============ CHAT VIEW ============ -->
     <section id="view-chat" data-view class="flex-1">
+      <!-- Online is app-wide, not per-project, so it sits above the two-pane layout rather than
+           inside either pane. Empty (not shown at all) when nobody else is currently online. -->
+      <div id="chat-online-strip" class="hidden items-center gap-2 mb-3 text-xs text-zinc-500 dark:text-zinc-400"></div>
       <div class="flex flex-col lg:flex-row gap-4">
         <!-- Project list -- every project appears here (same names as the Projects tab), not
              just ones with a chat already, so "+ Create" is reachable in one place. -->
@@ -681,7 +684,8 @@
             Select a project on the left to see its group chat, or create one.
           </div>
           <div id="chat-detail" class="hidden flex-col">
-            <div class="flex items-center justify-between gap-2 px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+            <div class="flex items-center gap-2.5 px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+              <span id="project-chat-avatar"></span>
               <div class="min-w-0">
                 <h3 id="project-chat-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">Project chat</h3>
                 <p class="text-xs text-zinc-400 dark:text-zinc-500">Group chat for this project — separate from task comments.</p>
@@ -1044,6 +1048,39 @@
     });
   }
 
+  // "Who's online" (requested for the Chat tab) reuses this same lastSeen field rather than a
+  // new collection/field -- registerPresence already wrote it once at sign-in; this just keeps
+  // it fresh for as long as the session stays open, and isPersonOnline (near avatarHtml below)
+  // treats "seen in the last ONLINE_THRESHOLD_MS" as online. This is the lightweight choice, on
+  // request, over a Realtime Database onDisconnect() presence system: free and needs no second
+  // Firebase product, at the cost of being approximate (up to ~2 minutes stale) rather than
+  // instant -- a silent disconnect (closed laptop lid, lost wifi) has no "I'm offline now" write
+  // to react to, so a viewer only finds out by the heartbeat simply not showing up any more.
+  var PRESENCE_HEARTBEAT_MS = 60000;
+  var ONLINE_THRESHOLD_MS = 120000;
+  var presenceHeartbeatTimer = null;
+
+  function heartbeatPresence() {
+    var user = auth.currentUser;
+    if (!user) return;
+    updateDoc(doc(peopleCol, user.uid), { lastSeen: new Date().toISOString() }).catch(function () { /* best-effort, see registerPresence */ });
+  }
+
+  function startPresenceHeartbeat() {
+    if (presenceHeartbeatTimer) return;
+    presenceHeartbeatTimer = setInterval(heartbeatPresence, PRESENCE_HEARTBEAT_MS);
+  }
+
+  function stopPresenceHeartbeat() {
+    if (presenceHeartbeatTimer) { clearInterval(presenceHeartbeatTimer); presenceHeartbeatTimer = null; }
+  }
+
+  // A refresh the moment a backgrounded tab comes back, not just the fixed 60s cadence -- reopening
+  // a laptop should read as "back online" right away rather than up to a minute later.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') heartbeatPresence();
+  });
+
   var activityCol = collection(db, "activity");
   // 50 was several days of history at five people. It is an afternoon at eleven, which quietly
   // turns the audit trail into a "recently" list. Raised with the Activity view made searchable
@@ -1362,6 +1399,7 @@
     document.getElementById('project-chat-typing').textContent = '';
     currentChatProjectName = name;
     document.getElementById('project-chat-title').textContent = name;
+    document.getElementById('project-chat-avatar').innerHTML = chatAvatarHtml(name, 'w-10 h-10', 'text-sm');
     document.getElementById('chat-empty-state').classList.add('hidden');
     document.getElementById('chat-detail').classList.remove('hidden');
     document.getElementById('chat-detail').classList.add('flex');
@@ -1373,9 +1411,34 @@
   }
 
   function renderChatView() {
+    renderChatOnlineStrip();
     renderChatProjectList();
     if (currentChatProjectName) renderChatDetail();
   }
+
+  // teamRoster(), not uniqueValues('assignee') -- someone with no current tasks but a live
+  // session is still meaningfully "online right now", same reasoning teamRoster() itself is
+  // built on for the assignee picker/mentions elsewhere. Excludes the viewer's own name -- you
+  // already know you're here.
+  function renderChatOnlineStrip() {
+    var el = document.getElementById('chat-online-strip');
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    var online = teamRoster().filter(function (name) { return name !== myName && isPersonOnline(name); });
+    el.classList.toggle('hidden', online.length === 0);
+    el.classList.toggle('flex', online.length > 0);
+    if (!online.length) { el.innerHTML = ''; return; }
+    el.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>' +
+      '<span>Online now: </span>' +
+      '<span class="flex items-center -space-x-1.5">' +
+        online.map(function (name) { return avatarHtml(name, 'w-5 h-5 ring-2 ring-white dark:ring-zinc-800', 'text-[9px]'); }).join('') +
+      '</span>' +
+      '<span class="text-zinc-400 dark:text-zinc-500">' + online.join(', ') + '</span>';
+  }
+
+  // Ages out a teammate who went silently offline (closed the lid, lost wifi) without a new
+  // `people` write ever arriving to trigger a re-render -- see PRESENCE_HEARTBEAT_MS's comment.
+  // 30s is coarse on purpose: online/offline doesn't need typing-indicator-grade immediacy.
+  setInterval(function () { if (currentView === 'chat') renderChatOnlineStrip(); }, 30000);
 
   // Every project appears here, same names as the Projects tab (grouped from the task list, not
   // from projectDocs -- a project with no deadline and no chat yet still has no projectDocs entry
@@ -1394,10 +1457,11 @@
           var subtitle = hasChat
             ? (pdoc.chat.length ? pdoc.chat.length + ' message' + (pdoc.chat.length === 1 ? '' : 's') : 'No messages yet')
             : 'No chat yet';
-          return '<button type="button" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-2 ' +
+          return '<button type="button" class="chat-project-row w-full text-left px-3.5 py-2.5 flex items-center gap-2.5 ' +
             (selected ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-700/50') +
             '" data-project="' + escapeHtml(name) + '" data-has-chat="' + (hasChat ? '1' : '0') + '">' +
-            '<span class="min-w-0">' +
+            chatAvatarHtml(name, 'w-8 h-8', 'text-xs') +
+            '<span class="min-w-0 flex-1">' +
               '<span class="block text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
               '<span class="block text-xs text-zinc-400 dark:text-zinc-500">' + subtitle + '</span>' +
             '</span>' +
@@ -1471,7 +1535,7 @@
     reactionsHtml += '<button type="button" class="chat-reaction-add inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300" data-message-id="' + m.id + '" title="Add a reaction">' + svgIcon('plus', 'w-3 h-3') + '</button>';
     return '<div class="bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
       '<div class="flex items-center gap-1.5 mb-1">' +
-        avatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
+        presenceAvatarHtml(m.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
         '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
         '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
       '</div>' +
@@ -1902,6 +1966,12 @@
     'bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25'
   ];
 
+  // Same 8 hues as PROJECT_BADGE_PALETTE, solid instead of soft-tinted -- for a filled circle
+  // (white initials text needs real contrast, which the badge palette's light tints don't give).
+  // Same order, same hash formula (projectAvatarColor below), so a project's chat avatar and its
+  // badge elsewhere always land on the same hue -- one identity color per project, two renderings.
+  var PROJECT_AVATAR_PALETTE = ['bg-orange-500', 'bg-teal-500', 'bg-indigo-500', 'bg-fuchsia-500', 'bg-cyan-500', 'bg-lime-500', 'bg-pink-500', 'bg-violet-500'];
+
   /* =========================================================
      ICONS -- inline monotone SVG, matching content-hub-firebase.html's
      icon convention (stroke=currentColor, no external icon font/library).
@@ -2258,6 +2328,27 @@
     return '<span class="' + className + ' rounded-full ' + avatarColor(name) + ' text-white ' + textSizeClass + ' font-bold flex items-center justify-center">' + initials(name || '?') + '</span>';
   }
 
+  // See PRESENCE_HEARTBEAT_MS/ONLINE_THRESHOLD_MS near registerPresence for what "online" means
+  // here and why it's approximate. Matched by display name, same as every other name-based
+  // lookup against teamPeople in this file.
+  function isPersonOnline(name) {
+    if (!name) return false;
+    var p = teamPeople.find(function (x) { return x.name === name; });
+    if (!p || !p.lastSeen) return false;
+    return (Date.now() - new Date(p.lastSeen).getTime()) < ONLINE_THRESHOLD_MS;
+  }
+
+  // Wraps avatarHtml with a small green presence dot -- scoped to the Chat tab (its message
+  // authors) rather than every avatar in the app, since that's specifically where online status
+  // was asked for. A plain wrapper rather than a parameter on avatarHtml itself, so every other
+  // call site (comments, time entries, People cards, ...) is untouched.
+  function presenceAvatarHtml(name, className, textSizeClass) {
+    return '<span class="relative inline-flex shrink-0">' +
+      avatarHtml(name, className, textSizeClass) +
+      (isPersonOnline(name) ? '<span class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-800" title="Online"></span>' : '') +
+    '</span>';
+  }
+
   // Same hash, PROJECT_BADGE_PALETTE instead of AVATAR_PALETTE -- lets the Gantt's flat,
   // chronologically sorted task list still make same-project rows visually obvious (a colored
   // badge around the project name on the sticky label column) WITHOUT clustering rows by
@@ -2269,6 +2360,22 @@
     var hash = 0;
     for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
     return PROJECT_BADGE_PALETTE[hash % PROJECT_BADGE_PALETTE.length];
+  }
+
+  // Same hash as projectColor, PROJECT_AVATAR_PALETTE instead -- see that array's comment.
+  function projectAvatarColor(name) {
+    var hash = 0;
+    for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return PROJECT_AVATAR_PALETTE[hash % PROJECT_AVATAR_PALETTE.length];
+  }
+
+  // The group chat's "profile photo" -- requested directly, but a real upload needs Firebase
+  // Storage, which no longer supports the free Spark plan for new buckets (same wall as every
+  // other image feature in this app). This is the zero-infrastructure alternative: a solid
+  // colored circle with the project's initials, same "colored initials" idea avatarHtml already
+  // uses for people with no photo, just keyed to the project name instead of a person's.
+  function chatAvatarHtml(name, className, textSizeClass) {
+    return '<span class="' + className + ' rounded-full ' + projectAvatarColor(name) + ' text-white ' + textSizeClass + ' font-bold flex items-center justify-center shrink-0">' + initials(name) + '</span>';
   }
 
   function normalizeUrl(url) {
@@ -6396,6 +6503,7 @@
   });
 
   function stopListeners() {
+    stopPresenceHeartbeat();
     if (projectChatTypingUnsub) { projectChatTypingUnsub(); projectChatTypingUnsub = null; }
     if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
     currentChatProjectName = null;
@@ -6551,9 +6659,12 @@
     // itself every time the modal opens.
     unsubPeople = onSnapshot(peopleCol, function (snap) {
       teamPeople = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-      // Full re-render: this collection now carries personal leave as well as the roster, and
+      // Full re-render (renderAll -> renderCurrentSecondaryView already covers the Chat tab's
+      // online strip too, so a heartbeat write shows up there immediately, not just on the 30s
+      // aging-out tick): this collection now carries personal leave as well as the roster, and
       // leave is drawn on the Gantt's rows and the People cards. Cheap -- one doc per teammate,
-      // and it only fires when somebody signs in or edits their time off.
+      // and it only fires when somebody signs in, sends a presence heartbeat, or edits their time
+      // off.
       renderAll();
     }, function (err) {
       // Same reasoning as registerPresence: a missing roster degrades the assignee picker back
@@ -6577,10 +6688,10 @@
       projectDocs = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       // Full re-render, not just the Projects tab: project deadlines drive the Gantt's grouped
       // rows and the deadline popups too, so any of them can be on screen when this fires.
+      // renderAll -> renderCurrentSecondaryView also covers the Chat tab, so a teammate's new
+      // message, reaction or pinned link lands there the same way an edited task lands in the
+      // tasks listener above.
       renderAll();
-      // Keeps the Chat tab live for everyone in it -- a teammate's new message, reaction or
-      // pinned link lands here the same way an edited task lands in the tasks listener above.
-      if (currentView === 'chat') renderChatView();
     }, function (err) {
       showToast('Project deadlines aren\'t loading: ' + err.message, 'error');
     });
@@ -6721,6 +6832,7 @@
     // first-time signer-in can assign themselves a task without reloading.
     registerPresence(user);
     startListeners();
+    startPresenceHeartbeat();
   });
 
   /* =========================================================
@@ -6733,7 +6845,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T16:38:32Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T16:53:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
