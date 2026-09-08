@@ -3986,7 +3986,9 @@
     // answer doesn't require dragging the card back out of Review and in again to fix. Checked
     // ahead of data-open-task in the click delegation below, same ordering as edit/delete/archive,
     // so clicking it re-prompts instead of opening the task modal underneath it.
-    return '<button type="button" data-set-review-audience="' + t.id + '" title="Click to change" class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + cls + '">' + label + '</button>';
+    // ml-auto pushes this (and, since it's last, only this) to the row's right edge -- everything
+    // before it keeps its normal left-packed order and spacing.
+    return '<button type="button" data-set-review-audience="' + t.id + '" title="Click to change" class="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + cls + '">' + label + '</button>';
   }
 
   // One compact row per task, meant to live inside projectGroupCardHtml's wrapper below -- not
@@ -4036,11 +4038,14 @@
           '</div>' +
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
-            reviewAudienceBadgeHtml(t) +
             '<span class="flex items-center gap-1 text-xs ' + dateClass + '">' + svgIcon('calendar', 'w-3 h-3') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
             (timeMinutes ? '<span class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3 h-3') + formatDuration(timeMinutes) + '</span>' : '') +
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
             (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
+            // Last in the row, pushed to the far right by ml-auto (see reviewAudienceBadgeHtml) --
+            // reported directly that sitting right next to Priority crowded the row's left side
+            // while the rest of it sat empty; this uses that space instead.
+            reviewAudienceBadgeHtml(t) +
           '</div>' +
         '</div>' +
       '</div>'
@@ -6093,7 +6098,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T10:45:15Z";
+  var CURRENT_BUILD_VERSION = "2026-09-08T10:51:22Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

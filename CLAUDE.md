@@ -748,6 +748,11 @@ to bottom:
        emerald = Done) or on the project badge above it (the orange/teal/indigo/fuchsia/cyan/
        lime/pink/violet hash palette) — reusing any of those here would have read as a second,
        false signal riding along with the real one.
+     - **The badge sits last in the meta row with `ml-auto`, not right after Priority.** First
+       shipped next to Priority; reported directly that this crowded the row's left side while
+       the rest of it (past the date/time icons) sat empty. Moving it to the end and giving it
+       `ml-auto` pushes just that one badge to the row's right edge without disturbing the
+       left-packed order of Priority/date/time/overdue before it.
    - **Overtime is manually tagged** (`task-time-overtime`, `setOvertimeToggle`) — a plain toggle
      button next to Billable, same shape and pattern. It used to be auto-detected: crossing
      `OVERTIME_DAILY_MINUTES` (8h) in a person's cumulative logged time for the day popped an
