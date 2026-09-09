@@ -555,6 +555,43 @@ to bottom:
        anyone's tab open would need that credential set up first — a real, one-time infrastructure
        step with its own security review, not something to add casually alongside a reactive
        in-app rule like this one.
+   - **Three more automations from the same shortlist** (asked for by name: "what other agents can
+     I build for PM?" → "build the first 3"), wired into the exact same `tasks` `onSnapshot`
+     handler right after `checkWorkloadSpikes()`. All three share its shape: a session-local
+     `xWarned` dedup map keyed so a materially different situation (a new deadline, a fresh
+     `updatedAt`) re-notifies while an unchanged one only fires once per session; a plain
+     `notifications` collection write via `setDoc(doc(notificationsCol), {...})`; and their own
+     `author`/verb/title branches in `renderNotificationBell` and `fireDesktopNotification`
+     (`'Deadline alert'`/`'Review alert'`/`'Leave alert'`, each reading "X alert flagged Y on
+     '<task>'" — unlike `workload_spike`'s "you", these three each point at one real task, so they
+     use the normal task-name subject instead of inventing a person-scoped one).
+     - **Deadline-approaching reminder** (`checkDeadlineReminders`, `type: 'deadline_reminder'`) —
+       the gap this fills: overdue is already visible everywhere (Board badges, Focus of the Day,
+       the digest panel), but nothing proactively flags a deadline that's *about* to arrive.
+       Fires once per task while `daysUntil(deadline)` is 0–2 (`DEADLINE_REMINDER_DAYS = 2`),
+       excluding Done and — same exemption as `dueUrgency`/`renderFocus` — Review, since a task
+       sent off for review isn't running on the assignee's own clock anymore.
+     - **Stale-in-Review nudge** (`checkStaleReviews`, `type: 'review_stale'`) — nothing currently
+       flags a task that's been sitting in Review with no follow-up. Uses `updatedAt` as a proxy
+       for "since this task last saw activity while in Review" (there's no dedicated
+       `enteredReviewAt` field) — an approximation, same spirit as the digest panel's own
+       documented "Done" ≠ "recently completed" shortcut: an unrelated edit resets the clock
+       without a real review action happening. Confirmed comments don't reset it before relying on
+       this — the comment-save path writes only `{ comments: list }`, never touching `updatedAt` —
+       so a reviewer's own feedback can't quietly suppress the next nudge. Fires at
+       `REVIEW_STALE_DAYS = 3` days. Notifies the *assignee*, not "the reviewer": this app has no
+       separate reviewer-identity field (`reviewAudience` is a Client/Internal label, not a
+       person), so the assignee — who put it in Review and is the one who'd actually chase a
+       stalled sign-off — is the useful recipient.
+     - **Leave-conflict warning** (`checkLeaveClashes`, `type: 'leave_clash'`) — reuses
+       `isOnLeave(assignee, deadline)` completely unchanged, the same "deadline lands ON a day
+       the assignee is away" signal the Gantt's own `gantt-leave-note` already validated (see
+       "Personal leave" elsewhere in this file: date-*range* overlap was tried and rejected there
+       as normal/noisy — a task merely spanning someone's time off resolves itself; a deadline
+       landing while they're actually away doesn't). This just turns that same passive Gantt
+       signal into a notification reaching the affected assignee directly. Doesn't touch leave
+       *editing* at all — `canEditLeaveFor` (self-or-admin, matching the `people` collection's
+       Firestore rule) is unchanged; this only reads existing leave data.
    - **Filters persist across reloads** (`FILTERS_KEY = 'flowboard_filters'`, `loadFilters`/
      `persistFilters`/`restoreFilterControls`). Only the five known keys are read back, so a
      stale or hand-edited `localStorage` value can't inject anything else. Safe to persist

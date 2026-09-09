@@ -1409,6 +1409,9 @@
       : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
       : notif.type === 'chat_reaction' ? (notif.author + ' reacted to your message')
       : notif.type === 'workload_spike' ? 'Workload alert'
+      : notif.type === 'deadline_reminder' ? 'Deadline alert'
+      : notif.type === 'review_stale' ? 'Review alert'
+      : notif.type === 'leave_clash' ? 'Leave alert'
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
@@ -6442,6 +6445,133 @@
     });
   }
 
+  /* =========================================================
+     DEADLINE-APPROACHING REMINDER -- the second of three automations picked from the same
+     shortlist workload_spike came from ("what other agents can I build for PM?" -> "build the
+     first 3"). Overdue is already surfaced everywhere (Board badges, Focus of the Day, the
+     digest panel) but nothing proactively flags a deadline that's about to arrive -- someone who
+     isn't currently looking at their own overdue list has no reason to know it's coming.
+
+     Deliberately a point check ("due in 0-2 days"), not a day-by-day countdown -- the same
+     dedup-by-key idiom as workloadSpikeWarned means a task only re-notifies if it stays in this
+     window across a page reload, which is an accepted minor inaccuracy exactly like that one, not
+     worth a Firestore-backed "already warned" flag for a reminder this low-stakes. Excludes
+     Review the same way dueUrgency/renderFocus do: once a task is sent off for review, the
+     assignee's own deadline clock isn't really running anymore, so reminding them about it would
+     be a false alarm about someone else's response time.
+  ========================================================= */
+  var DEADLINE_REMINDER_DAYS = 2;
+  var deadlineReminderWarned = {};
+
+  function notifyOnDeadlineApproaching(task, days) {
+    setDoc(doc(notificationsCol), {
+      recipient: task.assignee,
+      type: 'deadline_reminder',
+      taskId: task.id,
+      taskName: task.name,
+      chatProject: null,
+      author: 'Deadline alert',
+      snippet: '"' + task.name + '" in ' + task.project + ' is due ' + (days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'in ' + days + ' days'),
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify deadline reminder', e); });
+  }
+
+  function checkDeadlineReminders() {
+    activeTasks().forEach(function (t) {
+      if (!t.assignee || t.status === 'Done' || t.status === 'Review' || !t.deadline) return;
+      var days = daysUntil(t.deadline);
+      if (days === null || days < 0 || days > DEADLINE_REMINDER_DAYS) return;
+      var key = t.id + '|' + t.deadline;
+      if (deadlineReminderWarned[key]) return;
+      deadlineReminderWarned[key] = true;
+      notifyOnDeadlineApproaching(t, days);
+    });
+  }
+
+  /* =========================================================
+     STALE-IN-REVIEW NUDGE -- the third of the three. A task can sit in Review indefinitely with
+     nothing prompting anyone to follow up on it -- the Review column has no badge for "this has
+     been waiting a while" the way overdue tasks get flagged elsewhere.
+
+     Uses `updatedAt` as a proxy for "since this task last saw real activity while in Review" --
+     not a dedicated `enteredReviewAt` timestamp, which doesn't exist. This is an approximation,
+     same spirit as the digest panel's own documented "Done" != "recently completed" shortcut: an
+     unrelated edit (ticking a checklist item, say) would reset the clock without a real review
+     action happening. Good enough for a nudge, not worth a new field and a migration for.
+     Confirmed comments don't touch `updatedAt` before relying on this: the comment-save path
+     writes only `{ comments: list }`, so a reviewer leaving feedback doesn't quietly reset this
+     clock.
+
+     Notifies the assignee, not "the reviewer" -- this app has no separate reviewer identity field
+     (`reviewAudience` is Client/Internal, a label, not a person), so the assignee -- who put it in
+     Review and is the one who'd actually chase a stalled sign-off -- is the useful recipient.
+  ========================================================= */
+  var REVIEW_STALE_DAYS = 3;
+  var reviewStaleWarned = {};
+
+  function notifyOnStaleReview(task, days) {
+    setDoc(doc(notificationsCol), {
+      recipient: task.assignee,
+      type: 'review_stale',
+      taskId: task.id,
+      taskName: task.name,
+      chatProject: null,
+      author: 'Review alert',
+      snippet: '"' + task.name + '" in ' + task.project + ' has been sitting in Review for ' + days + ' days',
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify stale review', e); });
+  }
+
+  function checkStaleReviews() {
+    activeTasks().forEach(function (t) {
+      if (!t.assignee || t.status !== 'Review' || !t.updatedAt) return;
+      var days = daysBetween(parseDate(localDateOf(t.updatedAt)), todayMidnight());
+      if (days < REVIEW_STALE_DAYS) return;
+      var key = t.id + '|' + t.updatedAt;
+      if (reviewStaleWarned[key]) return;
+      reviewStaleWarned[key] = true;
+      notifyOnStaleReview(t, days);
+    });
+  }
+
+  /* =========================================================
+     LEAVE-CONFLICT WARNING -- the last of the three. Reuses `isOnLeave(assignee, deadline)`
+     unchanged -- the exact same "deadline lands ON a day the assignee is away" signal the Gantt's
+     own leave-clash note already validated (see its comment: date-RANGE overlap was tried and
+     rejected as normal/noisy, a deadline landing while genuinely away is the one that can't
+     resolve itself). This just turns that same signal into a notification reaching the affected
+     assignee directly, instead of only being visible to whoever happens to have the Gantt open.
+  ========================================================= */
+  var leaveClashWarned = {};
+
+  function notifyOnLeaveClash(task) {
+    var period = leavePeriodOn(task.assignee, task.deadline);
+    setDoc(doc(notificationsCol), {
+      recipient: task.assignee,
+      type: 'leave_clash',
+      taskId: task.id,
+      taskName: task.name,
+      chatProject: null,
+      author: 'Leave alert',
+      snippet: '"' + task.name + '" in ' + task.project + ' is due ' + formatShortDate(task.deadline) + ', while you\'re marked away' + (period ? ' (' + formatShortDate(period.start) + '–' + formatShortDate(period.end) + ')' : ''),
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify leave clash', e); });
+  }
+
+  function checkLeaveClashes() {
+    activeTasks().forEach(function (t) {
+      if (!t.assignee || t.status === 'Done' || !t.deadline) return;
+      if (!isOnLeave(t.assignee, t.deadline)) return;
+      var key = t.id + '|' + t.deadline;
+      if (leaveClashWarned[key]) return;
+      leaveClashWarned[key] = true;
+      notifyOnLeaveClash(t);
+    });
+  }
+
   function archiveTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t) return;
@@ -8670,6 +8800,9 @@
       renderAll();
       checkProjectDeadlinePopups();
       checkWorkloadSpikes();
+      checkDeadlineReminders();
+      checkStaleReviews();
+      checkLeaveClashes();
     }, function (err) {
       showToast('Live sync error: ' + err.message, 'error');
     });
@@ -8757,10 +8890,17 @@
           // `workload_spike` (see checkWorkloadSpikes) has no chat or task to point the sentence
           // at all -- it's a system-generated observation about the recipient's own tasks, not
           // something someone else did to a specific thing, so it gets its own subject ("you").
+          // `deadline_reminder`/`review_stale`/`leave_clash` (see checkDeadlineReminders/
+          // checkStaleReviews/checkLeaveClashes) are the same kind of system-generated observation
+          // as workload_spike, but each one IS about one specific task, so they use the normal
+          // task-name subject instead of workload_spike's "you".
           var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : n.type === 'workload_spike' ? 'you' : ('"' + escapeHtml(n.taskName) + '"');
           var verb = n.chatProject
             ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
             : n.type === 'workload_spike' ? 'flagged a workload pile-up for'
+            : n.type === 'deadline_reminder' ? 'flagged an approaching deadline on'
+            : n.type === 'review_stale' ? 'flagged a stale Review on'
+            : n.type === 'leave_clash' ? 'flagged a leave conflict on'
             : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
@@ -8892,7 +9032,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T16:30:11Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T16:40:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
