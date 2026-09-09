@@ -887,6 +887,14 @@ to bottom:
        held for ordinary "Word Word Word" names.
      - **The pinned-link "Label" input was too narrow to read anything typed into it**
        (`w-28` → `w-44`) — reported directly against a screenshot.
+     - **"Pinned links" recolored from brand-orange to emerald** (the "+ Add" toggle and each
+       link's own anchor text) — reported directly ("change pinned links to green instead of
+       orange"). Deliberately this app's existing `emerald` (the same green already used for
+       Done/success states), not a new shade, and scoped to just this one section — links/mentions
+       everywhere else in chat (message text, the compose box, "New chat") stay brand-orange like
+       every other actionable link in this app. Distinct from "Pinned messages" (added
+       separately, further down), which stayed amber — the two sections now read as two visually
+       distinct colors rather than needing the "links" vs. "messages" word to tell them apart.
      - **Manual, not automatic on a project's first task** — explicitly called out by the user
        mid-build ("this is something to be created manually and not automatically when a user
        creates a task"). Most projects never need a dedicated thread, so `projectCardHtml`'s card
