@@ -2355,6 +2355,69 @@ decides what to move.
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour
   for "someone is not available" everywhere it appears.
 
+### Calendar view
+
+Rebuilt from a plain read-only month grid (dot + task name on the deadline day only, static
+"+N more" text) into something meant to replace checking a personal Google Calendar for
+deadlines. The goal was stated directly and then deliberately narrowed by a follow-up question:
+"I want users to use this tool rather than google calendar... a full replacement" turned into
+"just task/project deadlines" once asked whether that meant deadline-tracking or real meeting
+scheduling (invites/RSVPs/time-of-day booking) — this app has no concept of a meeting or an
+invite system, and building one would be a fundamentally different, much larger feature than
+polishing an existing deadline grid. Four gaps, all requested together in one list:
+
+- **"Mine"/"Everyone" scope, defaulting to Mine** (`calendarScope`, `CALENDAR_SCOPE_KEY =
+  'flowboard_calendar_scope'` in `localStorage`) — the single biggest thing making this read as
+  *your* calendar rather than a shared project grid. `#calendar-scope-mine`/`#calendar-scope-all`
+  are a small segmented control (`.calendar-scope-btn.active`, same on/off shape as
+  `.view-toggle-btn.active` but its own rule since it's a two-button track, not a full-width rail
+  item), filtering on `t.assignee === myName` before anything else runs. Falls back to "everyone"
+  silently if there's no signed-in name to match (shouldn't happen in practice — the auth gate
+  blocks reaching this view at all without one).
+- **Every task now spans its whole `startDate` → `deadline` range on the grid, not just a dot on
+  the deadline day** ("like the Gantt already does," said directly once the scope question above
+  was settled). `renderCalendar` builds `calendarDayCache` once per render — for each task, walk
+  every day from `start` to `end` (clamped to the visible 42-day grid) and push an
+  `{task, isStart, isEnd}` entry. A day's chips render as a small colored bar (`pm.bar` + white
+  text on the deadline day, `pm.barLight` + normal text on in-progress days — the same two shades
+  the Gantt already uses for its own bars, reused rather than inventing a third color language)
+  instead of the old dot-and-name row.
+  - **The task name only re-appears at the true start, the true end, or the first column of a new
+    week the span is still running through** (`isStart || isEnd || isRowStart`) — not on every
+    day of the span. A task running the whole width of a row would otherwise repeat its own name
+    seven times in a row, which reads as clutter, not a calendar; Google Calendar's own multi-day
+    event bars re-label the same way at each week boundary.
+  - **Legacy tasks with no `startDate` fall back to the old single-day-on-the-deadline behavior**
+    (`parseDate(t.startDate) || parseDate(t.deadline)`) rather than guessing a start. A task whose
+    `startDate` is somehow after its own `deadline` (bad data) defensively collapses to a single
+    day on the deadline instead of rendering an inverted range.
+  - **A day's entries sort deadline-first, then by `PRIORITY_WEIGHT`** — arriving today is more
+    actionable than merely being in progress, so it should be the first thing a crowded day shows
+    before the cap (`CALENDAR_DAY_CAP = 3`) pushes anything into overflow.
+- **Who's on leave shows directly on the grid** (`isOnLeave`, unchanged — see "Personal leave"
+  above) — a small amber line per day cell naming who's away, independent of the Mine/Everyone
+  toggle since it's team-wide context, not a personal task. First place this data renders
+  day-by-day rather than only as a Gantt range-band or a `leave_clash` warning.
+- **The old static "+N more" is now `openCalendarDayModal`, a real day-detail popover**
+  (`#calendar-day-modal`) — a busy day used to just hide everything past the third task with no
+  way to see the rest. Clicking either the day number (works even with zero overflow — a day with
+  exactly three tasks had no click target at all before) or the "+N more" row opens it, reading
+  straight from `calendarDayCache` rather than recomputing spans. Its list reuses the same
+  `data-open-task` attribute the rest of the app already delegates clicks on
+  (`document`-level listener, see "GLOBAL CLICK DELEGATION"), plus one extra listener scoped to
+  `#calendar-day-modal-list` that closes the popover itself the moment a task inside it is
+  clicked — both listeners see the same click; the scoped one runs first during the bubble phase,
+  so the day modal is gone before the task modal appears instead of sitting stacked behind it.
+  Escape and an outside-the-card click both close it, wired into the same keydown handler and
+  `modal-backdrop` idiom every other modal in this app already uses.
+- **Verified without live Firestore data**: the DOM/interaction layer (scope toggle persistence,
+  day modal open/close via a real click/Escape/backdrop-click, the empty-day message) was checked
+  against the real file via Playwright; the span-building algorithm itself (multi-week spans,
+  legacy no-`startDate` fallback, the bad-data collapse, deadline-first sort) was verified with an
+  isolated Node port of `renderCalendar`'s `calendarDayCache`-building logic, run against
+  synthetic tasks — the same two-track approach used earlier in this file for the workload/
+  deadline/review/leave automations, since there's still no Firebase emulator in this environment.
+
 ### Who can edit what (ownership rules)
 
 **Task ownership now tracks who *created* the task, not who it's assigned to** — the third shape

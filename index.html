@@ -299,6 +299,14 @@
   .view-toggle-btn.active { background: #ffe4da; color: #b93816; }
   .dark .view-toggle-btn.active { background: rgba(255,78,32,0.14); color: #ff9d7e; }
 
+  /* Calendar's "Mine"/"Everyone" scope toggle -- same on/off shape as .view-toggle-btn.active,
+     kept as its own small rule rather than reused wholesale since this is a two-button segmented
+     control sitting inside its own bordered track, not a full-width rail item. */
+  .calendar-scope-btn { color: #71717a; }
+  .dark .calendar-scope-btn { color: #a1a1aa; }
+  .calendar-scope-btn.active { background: #ffe4da; color: #b93816; }
+  .dark .calendar-scope-btn.active { background: rgba(255,78,32,0.14); color: #ff9d7e; }
+
   /* Below md, the sidebar is an off-canvas drawer (slides in from the left over a dimmed
      backdrop) rather than a permanent rail -- there isn't room for both a rail and real
      content on a phone. #app's own `flex` row layout is untouched; this just lifts the
@@ -701,16 +709,25 @@
     <!-- ============ CALENDAR VIEW ============ -->
     <section id="view-calendar" data-view class="flex-1">
       <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
-        <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 id="calendar-label" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Calendar</h2>
-          <div class="flex items-center gap-1">
-            <button type="button" id="calendar-prev-btn" title="Previous month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            <button type="button" id="calendar-today-btn" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Today</button>
-            <button type="button" id="calendar-next-btn" title="Next month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- Defaults to "Mine" (see CALENDAR_SCOPE_KEY) -- requested directly, wanting this
+                 view to replace checking a personal Google Calendar for deadlines, which centers
+                 on your own agenda by default, not the whole team's. -->
+            <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold">
+              <button type="button" id="calendar-scope-mine" class="calendar-scope-btn px-2.5 py-1 rounded-md">Mine</button>
+              <button type="button" id="calendar-scope-all" class="calendar-scope-btn px-2.5 py-1 rounded-md">Everyone</button>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" id="calendar-prev-btn" title="Previous month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button type="button" id="calendar-today-btn" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Today</button>
+              <button type="button" id="calendar-next-btn" title="Next month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
           </div>
         </div>
         <div class="overflow-x-auto">
@@ -1165,6 +1182,23 @@
       <button id="confirm-cancel-btn" class="text-sm font-medium px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700">Cancel</button>
       <button id="confirm-ok-btn" class="text-sm font-semibold px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700">Confirm</button>
     </div>
+  </div>
+</div>
+
+<!-- Calendar day-detail popover -- requested directly, replacing the old static "+N more" text
+     (a cell only ever showed 3 tasks with no way to see the rest). Opened by clicking a day
+     number or its overflow count; lists every task touching that day (not just ones due that
+     day, now that the grid shows a task's whole start-to-deadline span) plus who's on leave. -->
+<div id="calendar-day-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="calendar-day-modal-title">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden max-h-[80vh] flex flex-col modal-pop-in">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">
+      <h3 id="calendar-day-modal-title" class="text-sm font-bold text-zinc-900 dark:text-zinc-100"></h3>
+      <button type="button" id="calendar-day-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <p id="calendar-day-modal-leave" class="hidden px-4 pt-3 text-xs text-amber-700 dark:text-amber-400"></p>
+    <div id="calendar-day-modal-list" class="overflow-y-auto py-1"></div>
   </div>
 </div>
 
@@ -7281,57 +7315,124 @@
   });
 
   /* =========================================================
-     RENDER: CALENDAR -- a plain read-only month grid of deadlines.
-     Deliberately simple: no day-detail popover, "+N more" is static
-     text rather than another interactive surface to build/maintain.
+     RENDER: CALENDAR -- aiming to replace a personal Google Calendar for checking deadlines
+     ("I want users to use this tool rather than google calendar... a full replacement" for
+     deadline-tracking specifically, scoped down from meetings/scheduling after a direct
+     follow-up question). Four gaps closed in one pass, all requested together:
+       1. "Mine"/"Everyone" scope, defaulting to Mine -- a personal calendar centers on your own
+          agenda first; the old version always showed the whole team at once.
+       2. Every task on the grid now spans its whole startDate->deadline range, not just a dot on
+          the deadline day ("like the Gantt already does") -- see the byDate-building loop below.
+       3. Who's on leave shows directly on the grid (isOnLeave was already tracked for the
+          leave-conflict warning and the Gantt's own leave note; this is the first place it's
+          visible day-by-day rather than only as a range band or a warning).
+       4. The old static "+N more" is now a real day-detail popover (openCalendarDayModal) -- a
+          busy day used to just hide everything past the third task with no way to see the rest.
   ========================================================= */
   var calendarViewDate = todayMidnight();
+  var CALENDAR_SCOPE_KEY = 'flowboard_calendar_scope';
+  var calendarScope = (function () {
+    try { return localStorage.getItem(CALENDAR_SCOPE_KEY) === 'all' ? 'all' : 'mine'; } catch (e) { return 'mine'; }
+  })();
+  // Populated fresh by every renderCalendar() call, keyed by YYYY-MM-DD -- openCalendarDayModal
+  // reads back into this instead of recomputing the whole grid's worth of spans a second time.
+  var calendarDayCache = {};
+
+  function setCalendarScope(scope) {
+    calendarScope = scope;
+    try { localStorage.setItem(CALENDAR_SCOPE_KEY, scope); } catch (e) { /* private-browsing etc -- just won't persist across reloads */ }
+    renderCalendar();
+  }
+  document.getElementById('calendar-scope-mine').addEventListener('click', function () { setCalendarScope('mine'); });
+  document.getElementById('calendar-scope-all').addEventListener('click', function () { setCalendarScope('all'); });
 
   function renderCalendar() {
     document.getElementById('calendar-label').textContent = calendarViewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    document.getElementById('calendar-scope-mine').classList.toggle('active', calendarScope === 'mine');
+    document.getElementById('calendar-scope-all').classList.toggle('active', calendarScope === 'all');
 
-    var filtered = applyFilters(activeTasks());
-    var byDate = {};
-    filtered.forEach(function (t) {
-      if (!t.deadline) return;
-      (byDate[t.deadline] = byDate[t.deadline] || []).push(t);
-    });
+    var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    var candidates = applyFilters(activeTasks()).filter(function (t) { return !!t.deadline; });
+    // Falls back to "everyone" silently if there's no signed-in name to match (shouldn't happen
+    // in practice -- the auth gate blocks reaching this view at all without one) rather than
+    // showing an empty grid with no explanation.
+    var scoped = (calendarScope === 'mine' && myName) ? candidates.filter(function (t) { return t.assignee === myName; }) : candidates;
 
     var year = calendarViewDate.getFullYear();
     var month = calendarViewDate.getMonth();
     var firstOfMonth = new Date(year, month, 1);
     var startOffset = firstOfMonth.getDay();
     var gridStart = addDays(firstOfMonth, -startOffset);
+    var gridEnd = addDays(gridStart, 41);
     var todayStr = toDateInputValue(todayMidnight());
+
+    calendarDayCache = {};
+    scoped.forEach(function (t) {
+      // Legacy tasks saved before startDate was always set fall back to a single-day span on
+      // just the deadline -- the old behavior -- rather than guessing a start.
+      var start = parseDate(t.startDate) || parseDate(t.deadline);
+      var end = parseDate(t.deadline);
+      if (!start || !end) return;
+      if (start > end) start = end; // defensive: a task with startDate after its own deadline shouldn't invert the bar
+      var from = start < gridStart ? gridStart : start;
+      var to = end > gridEnd ? gridEnd : end;
+      for (var d = from; d <= to; d = addDays(d, 1)) {
+        var ds = toDateInputValue(d);
+        (calendarDayCache[ds] = calendarDayCache[ds] || []).push({ task: t, isStart: +d === +start, isEnd: +d === +end });
+      }
+    });
+    Object.keys(calendarDayCache).forEach(function (ds) {
+      // Deadline-day entries surface first on a crowded day -- more actionable than "still in
+      // progress" -- then by priority, same weight table sortByFocus itself uses.
+      calendarDayCache[ds].sort(function (a, b) {
+        if (a.isEnd !== b.isEnd) return a.isEnd ? -1 : 1;
+        return (PRIORITY_WEIGHT[b.task.priority] || 0) - (PRIORITY_WEIGHT[a.task.priority] || 0);
+      });
+    });
 
     var weekdayHtml = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(function (d) {
       return '<div class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 text-center py-1.5">' + d + '</div>';
     }).join('');
 
+    var CALENDAR_DAY_CAP = 3;
     var cellsHtml = '';
     for (var i = 0; i < 42; i++) {
       var cellDate = addDays(gridStart, i);
       var dateStr = toDateInputValue(cellDate);
       var inMonth = cellDate.getMonth() === month;
       var isToday = dateStr === todayStr;
-      var dayTasks = byDate[dateStr] || [];
-      var shown = dayTasks.slice(0, 3);
-      var overflow = dayTasks.length - shown.length;
+      var isRowStart = i % 7 === 0;
+      var entries = calendarDayCache[dateStr] || [];
+      var shown = entries.slice(0, CALENDAR_DAY_CAP);
+      var overflow = entries.length - shown.length;
 
-      var chipsHtml = shown.map(function (t) {
+      var barsHtml = shown.map(function (e) {
+        var t = e.task;
         var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
-        return '<button type="button" data-open-task="' + t.id + '" class="w-full flex items-center gap-1 text-left text-[11px] px-1 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 truncate">' +
-          '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
-          '<span class="truncate text-zinc-600 dark:text-zinc-300">' + escapeHtml(t.name) + '</span>' +
+        // The name only re-appears at the true start/end of a span or the first column of a new
+        // row it's still running through -- otherwise every day of a multi-week task would repeat
+        // its own name across the whole row, which reads as clutter, not a calendar.
+        var showLabel = e.isStart || e.isEnd || isRowStart;
+        return '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + formatShortDate(t.startDate || t.deadline) + ' – ' + formatShortDate(t.deadline)) + '" class="w-full block text-left text-[11px] leading-4 px-1 rounded truncate ' +
+          (e.isEnd ? pm.bar + ' text-white font-medium' : pm.barLight + ' text-zinc-700 dark:text-zinc-100') + '">' +
+          (showLabel ? escapeHtml(t.name) : '&nbsp;') +
         '</button>';
       }).join('');
-      if (overflow > 0) chipsHtml += '<div class="text-[11px] text-zinc-400 dark:text-zinc-500 px-1">+' + overflow + ' more</div>';
+
+      var away = teamPeople.filter(function (p) { return isOnLeave(p.name, dateStr); }).map(function (p) { return p.name; });
+      var awayHtml = away.length
+        ? '<div class="text-[10px] text-amber-600 dark:text-amber-400 truncate px-1" title="' + escapeHtml(away.join(', ') + ' away today') + '">' + escapeHtml(away.length === 1 ? away[0] + ' away' : away.length + ' away') + '</div>'
+        : '';
+      var moreHtml = overflow > 0
+        ? '<button type="button" data-calendar-day="' + dateStr + '" class="w-full text-left text-[11px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-1">+' + overflow + ' more</button>'
+        : '';
 
       cellsHtml += '<div class="border border-zinc-100 dark:border-zinc-700/60 min-h-[88px] p-1 ' + (inMonth ? '' : 'bg-zinc-50/60 dark:bg-zinc-900/30') + '">' +
-        '<span class="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full ' +
+        '<button type="button" data-calendar-day="' + dateStr + '" class="inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full hover:ring-2 hover:ring-brand-400 dark:hover:ring-brand-500 ' +
           (isToday ? 'bg-brand-600 text-white' : (inMonth ? 'text-zinc-600 dark:text-zinc-300' : 'text-zinc-300 dark:text-zinc-600')) +
-        '">' + cellDate.getDate() + '</span>' +
-        '<div class="mt-0.5 flex flex-col gap-0.5">' + chipsHtml + '</div>' +
+        '">' + cellDate.getDate() + '</button>' +
+        awayHtml +
+        '<div class="mt-0.5 flex flex-col gap-0.5">' + barsHtml + moreHtml + '</div>' +
       '</div>';
     }
 
@@ -7339,6 +7440,60 @@
       '<div class="grid grid-cols-7">' + weekdayHtml + '</div>' +
       '<div class="grid grid-cols-7">' + cellsHtml + '</div>';
   }
+
+  // Day-detail popover -- replaces the old static "+N more" text, and doubles as a way to open
+  // any day at all (clicking the date number works even with zero overflow, since a day with
+  // exactly 3 tasks had no click target before either). Reads calendarDayCache rather than
+  // recomputing spans, so opening it is just a lookup.
+  var calendarDayModal = document.getElementById('calendar-day-modal');
+  function openCalendarDayModal(dateStr) {
+    var d = parseDate(dateStr);
+    document.getElementById('calendar-day-modal-title').textContent = d
+      ? d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+      : dateStr;
+
+    var away = teamPeople.filter(function (p) { return isOnLeave(p.name, dateStr); }).map(function (p) { return p.name; });
+    var leaveEl = document.getElementById('calendar-day-modal-leave');
+    leaveEl.textContent = away.length ? (away.join(', ') + (away.length === 1 ? ' is' : ' are') + ' away today') : '';
+    leaveEl.classList.toggle('hidden', away.length === 0);
+
+    var entries = calendarDayCache[dateStr] || [];
+    document.getElementById('calendar-day-modal-list').innerHTML = entries.length
+      ? entries.map(function (e) {
+          var t = e.task;
+          var pm = t.status === 'Done' ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
+          var stage = e.isEnd ? 'Due today' : (e.isStart ? 'Starts today' : 'In progress');
+          return '<button type="button" data-open-task="' + t.id + '" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40">' +
+            '<span class="w-1.5 h-1.5 rounded-full shrink-0 ' + pm.dot + '"></span>' +
+            '<div class="min-w-0 flex-1">' +
+              '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
+              '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.project) + ' · ' + escapeHtml(t.assignee || 'Unassigned') + '</p>' +
+            '</div>' +
+            '<span class="text-xs font-semibold shrink-0 text-zinc-400 dark:text-zinc-500">' + stage + '</span>' +
+          '</button>';
+        }).join('')
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">Nothing on the calendar this day.</p>';
+
+    calendarDayModal.classList.remove('hidden');
+    calendarDayModal.classList.add('flex');
+  }
+  function closeCalendarDayModal() {
+    calendarDayModal.classList.add('hidden');
+    calendarDayModal.classList.remove('flex');
+  }
+  document.getElementById('calendar-grid').addEventListener('click', function (e) {
+    var dayBtn = e.target.closest('[data-calendar-day]');
+    if (dayBtn) openCalendarDayModal(dayBtn.getAttribute('data-calendar-day'));
+  });
+  document.getElementById('calendar-day-modal-close').addEventListener('click', closeCalendarDayModal);
+  calendarDayModal.addEventListener('click', function (e) { if (e.target === calendarDayModal) closeCalendarDayModal(); });
+  // Closes the popover on its way to opening the actual task -- both listeners see the same
+  // click (this one during the bubble phase at the list itself, the app's global
+  // [data-open-task] delegation a moment later once it reaches `document`), so the day modal is
+  // already gone by the time the task modal appears instead of sitting stacked behind it.
+  document.getElementById('calendar-day-modal-list').addEventListener('click', function (e) {
+    if (e.target.closest('[data-open-task]')) closeCalendarDayModal();
+  });
 
   function shiftCalendarMonth(delta) {
     calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + delta, 1);
@@ -8502,6 +8657,7 @@
     if (e.key === 'Escape') {
       if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
       if (!confirmModal.classList.contains('hidden')) closeConfirm();
+      if (!calendarDayModal.classList.contains('hidden')) closeCalendarDayModal();
       if (appRoot.classList.contains('sidebar-open')) closeMobileSidebar();
     }
   });
@@ -9047,7 +9203,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T16:48:12Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T17:04:22Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
