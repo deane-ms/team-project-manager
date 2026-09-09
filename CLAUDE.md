@@ -525,11 +525,10 @@ to bottom:
        who triggers this check (by having Flowboard open when a `tasks` snapshot fires) is very
        often *not* the affected assignee, so there's no "current viewer" to show a toast to that
        would actually reach the right person. Reuses the bell badge and (if opted in) the desktop
-       popup for free; no new UI surface. Its own `author: 'Workload alert'` plus dedicated
-       verb/subject branches in `renderNotificationBell` ("flagged a workload pile-up for you")
-       and title in `fireDesktopNotification` ("Workload alert") — it doesn't fit the existing
-       "author verb subject" template built for a *person* doing something to a *thing*, since
-       this is a system observation about the recipient's own tasks, not an action by anyone.
+       popup for free; no new UI surface. It doesn't fit the existing "author verb subject"
+       template built for a *person* doing something to a *thing* (this is a system observation,
+       not an action by anyone) — see `systemAlertHeadline`, below, for the shared plain-language
+       headline this and the other three system alerts use instead.
      - **Deliberately does NOT exclude the affected assignee from their own notification** —
        unlike a chat mention (excluding the person who typed it, since a self-mention is a no-op:
        you obviously know you mentioned yourself). Someone whose own tasks just piled up is
@@ -559,12 +558,23 @@ to bottom:
      I build for PM?" → "build the first 3"), wired into the exact same `tasks` `onSnapshot`
      handler right after `checkWorkloadSpikes()`. All three share its shape: a session-local
      `xWarned` dedup map keyed so a materially different situation (a new deadline, a fresh
-     `updatedAt`) re-notifies while an unchanged one only fires once per session; a plain
-     `notifications` collection write via `setDoc(doc(notificationsCol), {...})`; and their own
-     `author`/verb/title branches in `renderNotificationBell` and `fireDesktopNotification`
-     (`'Deadline alert'`/`'Review alert'`/`'Leave alert'`, each reading "X alert flagged Y on
-     '<task>'" — unlike `workload_spike`'s "you", these three each point at one real task, so they
-     use the normal task-name subject instead of inventing a person-scoped one).
+     `updatedAt`) re-notifies while an unchanged one only fires once per session, and a plain
+     `notifications` collection write via `setDoc(doc(notificationsCol), {...})`.
+     - **`systemAlertHeadline(type)` is the one place all four system alerts' wording lives** —
+       a plain-language headline per type ("Your workload is stacking up" / "A deadline is coming
+       up" / "Still waiting on a review" / "A deadline clashes with your time off"), shared
+       verbatim between the bell panel's bold line and the desktop popup's title. First shipped as
+       `author: 'Workload alert'`/`'Deadline alert'`/etc. forced through the normal "`<author>`
+       verb subject" template (e.g. "Deadline alert flagged an approaching deadline on 'Pitch
+       Deck'") — reported back directly, from a screenshot, as reading clinical and repetitive:
+       that headline named the task, and the detail line right below it (`snippet`) named the
+       exact same task again. `systemAlertHeadline` returns `null` for every non-system type, so
+       both call sites fall through to the original person-did-something-to-a-thing template
+       unchanged for comments/mentions/chat/assignment. The specific detail (which task, which
+       date) lives in `snippet` alone now — softened at the same time ("has been waiting on a
+       review for" instead of "sitting in"; "while you're away" instead of "marked away"; "You
+       have N tasks" instead of a bare count) — so the headline and detail line no longer say the
+       same thing twice.
      - **Deadline-approaching reminder** (`checkDeadlineReminders`, `type: 'deadline_reminder'`) —
        the gap this fills: overdue is already visible everywhere (Board badges, Focus of the Day,
        the digest panel), but nothing proactively flags a deadline that's *about* to arrive.

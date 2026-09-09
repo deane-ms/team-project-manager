@@ -1398,6 +1398,23 @@
   var notifListenerReady = false;
   var firedDesktopNotifIds = {};
 
+  // Shared between the desktop popup title and the bell panel's bold line for the four
+  // system-generated alerts (checkWorkloadSpikes/checkDeadlineReminders/checkStaleReviews/
+  // checkLeaveClashes) -- one plain-language headline per type, instead of forcing them through
+  // the "<author> <verb> <subject>" template built for a person doing something to a thing.
+  // Reported directly, from a screenshot, as reading too clinical/repetitive ("Deadline alert
+  // flagged an approaching deadline on 'Pitch Deck'" immediately followed by a detail line
+  // naming that exact same task again) -- that reads like a system log line, not something a
+  // teammate would actually say. The specific detail (which task, which date) still lives in
+  // `snippet` alone; the headline stays generic on purpose so the two lines don't repeat.
+  function systemAlertHeadline(type) {
+    return type === 'workload_spike' ? 'Your workload is stacking up'
+      : type === 'deadline_reminder' ? 'A deadline is coming up'
+      : type === 'review_stale' ? 'Still waiting on a review'
+      : type === 'leave_clash' ? 'A deadline clashes with your time off'
+      : null;
+  }
+
   function fireDesktopNotification(notif) {
     if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
     firedDesktopNotifIds[notif.id] = true;
@@ -1405,21 +1422,20 @@
     // notifyOnProjectChat) -- worded as "posted in", not "mentioned you", for the same reason
     // the bell panel's own verb branches on it. `chat_reaction` (see notifyOnChatReaction) is
     // its own wording again -- reacting isn't posting or mentioning.
-    var title = (notif.type === 'mention' || notif.type === 'chat_mention') ? (notif.author + ' mentioned you')
+    var systemHeadline = systemAlertHeadline(notif.type);
+    var title = systemHeadline ? systemHeadline
+      : (notif.type === 'mention' || notif.type === 'chat_mention') ? (notif.author + ' mentioned you')
       : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
       : notif.type === 'chat_reaction' ? (notif.author + ' reacted to your message')
-      : notif.type === 'workload_spike' ? 'Workload alert'
-      : notif.type === 'deadline_reminder' ? 'Deadline alert'
-      : notif.type === 'review_stale' ? 'Review alert'
-      : notif.type === 'leave_clash' ? 'Leave alert'
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
     // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
     // it's even clicked, same reasoning taskName is prefixed for a task notification. Skipped
-    // for `chat_post`, whose title already names the project -- repeating it in the body too
-    // would just be the same name twice in one popup.
-    var subjectName = notif.type === 'chat_post' ? '' : (notif.chatProject || notif.taskName);
+    // for `chat_post` and for every system alert (`systemHeadline` truthy) -- in both cases the
+    // body (`snippet`) already names the task/project on its own, so repeating it here would
+    // just be the same name twice in one popup.
+    var subjectName = (notif.type === 'chat_post' || systemHeadline) ? '' : (notif.chatProject || notif.taskName);
     var n = new Notification(title, {
       body: (subjectName ? subjectName + ': ' : '') + (notif.snippet || ''),
       icon: 'favicon.png',
@@ -6419,7 +6435,7 @@
       taskName: '',
       chatProject: null,
       author: 'Workload alert',
-      snippet: groupTasks.length + ' High-priority tasks are all due ' + formatShortDate(deadline) + ': ' + groupTasks.map(function (t) { return t.name; }).join(', '),
+      snippet: 'You have ' + groupTasks.length + ' High-priority tasks all due ' + formatShortDate(deadline) + ': ' + groupTasks.map(function (t) { return t.name; }).join(', '),
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify workload spike', e); });
@@ -6518,7 +6534,7 @@
       taskName: task.name,
       chatProject: null,
       author: 'Review alert',
-      snippet: '"' + task.name + '" in ' + task.project + ' has been sitting in Review for ' + days + ' days',
+      snippet: '"' + task.name + '" in ' + task.project + ' has been waiting on a review for ' + days + ' days',
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify stale review', e); });
@@ -6555,7 +6571,7 @@
       taskName: task.name,
       chatProject: null,
       author: 'Leave alert',
-      snippet: '"' + task.name + '" in ' + task.project + ' is due ' + formatShortDate(task.deadline) + ', while you\'re marked away' + (period ? ' (' + formatShortDate(period.start) + '–' + formatShortDate(period.end) + ')' : ''),
+      snippet: '"' + task.name + '" in ' + task.project + ' is due ' + formatShortDate(task.deadline) + ', while you\'re away' + (period ? ' (' + formatShortDate(period.start) + '–' + formatShortDate(period.end) + ')' : ''),
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify leave clash', e); });
@@ -8887,25 +8903,24 @@
           // notifyOnProjectChat) reads "posted in", not "mentioned you in", so this sentence
           // doesn't claim a mention that never happened. `chat_reaction` (see
           // notifyOnChatReaction) is its own wording again -- reacting isn't posting or mentioning.
-          // `workload_spike` (see checkWorkloadSpikes) has no chat or task to point the sentence
-          // at all -- it's a system-generated observation about the recipient's own tasks, not
-          // something someone else did to a specific thing, so it gets its own subject ("you").
-          // `deadline_reminder`/`review_stale`/`leave_clash` (see checkDeadlineReminders/
-          // checkStaleReviews/checkLeaveClashes) are the same kind of system-generated observation
-          // as workload_spike, but each one IS about one specific task, so they use the normal
-          // task-name subject instead of workload_spike's "you".
-          var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : n.type === 'workload_spike' ? 'you' : ('"' + escapeHtml(n.taskName) + '"');
+          // The four system-generated alerts (see systemAlertHeadline, shared with the desktop
+          // popup's title) get one plain-language headline instead of being forced through the
+          // "<author> verb subject" template below, built for a person doing something to a
+          // thing -- these are a system observation, and the old phrasing ("Deadline alert
+          // flagged an approaching deadline on 'X'" right above a detail line naming that same
+          // task again) read as clinical and repetitive when reported back against a screenshot.
+          var systemHeadline = systemAlertHeadline(n.type);
+          var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
           var verb = n.chatProject
             ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
-            : n.type === 'workload_spike' ? 'flagged a workload pile-up for'
-            : n.type === 'deadline_reminder' ? 'flagged an approaching deadline on'
-            : n.type === 'review_stale' ? 'flagged a stale Review on'
-            : n.type === 'leave_clash' ? 'flagged a leave conflict on'
             : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
+          var headlineHtml = systemHeadline
+            ? escapeHtml(systemHeadline)
+            : '<span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject;
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
             '<div class="min-w-0 flex-1">' +
-              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '"><span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject + '</p>' +
+              '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '">' + headlineHtml + '</p>' +
               '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
             '</div>' +
           '</button>';
@@ -9032,7 +9047,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T16:40:43Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T16:48:12Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
