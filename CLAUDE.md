@@ -1581,6 +1581,89 @@ to bottom:
          confirming the paste listener intercepts and calls `uploadAndSendChatImage`), not the
          real Storage upload itself. Worth a real two-screenshot test — post one, forward it,
          delete it — once Blaze is live and `storage.rules` is deployed.
+     - **Six features compared against Slack, then all six built** ("compare this PM tool with
+       Slack. What are some features that can be applicable here?" → "build all"). The framing
+       going in: Slack is a full messaging platform where channels are the primary surface;
+       Flowboard's chat is one feature bolted onto a task board, so the point was never "copy
+       Slack" wholesale, just borrowing the individual mechanics that fit.
+       - **Unread count, not just a dot** (`chatUnreadCount`, replacing the old boolean
+         `isChatUnread`) — Slack shows an actual number on an unread channel, not a plain
+         indicator. Counts every message from someone else newer than `chatLastRead`, not just
+         whether the *latest* message is unread — a real fix over the old boolean's edge case,
+         where a message you sent after two unread ones from someone else would have hidden them
+         entirely (the old check only ever looked at the last message's author). `isChatUnread`
+         is now just `chatUnreadCount(name) > 0`, so every existing caller (the sort tier, the
+         bold name styling) kept working unchanged. Same "9+" cap the notification bell's own
+         badge already uses.
+       - **Basic text formatting** — `*bold*`, `_italic_`, `` `code` ``, added to
+         `applyBasicFormatting` inside the *shared* `enrichCommentText` (task comments get this
+         too, not just chat — it's the same function both already ran through for mentions/links,
+         and there was no reason to fork a chat-only copy). Deliberately a simple regex pass, not
+         a real markdown parser: a code span's content isn't protected from also matching the
+         bold/italic regexes below it, an accepted rough edge for a low-stakes internal tool.
+         Italic gets a word-boundary guard (`_` has to be preceded/followed by whitespace or
+         string edges) that bold doesn't — underscores show up constantly in ordinary text and
+         identifiers ("some_file_name" would otherwise italicize "file"), where asterisks
+         essentially never do without real formatting intent. The compose box placeholder
+         mentions the syntax directly, since there's no toolbar/buttons to discover it from.
+       - **Pin messages** (`pinned`, an array of message ids on the same project doc `chat`/
+         `links` already live on; `isMessagePinned`/`toggleMessagePin`) — distinct from the
+         pre-existing "Pinned links" (a manually-curated URL list, unrelated to any one message).
+         Someone had asked "can I pin messages" earlier in this project and the answer at the
+         time was no; this is that feature. **Open to anyone, not author/admin-scoped** — pinning
+         is fully reversible and never touches the message's own content or existence, closer in
+         kind to reacting than to deleting. Needed **no `firestore.rules` change**: `pinned` is a
+         brand new field the project doc's `chat`-focused update rule never restricts
+         (`!changedKeys().hasAny(['chat'])` already passes when only `pinned` changes). Surfaced
+         as its own strip above the message log (`#project-chat-pinned-wrap`, hidden entirely
+         when nothing's pinned, same "don't show an empty state for something most chats won't
+         use" reasoning as Pinned Links' own "no links pinned yet" — except this one hides the
+         whole section rather than showing that line, since pinning is rarer still). Clicking a
+         pinned entry scrolls the real message into view and gives it a brief highlight flash
+         (`chat-message-jump-flash`, same "flash then fade" idea `checklist-check-pop` already
+         established); a dangling pinned id (the message was since deleted) is silently filtered
+         out when rendering the strip, same "don't guess, don't break" fallback a dangling
+         `replyTo` already gets — the stale id itself is never pruned from the array, a minor,
+         accepted bit of bloat rather than something worth a cleanup pass for.
+       - **Edit a sent message** (`startChatEdit`/`saveChatEdit`, reusing the compose box itself
+         rather than a separate inline editor) — own messages only, text-only (nothing to edit on
+         an image). Mutually exclusive with replying: starting an edit cancels any in-progress
+         reply and vice versa. Shows "(edited)" next to the timestamp once saved, Slack's own
+         convention. **The "own message only" boundary is client-side only, same as reactions'
+         own trust model, not a new gap this feature introduces.** Tightening it further turns
+         out to be genuinely hard, not just undone: the existing `projects` update rule already
+         has to allow a same-size `chat` array update for reactions (toggling one doesn't change
+         `chat.size()`), and Firestore rules can't easily tell "someone else's reaction toggle"
+         apart from "a content edit" within one array-diff check without risking false rejections
+         on the reactions path, which *is* meant to be open to anyone regardless of message
+         author. A determined bad actor bypassing the client could already rewrite any message's
+         reactions this way before this feature existed; Edit just adds one more UI surface
+         sitting on the same pre-existing allowance, not a new exposure.
+       - **Mute a chat** (`mutedChats` on the signed-in person's own `people/{uid}` doc, same
+         array-on-your-own-doc shape and rules-safety as `favoriteChats`/`chatLastRead` — no
+         `firestore.rules` change needed) — the natural counterpart to "every message now
+         notifies every project assignee" (see above): Slack always pairs broad default
+         notifications with a per-channel mute. Silences the assignee-broadcast (`chat_post`) and
+         reaction (`chat_reaction`) notifications a chat would otherwise send, but **never an
+         actual `chat_mention`** — same "a mute doesn't block a direct mention" convention
+         Slack/Discord both use, checked via `isPersonMutedOnChat` (reading the *recipient's* own
+         `mutedChats` off the shared `teamPeople` roster from whoever's *sending* the message —
+         `people` is already team-readable, so this needed no new read access either). Toggled
+         via a bell/bell-off icon in the chat header; deliberately does **not** touch the unread
+         dot/count or the sort tier — muting only silences pushes, the same way a muted Slack
+         channel still shows unread in its own sidebar.
+       - **Cross-chat search** (`findMatchingChatMessage`, folded into `renderChatProjectList`'s
+         existing `filters.search` handling) — the project list's search box used to match only
+         the project *name*; Slack searches every channel's *messages* at once. A chat now
+         matches if its name matches OR any of its messages contain the term (most recent match
+         first). When the hit came from message content rather than the name, the row's subtitle
+         swaps from "the latest message" to "the message that actually matched" — Slack's own
+         global search shows the matching snippet, not just "this channel contains your term
+         somewhere" — falling back to the normal latest-message preview once the search box is
+         cleared or the project name itself is what matched. This is a different, complementary
+         search from the pre-existing `runChatSearch` ("search within the chat itself"), which
+         only ever looked inside whichever ONE chat was already open — this one finds *which*
+         chat to open in the first place.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via
