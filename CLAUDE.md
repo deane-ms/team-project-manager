@@ -995,13 +995,37 @@ to bottom:
        pasted URLs — a chat message is rendered exactly like a task comment's text, so "links and
        images" just means "paste the Drive/image URL and it becomes clickable," the same as
        comments already do. No separate URL-linkifying code.
-     - **Only @mentions notify, unlike a task comment** — there's no single "assignee" a project
-       chat message could default to notifying (`notifyOnProjectChat`, mirroring
-       `notifyOnComment` minus that fallback). The notification doc carries a new `chatProject`
-       field instead of `taskId`/`taskName`; `renderNotificationBell` and the notification-list
-       click handler both branch on its presence — the sentence reads "mentioned you in the '…'
-       group chat" instead of "…on '…'", and clicking switches to the Chat tab and calls
-       `selectChatProject(chatProject)` instead of opening a task.
+     - **Every project assignee gets notified on every chat message, not just @mentions** —
+       requested directly ("user don't have to be tagged to receive a notification"), compared
+       against WhatsApp's own group behavior before building: WhatsApp notifies every group
+       *member* on every message regardless of @mention (a mention there only matters for
+       bypassing a *muted* group, a feature this app doesn't have) — membership is explicit, not
+       inferred. This app has no explicit "who's in this chat" list at all, so `projectAssignees
+       (projectName)` (every distinct `assignee` across that project's active *and* archived
+       tasks) is the closest available stand-in for "who's actually on this," chosen directly
+       over two alternatives: "everyone who's posted in this chat before" (rejected — it can't
+       notify anyone on a chat's very first message) and "the whole team" (rejected — too noisy
+       with no per-chat mute to fall back on).
+       - **A recipient's notification type is per-person, not per-message** — `notifyOnProjectChat`
+         unions `parseMentions(text)` with `projectAssignees(projectName)` into one recipient set
+         (so someone who's both @mentioned and a project assignee gets exactly one notification,
+         not two), keyed by name so the sender is excluded from their own broadcast the same way
+         self-mentions were already excluded. Each recipient's stored `type` is `'chat_mention'`
+         if they were actually named, `'chat_post'` otherwise — `renderNotificationBell` and
+         `fireDesktopNotification` both branch on this to say "mentioned you in" vs. "posted in,"
+         so a plain broadcast notification never claims a mention that didn't happen.
+       - **Called unconditionally now, not just when there's text** — forwarding a caption-less
+         screenshot, or posting one directly, both still notify a project's assignees;
+         previously `if (caption)`/`if (original.text)` skipped the call entirely for an
+         image-only message, which (before this change) only meant "no mention was possible
+         anyway," but now would have skipped the whole assignee broadcast too.
+         `notifyOnProjectChat` takes a `hasImage` third argument so a caption-less image's
+         snippet still reads as "Photo" (matching the same fallback used elsewhere) instead of
+         an empty notification body.
+       - The notification doc carries a `chatProject` field instead of `taskId`/`taskName`;
+         `renderNotificationBell` and the notification-list click handler both branch on its
+         presence, and clicking switches to the Chat tab and calls `selectChatProject
+         (chatProject)` instead of opening a task — same as before this change, unaffected by it.
      - **An emoji picker was asked for directly, "similar to what we've built on Content Hub"** —
        ported from the sibling MS LinkedIn Hub's `createEmojiPicker`/`EMOJI_CATEGORIES`
        (`content-hub-firebase.html`), which that app's own `DESIGN.md` documents as a *deliberate

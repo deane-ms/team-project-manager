@@ -1281,13 +1281,19 @@
   function fireDesktopNotification(notif) {
     if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
     firedDesktopNotifIds[notif.id] = true;
-    var title = notif.type === 'mention' ? (notif.author + ' mentioned you')
+    // `chat_post` is a project-assignee broadcast with no real @mention behind it (see
+    // notifyOnProjectChat) -- worded as "posted in", not "mentioned you", for the same reason
+    // the bell panel's own verb branches on it.
+    var title = (notif.type === 'mention' || notif.type === 'chat_mention') ? (notif.author + ' mentioned you')
+      : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
     // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
-    // it's even clicked, same reasoning taskName is prefixed for a task notification.
-    var subjectName = notif.chatProject || notif.taskName;
+    // it's even clicked, same reasoning taskName is prefixed for a task notification. Skipped
+    // for `chat_post`, whose title already names the project -- repeating it in the body too
+    // would just be the same name twice in one popup.
+    var subjectName = notif.type === 'chat_post' ? '' : (notif.chatProject || notif.taskName);
     var n = new Notification(title, {
       body: (subjectName ? subjectName + ': ' : '') + (notif.snippet || ''),
       icon: 'favicon.png',
@@ -2477,7 +2483,7 @@
       cancelChatReply();
       projectChatMentions.close();
       clearProjectChatTyping();
-      notifyOnProjectChat(text, currentChatProjectName);
+      notifyOnProjectChat(text, currentChatProjectName, false);
       // No logActivity call -- see removeChatMessage's comment for why chat messages are
       // deliberately excluded from the Activity feed entirely.
     }).catch(function (err) {
@@ -2524,7 +2530,9 @@
       cancelChatReply();
       projectChatMentions.close();
       clearProjectChatTyping();
-      if (caption) notifyOnProjectChat(caption, currentChatProjectName);
+      // Unconditional now, not just when there's a caption -- project assignees should hear
+      // about a shared screenshot too, not only an @mention typed alongside it.
+      notifyOnProjectChat(caption, currentChatProjectName, true);
     }).catch(function (err) {
       showToast('Could not send image: ' + err.message, 'error');
     });
@@ -2707,7 +2715,9 @@
     // No logActivity call here either -- see removeChatMessage's comment.
     updateDoc(doc(projectsCol, targetPdoc.id), { chat: arrayUnion(forwarded) }).then(function () {
       showToast('Forwarded to ' + targetName, 'success');
-      if (original.text) notifyOnProjectChat(original.text, targetName);
+      // Unconditional now, same reasoning as the image-upload call site -- the target project's
+      // own assignees should hear about a forwarded message landing in their chat too.
+      notifyOnProjectChat(original.text, targetName, !!original.imageUrl);
     }).catch(function (err) {
       showToast('Could not forward message: ' + err.message, 'error');
     });
@@ -2799,27 +2809,55 @@
     closeChatMessageMenu();
   });
 
-  // Only @mentions get notified here -- unlike a task comment, a project chat message has no
-  // single "assignee" to default to, so silence (no mention) means nobody's pinged, same as
-  // Suggestions.
-  function notifyOnProjectChat(text, projectName) {
+  // Every assignee on this project, active or archived tasks both -- the same "who's the
+  // project's team" set the Chat tab's own everyone-with-a-task reasoning would use, if it had
+  // one. Deliberately not "everyone who's posted in this chat before": that would leave the
+  // very first message in a brand-new chat notifying nobody, the opposite of what was asked.
+  function projectAssignees(projectName) {
+    var names = {};
+    tasks.concat(archivedTasks).forEach(function (t) { if (t.project === projectName && t.assignee) names[t.assignee] = true; });
+    return Object.keys(names);
+  }
+
+  // Notifies both @mentions AND every assignee on the project, mention or not -- reported
+  // directly ("user don't have to be tagged to receive a notification"), compared against
+  // WhatsApp's own group behavior before building: WhatsApp notifies every group MEMBER on every
+  // message regardless of @mention (mentions there only matter for bypassing a muted group, a
+  // feature this app doesn't have), and membership is explicit, not inferred. This app has no
+  // explicit "who's in this chat" list at all, so project assignees are the closest available
+  // stand-in for "who's actually on this" -- chosen directly over "everyone who's posted here
+  // before" specifically because that alternative can't notify anyone on a chat's very first
+  // message, and over "the whole team" as too noisy with no per-chat mute to fall back on.
+  //
+  // A recipient's `type` is per-person, not per-call: someone who's both @mentioned AND a project
+  // assignee still gets exactly one notification (recipients is keyed by name), and its wording
+  // ("mentioned you" vs "posted in") reflects whichever is actually true for them -- see
+  // renderNotificationBell/fireDesktopNotification's own type branches below.
+  function notifyOnProjectChat(text, projectName, hasImage) {
     var user = auth.currentUser;
     var myName = user ? (user.displayName || user.email) : null;
     var mentioned = {};
     parseMentions(text).forEach(function (name) { mentioned[name] = true; });
-    delete mentioned[myName];
-    Object.keys(mentioned).forEach(function (name) {
+    var recipients = {};
+    Object.keys(mentioned).forEach(function (name) { recipients[name] = true; });
+    projectAssignees(projectName).forEach(function (name) { recipients[name] = true; });
+    delete recipients[myName];
+    // A caption-less screenshot has no text to snippet -- "Photo" matches the same fallback
+    // used everywhere else an image-only message would otherwise preview blank (the quoted-reply
+    // preview, the chat list's own latest-message subtitle).
+    var snippet = (text || (hasImage ? 'Photo' : '')).slice(0, 140);
+    Object.keys(recipients).forEach(function (name) {
       setDoc(doc(notificationsCol), {
         recipient: name,
-        type: 'mention',
+        type: mentioned[name] ? 'chat_mention' : 'chat_post',
         taskId: null,
         taskName: '',
         chatProject: projectName,
         author: myName || 'unknown',
-        snippet: text.slice(0, 140),
+        snippet: snippet,
         at: new Date().toISOString(),
         read: false
-      }).catch(function (e) { console.error('Failed to notify project chat mention', e); });
+      }).catch(function (e) { console.error('Failed to notify project chat', e); });
     });
   }
 
@@ -8058,10 +8096,15 @@
           // needs attention" at a glance -- add an explicit dot (a transparent one on read
           // items, to keep every row's text aligned to the same left edge) plus bolder,
           // brighter text for unread vs muted grey for read.
-          // Project chat mentions carry chatProject instead of taskName/taskId (there's no
+          // Project chat notifications carry chatProject instead of taskName/taskId (there's no
           // single task to point at), so the sentence and the click target both branch on it.
+          // `chat_post` (an assignee-broadcast notification with no actual @mention -- see
+          // notifyOnProjectChat) reads "posted in", not "mentioned you in", so this sentence
+          // doesn't claim a mention that never happened.
           var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
-          var verb = n.chatProject ? 'mentioned you in' : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
+          var verb = n.chatProject
+            ? (n.type === 'chat_post' ? 'posted in' : 'mentioned you in')
+            : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
             '<div class="min-w-0 flex-1">' +
@@ -8192,7 +8235,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T03:28:52Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T03:43:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
