@@ -181,6 +181,22 @@ to bottom:
      assignment never notifies its own author (see `delete recipients[myName]` in
      `notifyOnComment`, and the self-check in `notifyAssignment`), so testing needs a second
      account/tab, not a self-mention.
+     - **Reported directly as "doesn't alert me immediately"** — turned out to mean the opt-in
+       toggle/browser permission weren't actually active, so the in-app bell (only visible by
+       opening the app) was the only signal that ever fired; not a bug in the notification
+       pipeline itself, which is real-time (a live `onSnapshot`, not a poll) regardless of
+       notification type.
+     - **Clicking a chat-mention popup only ever opened a task, never the chat** — reported
+       directly right after ("when clicking on desktop notification, it should bring me directly
+       to chat"). `fireDesktopNotification`'s `n.onclick` only ever checked `notif.taskId`; a
+       project chat mention carries `chatProject` instead (see `notifyOnProjectChat`), which
+       this handler never looked at, so clicking one silently did nothing beyond focusing the
+       window. Fixed to branch on `chatProject` the same way the notification bell's own panel
+       click handler already does (`setView('chat')` + `selectChatProject(chatProject)`) — that
+       existing path was never broken; this one just never reused it. The popup body also gained
+       the same subject-naming `taskName` already got (`"<name>: <snippet>"`), using
+       `chatProject` in place of `taskName` when present, so you can tell which chat it's about
+       before clicking.
 3. **Drive picker integration** — lazy-loads the Google Picker API (`ensureGapiLoaded`) so users
    can attach a Drive folder to a task/project without guessing folder names.
    - **Project and Google Drive Link are one field, not two.** They used to be separate inputs

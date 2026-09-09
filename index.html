@@ -1284,8 +1284,12 @@
     var title = notif.type === 'mention' ? (notif.author + ' mentioned you')
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
       : (notif.author + ' commented');
+    // A project chat mention carries `chatProject` instead of `taskName` (see
+    // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
+    // it's even clicked, same reasoning taskName is prefixed for a task notification.
+    var subjectName = notif.chatProject || notif.taskName;
     var n = new Notification(title, {
-      body: (notif.taskName ? notif.taskName + ': ' : '') + (notif.snippet || ''),
+      body: (subjectName ? subjectName + ': ' : '') + (notif.snippet || ''),
       icon: 'favicon.png',
       tag: notif.id,
       // Stays on screen until clicked (n.onclick below calls n.close()) instead of
@@ -1293,10 +1297,19 @@
       // silently ignore it and fall back to their own default timing.
       requireInteraction: true
     });
+    // Reported directly ("when clicking on desktop notification, it should bring me directly
+    // to chat") -- this only ever opened a task, since a chat mention's own `chatProject` field
+    // wasn't handled here at all, unlike the identical click-to-open logic already wired into
+    // the notification bell's own panel (see the `data-notification-chat-project` handler).
     n.onclick = function () {
       window.focus();
-      var t = notif.taskId ? tasks.find(function (x) { return x.id === notif.taskId; }) : null;
-      if (t) openTaskModal(t);
+      if (notif.chatProject) {
+        setView('chat');
+        selectChatProject(notif.chatProject);
+      } else if (notif.taskId) {
+        var t = tasks.find(function (x) { return x.id === notif.taskId; });
+        if (t) openTaskModal(t);
+      }
       n.close();
     };
   }
@@ -8179,7 +8192,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T02:41:58Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T03:28:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
