@@ -863,7 +863,21 @@
               </p>
               <div id="project-chat-pinned-list" class="flex flex-col gap-1"></div>
             </div>
-            <div id="project-chat-log" class="max-h-[45vh] overflow-y-auto px-4 sm:px-5 py-3 space-y-2"></div>
+            <!-- Wraps the log so the WhatsApp-style "scroll to bottom" button (below) can be
+                 positioned relative to the scrolling log itself, not the whole chat panel. -->
+            <div class="relative">
+              <div id="project-chat-log" class="max-h-[45vh] overflow-y-auto px-4 sm:px-5 py-3 space-y-2"></div>
+              <!-- Requested directly ("similar to whatsapp") -- shown once the log is scrolled
+                   away from its own bottom edge by more than a screenful's worth of slack, hidden
+                   the moment the user is back near the bottom (see syncChatScrollToBottomButton).
+                   `flex` deliberately not in this static class list -- same hidden+flex
+                   specificity trap documented on #chat-edit-preview/#chat-reply-preview
+                   elsewhere in this file; JS toggles both `hidden` and `flex` together. -->
+              <button type="button" id="chat-scroll-to-bottom-btn" hidden aria-label="Scroll to latest messages" class="absolute bottom-3 right-4 items-center justify-center w-9 h-9 rounded-full bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 shadow-pop text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600 panel-pop-in">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span id="chat-scroll-to-bottom-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
+              </button>
+            </div>
             <p id="project-chat-typing" class="px-4 sm:px-5 text-xs italic text-zinc-400 dark:text-zinc-500 h-4"></p>
             <div class="px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">
               <!-- Reply preview -- shown above the compose box while replying to a message
@@ -2349,6 +2363,32 @@
       { tone: 'question', confirmText: 'Create chat', cancelText: 'Cancel' }
     );
   });
+  // How many messages have landed in the currently-open chat while the user was scrolled away
+  // from the bottom, keyed by project name so switching chats and back doesn't carry over a
+  // stale count. Reset to 0 the moment the log is back near its own bottom (see
+  // syncChatScrollToBottomButton), whether that's from clicking the button, scrolling down
+  // manually, or a fresh render that finds the user already there.
+  var chatUnseenWhileScrolledUp = {};
+  var CHAT_SCROLL_BOTTOM_THRESHOLD = 100;
+  function isChatLogNearBottom(logEl) {
+    return (logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight) < CHAT_SCROLL_BOTTOM_THRESHOLD;
+  }
+  // WhatsApp-style "scroll to bottom" affordance (requested directly, "similar to whatsapp") --
+  // shown once the log is scrolled more than a threshold away from its own bottom, with a badge
+  // for how many messages arrived while scrolled up. Kept in sync from two places: this app's own
+  // renders (renderChatDetail, below) and the log's native 'scroll' event for manual scrolling.
+  function syncChatScrollToBottomButton() {
+    var logEl = document.getElementById('project-chat-log');
+    var btn = document.getElementById('chat-scroll-to-bottom-btn');
+    var nearBottom = isChatLogNearBottom(logEl);
+    if (nearBottom && currentChatProjectName) chatUnseenWhileScrolledUp[currentChatProjectName] = 0;
+    btn.hidden = nearBottom;
+    btn.classList.toggle('flex', !nearBottom);
+    var count = (currentChatProjectName && chatUnseenWhileScrolledUp[currentChatProjectName]) || 0;
+    var badge = document.getElementById('chat-scroll-to-bottom-badge');
+    badge.textContent = count > 9 ? '9+' : String(count);
+    badge.classList.toggle('hidden', count === 0);
+  }
   function renderChatDetail() {
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     var links = (pdoc && pdoc.links) || [];
@@ -2414,9 +2454,16 @@
     // project so switching chats and back doesn't replay anything either.
     var isFirstRenderForThisChat = !chatSeenMessageIds[currentChatProjectName];
     var seenIds = chatSeenMessageIds[currentChatProjectName] || (chatSeenMessageIds[currentChatProjectName] = {});
+    // Captured BEFORE the innerHTML swap below (which changes scrollHeight) -- a fresh render
+    // should only pull the view down to the newest message if the user was already basically
+    // there, same as WhatsApp. Opening a chat for the first time always counts as "at the
+    // bottom": there's nothing to preserve scroll position against yet.
+    var wasNearBottom = isFirstRenderForThisChat || isChatLogNearBottom(logEl);
+    var newUnseenCount = 0;
     logEl.innerHTML = chat.length
       ? chat.map(function (m) {
           var isNewMessage = !isFirstRenderForThisChat && !seenIds[m.id];
+          if (isNewMessage && !wasNearBottom && m.author !== myName) newUnseenCount++;
           seenIds[m.id] = true;
           return chatMessageHtml(m, myName, chat, isNewMessage, isFirstRenderForThisChat);
         }).join('')
@@ -2435,9 +2482,18 @@
     // jumping to the bottom, so the search stays usable across live updates.
     if (chatSearchOpen && document.getElementById('chat-search-input').value.trim()) {
       runChatSearch();
-    } else {
+    } else if (wasNearBottom) {
       logEl.scrollTop = logEl.scrollHeight;
     }
+    // else: leave the scroll position exactly where it was. The browser doesn't reset scrollTop
+    // just because innerHTML changed, and every message already above the fold keeps the same
+    // pixel height across a re-render, so this reliably keeps whatever the user was reading in
+    // view instead of yanking them down to a message they didn't ask to see yet -- that's what
+    // the scroll-to-bottom button (synced below) is for.
+    if (newUnseenCount > 0 && currentChatProjectName) {
+      chatUnseenWhileScrolledUp[currentChatProjectName] = (chatUnseenWhileScrolledUp[currentChatProjectName] || 0) + newUnseenCount;
+    }
+    syncChatScrollToBottomButton();
     // Marks this chat read on every render while it's open, not just the moment it's selected --
     // see markChatRead's own comment for why (a message arriving while you're already looking at
     // it shouldn't leave the chat sitting "unread" the next time you glance at the list). Same
@@ -2713,6 +2769,18 @@
   document.getElementById('project-chat-log').addEventListener('click', function (e) {
     var reactBtn = e.target.closest('.project-chat-reaction');
     if (reactBtn) toggleProjectChatReaction(reactBtn.getAttribute('data-message-id'), reactBtn.getAttribute('data-emoji'));
+  });
+
+  // WhatsApp-style "scroll to bottom" button -- see syncChatScrollToBottomButton's own comment
+  // (above renderChatDetail) for the near-bottom threshold and unseen-count bookkeeping this
+  // pairs with. The scroll listener is what keeps the button in sync with manual scrolling, not
+  // just with a re-render.
+  document.getElementById('project-chat-log').addEventListener('scroll', syncChatScrollToBottomButton);
+  document.getElementById('chat-scroll-to-bottom-btn').addEventListener('click', function () {
+    var logEl = document.getElementById('project-chat-log');
+    logEl.scrollTo({ top: logEl.scrollHeight, behavior: 'smooth' });
+    if (currentChatProjectName) chatUnseenWhileScrolledUp[currentChatProjectName] = 0;
+    syncChatScrollToBottomButton();
   });
 
   // Right-click for message actions -- the WhatsApp Web pattern shown directly as a reference
@@ -3797,7 +3865,8 @@
     // `check` entry (a checkmark-in-a-circle used for other "done" UI elsewhere), which reads
     // as a completion badge rather than a delivery/read mark.
     checkTick: '<polyline points="20 6 9 17 4 12"></polyline>',
-    checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>'
+    checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>'
   };
 
   function svgIcon(name, cls) {
@@ -8823,7 +8892,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T16:20:05Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T16:30:11Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -1119,6 +1119,35 @@ to bottom:
          entry** (a checkmark-in-a-circle used elsewhere for "done"/completion UI) — a bare tick
          reads as a delivery/read mark, not a completion badge, and reusing `check` would have
          made this new UI silently mean two different things depending on where it showed up.
+     - **A floating "scroll to bottom" button, WhatsApp-style** — requested directly, reported
+       against a screenshot of the user scrolled up reading older messages. `#project-chat-log`
+       is now wrapped in a `relative` div so `#chat-scroll-to-bottom-btn` can sit `absolute` in its
+       bottom-right corner; `isChatLogNearBottom(logEl)` (a `CHAT_SCROLL_BOTTOM_THRESHOLD = 100`px
+       check) drives it from two places kept in sync — the log's own native `scroll` event, and
+       every `renderChatDetail` re-render.
+       - **Also fixed the render itself always force-scrolling to the bottom, since the button
+         would have been pointless otherwise.** Before this, `renderChatDetail` unconditionally
+         set `logEl.scrollTop = logEl.scrollHeight` on every render — and because the `projects`
+         `onSnapshot` listener triggers a full `renderAll()` (and therefore `renderChatDetail`) on
+         *any* project's change, not just the open chat's own, a teammate scrolled up reading
+         history could get yanked back to the bottom by something as unrelated as someone else's
+         project deadline changing. Now a `wasNearBottom` flag is captured (from
+         `isChatLogNearBottom`, before the innerHTML swap changes `scrollHeight`) and the log only
+         auto-scrolls when it's true; otherwise the scroll position is left alone. This relies on
+         a real DOM property, not a guess: setting `.innerHTML` does not itself reset an element's
+         own `scrollTop`, and since new messages render at the end, every row already above the
+         fold keeps the same pixel height across the re-render — so leaving `scrollTop` untouched
+         reliably keeps whatever the user was reading in view. Opening a chat for the first time
+         (`isFirstRenderForThisChat`) still always counts as "at the bottom" — there's no prior
+         scroll position worth preserving against.
+       - **A small unread-while-scrolled-up badge rides along on the same button**
+         (`chatUnseenWhileScrolledUp`, keyed by project name) — incremented per render by counting
+         messages that are both genuinely new (`isNewMessage`, the same flag the message-entrance
+         animation already uses) and not authored by the viewer, but only while `wasNearBottom` is
+         false; reset to 0 the instant the log is back near its bottom, whether from clicking the
+         button (a `smooth` `scrollTo`, the one deliberate exception to this app's usual instant
+         `scrollTop =` jumps, since this one is a direct user action worth animating) or from
+         scrolling down manually.
      - **An emoji picker was asked for directly, "similar to what we've built on Content Hub"** —
        ported from the sibling MS LinkedIn Hub's `createEmojiPicker`/`EMOJI_CATEGORIES`
        (`content-hub-firebase.html`), which that app's own `DESIGN.md` documents as a *deliberate
