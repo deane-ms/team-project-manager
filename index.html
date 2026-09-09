@@ -1317,6 +1317,7 @@
     var title = (notif.type === 'mention' || notif.type === 'chat_mention') ? (notif.author + ' mentioned you')
       : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
       : notif.type === 'chat_reaction' ? (notif.author + ' reacted to your message')
+      : notif.type === 'workload_spike' ? 'Workload alert'
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
@@ -5942,6 +5943,73 @@
     });
   }
 
+  /* =========================================================
+     WORKLOAD SPIKE WARNINGS -- requested directly, chosen from a shortlist of "reactive, while
+     someone has the app open" automations ("Flags when one person has several High-priority
+     tasks clustering around the same near-term dates ... an active heads-up rather than
+     something only visible if you're looking at the Timeline").
+
+     Reuses the exact trigger the Gantt's own `computeGanttDeadlineStacks` already established
+     and validated -- one assignee, two or more non-Done tasks sharing the exact same DEADLINE --
+     rather than a new, fuzzier "within N days of each other" window. That fuzzier shape was
+     already tried once, for the Gantt's original conflict warning (date-RANGE overlap across a
+     person's tasks) and reported back as not actually useful, since working across several
+     projects' overlapping ranges is completely normal. Same-day stacking is the one signal this
+     codebase has already confirmed is worth surfacing; this only adds the "High priority" filter
+     (the Gantt's own version isn't priority-scoped) and turns it into an actual notification to
+     the affected assignee -- reaching them wherever they are, not just someone who happens to be
+     looking at a Timeline that happens to be filtered to show it.
+
+     Unlike checkProjectDeadlinePopups, this scans the WHOLE board's active tasks unconditionally,
+     not whatever's currently filtered/plotted -- the person discovering the spike (by having
+     Flowboard open when this runs) is very often not the affected assignee at all, so there's no
+     "current view" to scope this to. It also does NOT exclude the affected assignee from their
+     own notification the way a chat mention excludes the person who typed it -- someone
+     triggering this by having their own tasks pile up is exactly who needs telling, unlike a
+     self-mention (which is a no-op because you obviously know you mentioned yourself).
+  ========================================================= */
+  // Keyed by assignee|deadline|sorted task ids, not just assignee|deadline -- so a cluster that
+  // gains or loses a task (a real, materially different pile-up) gets a fresh notification, while
+  // the exact same unchanged cluster only ever notifies once per session. Session-local, same
+  // reasoning as projectPopupShown above: reloading the page could in theory re-notify about an
+  // already-flagged, still-unresolved spike once more -- an accepted, minor inaccuracy, not
+  // worth persisting this to Firestore/localStorage just to close.
+  var workloadSpikeWarned = {};
+
+  function notifyOnWorkloadSpike(assignee, deadline, groupTasks) {
+    setDoc(doc(notificationsCol), {
+      recipient: assignee,
+      type: 'workload_spike',
+      taskId: null,
+      taskName: '',
+      chatProject: null,
+      author: 'Workload alert',
+      snippet: groupTasks.length + ' High-priority tasks are all due ' + formatShortDate(deadline) + ': ' + groupTasks.map(function (t) { return t.name; }).join(', '),
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify workload spike', e); });
+  }
+
+  function checkWorkloadSpikes() {
+    var byAssignee = {};
+    activeTasks().forEach(function (t) {
+      if (!t.assignee || t.status === 'Done' || t.priority !== 'High' || !t.deadline) return;
+      (byAssignee[t.assignee] = byAssignee[t.assignee] || []).push(t);
+    });
+    Object.keys(byAssignee).forEach(function (assignee) {
+      var byDeadline = {};
+      byAssignee[assignee].forEach(function (t) { (byDeadline[t.deadline] = byDeadline[t.deadline] || []).push(t); });
+      Object.keys(byDeadline).forEach(function (deadline) {
+        var group = byDeadline[deadline];
+        if (group.length < 2) return;
+        var key = assignee + '|' + deadline + '|' + group.map(function (t) { return t.id; }).sort().join(',');
+        if (workloadSpikeWarned[key]) return;
+        workloadSpikeWarned[key] = true;
+        notifyOnWorkloadSpike(assignee, deadline, group);
+      });
+    });
+  }
+
   function archiveTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t) return;
@@ -8165,6 +8233,7 @@
       }
       renderAll();
       checkProjectDeadlinePopups();
+      checkWorkloadSpikes();
     }, function (err) {
       showToast('Live sync error: ' + err.message, 'error');
     });
@@ -8249,9 +8318,13 @@
           // notifyOnProjectChat) reads "posted in", not "mentioned you in", so this sentence
           // doesn't claim a mention that never happened. `chat_reaction` (see
           // notifyOnChatReaction) is its own wording again -- reacting isn't posting or mentioning.
-          var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
+          // `workload_spike` (see checkWorkloadSpikes) has no chat or task to point the sentence
+          // at all -- it's a system-generated observation about the recipient's own tasks, not
+          // something someone else did to a specific thing, so it gets its own subject ("you").
+          var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : n.type === 'workload_spike' ? 'you' : ('"' + escapeHtml(n.taskName) + '"');
           var verb = n.chatProject
             ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
+            : n.type === 'workload_spike' ? 'flagged a workload pile-up for'
             : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
@@ -8383,7 +8456,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T15:02:16Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T15:24:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

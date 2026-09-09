@@ -504,6 +504,57 @@ to bottom:
      `advanceProjectPopupQueue`) so two qualifying projects in the same snapshot don't stomp each
      other's modal state — and both defer entirely while the task modal or another confirm is
      already open, rather than interrupting an edit in progress.
+   - **Workload spike warnings** (`checkWorkloadSpikes`, alongside `checkProjectDeadlinePopups`
+     in the same `tasks` `onSnapshot` handler) — asked for directly, chosen from a shortlist of
+     "reactive, while someone has the app open" automations (the broader ask was "build agents
+     for PM tool to enable some sort of automation," narrowed down first to *reactive* rather
+     than a scheduled background service — see "Cloud Storage"-adjacent infra note below on why a
+     true background agent touching live Firestore data isn't just a code change — and then to
+     this one specific rule from a menu of candidates).
+     - **Reuses the Gantt's own `computeGanttDeadlineStacks` trigger exactly** — one assignee, 2+
+       non-Done tasks sharing the exact same deadline — rather than a fuzzier "within N days of
+       each other" window, deliberately. That fuzzier shape was already tried once, as the
+       Gantt's *original* conflict warning (date-RANGE overlap across a person's tasks), and
+       reported back as not actually useful: one person working across several projects'
+       overlapping ranges is normal, just a sequencing question. Same-deadline stacking is the
+       one signal this codebase has already confirmed is worth a warning; this only adds a
+       `priority === 'High'` filter (the Gantt's own version isn't priority-scoped) and turns it
+       from a passive visual into an actual notification.
+     - **Notifies the affected assignee directly, via the existing `notifications` collection**
+       (`notifyOnWorkloadSpike`, `type: 'workload_spike'`) rather than a local toast — the person
+       who triggers this check (by having Flowboard open when a `tasks` snapshot fires) is very
+       often *not* the affected assignee, so there's no "current viewer" to show a toast to that
+       would actually reach the right person. Reuses the bell badge and (if opted in) the desktop
+       popup for free; no new UI surface. Its own `author: 'Workload alert'` plus dedicated
+       verb/subject branches in `renderNotificationBell` ("flagged a workload pile-up for you")
+       and title in `fireDesktopNotification` ("Workload alert") — it doesn't fit the existing
+       "author verb subject" template built for a *person* doing something to a *thing*, since
+       this is a system observation about the recipient's own tasks, not an action by anyone.
+     - **Deliberately does NOT exclude the affected assignee from their own notification** —
+       unlike a chat mention (excluding the person who typed it, since a self-mention is a no-op:
+       you obviously know you mentioned yourself). Someone whose own tasks just piled up is
+       exactly who needs telling, even if they're the one who happened to trigger the check by
+       having the board open.
+     - **Scans the whole board's active tasks unconditionally** (`activeTasks()`), not whatever's
+       currently filtered — unlike the Gantt's passive version, which only ever sees `rows`
+       already narrowed by that view's own filters. A proactive notification has no "current
+       view" to scope itself to.
+     - **`workloadSpikeWarned` dedupes per exact cluster, not per assignee+deadline** — keyed by
+       `assignee|deadline|sorted task ids`, so a cluster gaining or losing a task (a materially
+       different pile-up) gets a fresh notification, while the same unchanged cluster only ever
+       notifies once per session. Session-local like `projectPopupShown` above, for the same
+       reason: reloading the page could in theory re-notify about an already-flagged,
+       still-unresolved spike once more, an accepted minor inaccuracy rather than something worth
+       persisting to Firestore or `localStorage` to fully close.
+     - **A true scheduled/background version of this (or any other automation) was considered and
+       set aside, not built** — this app has no service-account/admin Firestore access set up for
+       anything outside a real signed-in browser session (see the checklist-threading backfill's
+       own comment on the same gap, and the top-level `Claude Projects/CLAUDE.md`'s "Scheduled
+       cloud routines" section for the closest existing precedent, which only reads this repo's
+       *code*, not live task data). A background agent that could check for spikes without
+       anyone's tab open would need that credential set up first — a real, one-time infrastructure
+       step with its own security review, not something to add casually alongside a reactive
+       in-app rule like this one.
    - **Filters persist across reloads** (`FILTERS_KEY = 'flowboard_filters'`, `loadFilters`/
      `persistFilters`/`restoreFilterControls`). Only the five known keys are read back, so a
      stale or hand-edited `localStorage` value can't inject anything else. Safe to persist
