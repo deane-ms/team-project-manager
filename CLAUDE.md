@@ -1026,6 +1026,40 @@ to bottom:
          `renderNotificationBell` and the notification-list click handler both branch on its
          presence, and clicking switches to the Chat tab and calls `selectChatProject
          (chatProject)` instead of opening a task — same as before this change, unaffected by it.
+     - **Reacting to a message notifies its author** (`notifyOnChatReaction`) — reported directly
+       ("emoji reactions should create a notification"), confirmed via `toggleProjectChatReaction`
+       that this genuinely didn't happen before (a plain Firestore update to the message's
+       `reactions` field, no notification write anywhere near it). Unlike `notifyOnProjectChat`,
+       this is never a broadcast — only the one message's own author is notified, since a
+       reaction is about that specific message, not something the whole project team needs to
+       hear about. Only fires on the *add* half of the toggle (`toggleProjectChatReaction` tracks
+       this with a local `added` flag) — removing a reaction stays silent, and reacting to your
+       own message never notifies you (`notifyOnChatReaction` checks `message.author !== myName`
+       itself, a second guard beyond the UI never offering a way to react to nothing). Its own
+       `type: 'chat_reaction'` reads "reacted to your message in" in both the bell panel and the
+       desktop popup title — a third wording alongside `chat_mention`/`chat_post`, not folded into
+       either, since reacting is neither posting nor mentioning.
+     - **Read receipts, WhatsApp-style ticks on your own messages only** — requested directly
+       ("similar to WhatsApp, can I see whether my message is received or read?"), with the one
+       real difference from WhatsApp raised and confirmed before building: WhatsApp's receipts
+       work off an explicit, bounded group membership list, which this app's chat has never had
+       (anyone on the team can open any project's chat) — so there's no fixed "everyone" to
+       compare against and therefore **no third, blue "read by all" state**, just unread (single
+       tick) vs. read by at least one other person (double tick, with exactly who named in the
+       hover `title`). Computed entirely from data already collected for the unread-dot feature
+       (`chatLastRead` on every teammate's own `people` doc, see `markChatRead`/`isChatUnread`
+       above) — no new field, write, or query needed. `chatMessageHtml` computes this inline, only
+       when `mine`, by checking every `teamPeople` entry (not scoped to project assignees the way
+       the notification broadcast is — anyone could plausibly have opened the chat, and there's
+       no noise concern for a per-message, opt-in-to-look-at indicator the way there was for a
+       push notification) for a `chatLastRead` entry on this exact project whose `at` is at or
+       after the message's own `date`. Live: since `teamPeople` updates trigger a full `renderAll`
+       already (see the `people` `onSnapshot` handler's own comment on why), a teammate opening
+       the chat elsewhere flips your ticks from single to double without any new listener.
+       - **`ICONS.checkTick`/`checkTickDouble` are new, deliberately not the existing `check`
+         entry** (a checkmark-in-a-circle used elsewhere for "done"/completion UI) — a bare tick
+         reads as a delivery/read mark, not a completion badge, and reusing `check` would have
+         made this new UI silently mean two different things depending on where it showed up.
      - **An emoji picker was asked for directly, "similar to what we've built on Content Hub"** —
        ported from the sibling MS LinkedIn Hub's `createEmojiPicker`/`EMOJI_CATEGORIES`
        (`content-hub-firebase.html`), which that app's own `DESIGN.md` documents as a *deliberate

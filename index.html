@@ -1283,9 +1283,11 @@
     firedDesktopNotifIds[notif.id] = true;
     // `chat_post` is a project-assignee broadcast with no real @mention behind it (see
     // notifyOnProjectChat) -- worded as "posted in", not "mentioned you", for the same reason
-    // the bell panel's own verb branches on it.
+    // the bell panel's own verb branches on it. `chat_reaction` (see notifyOnChatReaction) is
+    // its own wording again -- reacting isn't posting or mentioning.
     var title = (notif.type === 'mention' || notif.type === 'chat_mention') ? (notif.author + ' mentioned you')
       : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
+      : notif.type === 'chat_reaction' ? (notif.author + ' reacted to your message')
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
@@ -2279,10 +2281,34 @@
     // No reply/forward/delete icons here either, hover or otherwise -- both went into the
     // right-click menu (openChatMessageMenu below), on request ("right click to show options,
     // same as whatsapp does it"). Just the timestamp at rest.
+    // Read receipts, WhatsApp-style ticks -- only on your OWN messages, same as WhatsApp itself
+    // only ever shows them there. Requested directly ("can I see whether my message is received
+    // or read?"), with the one real difference from WhatsApp flagged before building: this chat
+    // has no explicit membership list, so there's no bounded "everyone" to compare against and
+    // therefore no third (blue, "read by all") state -- just unread (single tick) vs read by at
+    // least one other person (double tick), with exactly who in the hover title. Computed from
+    // `chatLastRead` (see markChatRead/isChatUnread above) already collected on every teammate's
+    // own `people` doc for the unread-dot feature -- no new data to write or query for this.
+    var receiptHtml = '';
+    if (mine) {
+      var readers = teamPeople.filter(function (p) {
+        return p.name && p.name !== myName && Array.isArray(p.chatLastRead) && p.chatLastRead.some(function (e) {
+          return e.project === currentChatProjectName && e.at >= m.date;
+        });
+      }).map(function (p) { return p.name; });
+      var seen = readers.length > 0;
+      receiptHtml = '<span class="' + (seen ? 'text-brand-500 dark:text-brand-400' : 'text-zinc-400 dark:text-zinc-500') + '" title="' + (seen ? 'Read by ' + escapeHtml(readers.join(', ')) : 'Sent') + '">' +
+        '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (seen ? ICONS.checkTickDouble : ICONS.checkTick) + '</svg>' +
+      '</span>';
+    }
+
     return '<div class="flex ' + (mine ? 'justify-end' : 'justify-start') + '" data-message-row="' + m.id + '">' +
       '<div class="max-w-[78%] flex flex-col ' + (mine ? 'items-end' : 'items-start') + '">' +
         nameRowHtml + bubbleHtml +
-        '<span class="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+        '<span class="flex items-center gap-1 mt-0.5">' +
+          '<span class="text-[10px] text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(m.date)) + ', ' + formatTimeOnly(m.date) + '</span>' +
+          receiptHtml +
+        '</span>' +
         (reactionsHtml ? '<div class="flex items-center flex-wrap gap-1.5 mt-1">' + reactionsHtml + '</div>' : '') +
       '</div>' +
     '</div>';
@@ -2861,6 +2887,30 @@
     });
   }
 
+  // Requested directly ("emoji reactions should create a notification"). Notifies only the
+  // reacted message's own author -- not a project-wide broadcast like notifyOnProjectChat, since
+  // a reaction is about one specific message, not something the whole project team needs to hear
+  // about. Reacting to your own message doesn't notify you; toggleProjectChatReaction only calls
+  // this on the add half of a toggle, not on removing a reaction.
+  function notifyOnChatReaction(message, emoji, projectName) {
+    var user = auth.currentUser;
+    var myName = user ? (user.displayName || user.email) : null;
+    if (!message.author || message.author === myName) return;
+    setDoc(doc(notificationsCol), {
+      recipient: message.author,
+      type: 'chat_reaction',
+      taskId: null,
+      taskName: '',
+      chatProject: projectName,
+      author: myName || 'unknown',
+      // The emoji itself is message content here, not a UI icon -- same exception this app's
+      // emoji picker already documents (see "An emoji picker was asked for directly" above).
+      snippet: emoji + ' ' + (message.text || (message.imageUrl ? 'Photo' : '')).slice(0, 120),
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify chat reaction', e); });
+  }
+
   // Clears any unread @mention notification for this chat the moment it's actually opened --
   // reported directly ("when the message is replied to or read, the notifications should not
   // remain"). Before this, a mention notification only ever cleared by explicitly clicking it in
@@ -2884,16 +2934,24 @@
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     if (!pdoc || !myName) return;
+    var reactedMessage = null;
+    var added = false;
     var chat = (pdoc.chat || []).map(function (m) {
       if (m.id !== messageId) return m;
+      reactedMessage = m;
       var reactions = Object.assign({}, m.reactions);
       var names = (reactions[emoji] || []).slice();
       var idx = names.indexOf(myName);
-      if (idx === -1) names.push(myName); else names.splice(idx, 1);
+      if (idx === -1) { names.push(myName); added = true; } else { names.splice(idx, 1); }
       if (names.length) reactions[emoji] = names; else delete reactions[emoji];
       return Object.assign({}, m, { reactions: reactions });
     });
-    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).catch(function (err) {
+    var projectName = currentChatProjectName;
+    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).then(function () {
+      // Only on the add half of the toggle -- nobody wants a notification for someone removing
+      // a reaction, and reactedMessage is only set once the map above actually found the message.
+      if (added && reactedMessage) notifyOnChatReaction(reactedMessage, emoji, projectName);
+    }).catch(function (err) {
       showToast('Could not update reaction: ' + err.message, 'error');
     });
   }
@@ -3316,7 +3374,12 @@
     sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>',
     star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>',
     pin: '<line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>',
-    image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>'
+    image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>',
+    // A bare tick / WhatsApp-style overlapping double tick -- deliberately not the existing
+    // `check` entry (a checkmark-in-a-circle used for other "done" UI elsewhere), which reads
+    // as a completion badge rather than a delivery/read mark.
+    checkTick: '<polyline points="20 6 9 17 4 12"></polyline>',
+    checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -8100,10 +8163,11 @@
           // single task to point at), so the sentence and the click target both branch on it.
           // `chat_post` (an assignee-broadcast notification with no actual @mention -- see
           // notifyOnProjectChat) reads "posted in", not "mentioned you in", so this sentence
-          // doesn't claim a mention that never happened.
+          // doesn't claim a mention that never happened. `chat_reaction` (see
+          // notifyOnChatReaction) is its own wording again -- reacting isn't posting or mentioning.
           var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
           var verb = n.chatProject
-            ? (n.type === 'chat_post' ? 'posted in' : 'mentioned you in')
+            ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
             : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
@@ -8235,7 +8299,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T03:43:43Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T03:54:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
