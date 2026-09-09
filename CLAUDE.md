@@ -942,12 +942,22 @@ to bottom:
        that currently notifies about chat activity at all, same as a plain task comment with no
        @mention notifies nobody). Called alongside `renderNotificationBell()` from the same
        `notifications` `onSnapshot` handler, since it's reading the exact same `myNotifications`
-       array, just filtered further — there's no separate read-state to invent or keep in sync,
-       and it clears the same way the bell's own badge does (opening the notification from the
-       bell, or "Mark all read"). Positioned `absolute` on the nav button (`relative` added to
-       the button itself) rather than inline after the label, specifically so it still renders —
-       overlaid on the icon's top-right corner — when the sidebar is collapsed to its icon-only
-       rail, not just in the expanded label view.
+       array, just filtered further — there's no separate read-state to invent or keep in sync.
+       Positioned `absolute` on the nav button (`relative` added to the button itself) rather
+       than inline after the label, specifically so it still renders — overlaid on the icon's
+       top-right corner — when the sidebar is collapsed to its icon-only rail, not just in the
+       expanded label view.
+       - **A mention notification only ever cleared by explicitly clicking it in the bell panel
+         or hitting "Mark all read" — opening the same chat by any other route left it sitting
+         unread indefinitely.** Reported directly ("when the message is replied to or read, the
+         notifications should not remain"). `markChatNotificationsRead(name)` marks every unread
+         notification carrying that `chatProject` as read, called from `selectChatProject` (the
+         moment the chat is opened, however it was opened — the Chat tab's own project list, a
+         deep link, not just the bell) and again from the end of `renderChatDetail` (so a *new*
+         mention landing while the chat is already open clears itself too). Replying requires the
+         chat to already be open, so covering "opened" covers "replied to" as well without a
+         separate check tied to sending a message — there was never a need to special-case
+         `sendProjectChatMessage` on top of this.
      - **Lives on the same `projects/{id}` doc as the deadline**, not a new collection —
        `chat` (array of `{id, text, author, date, reactions}`, same shape/append pattern as task
        comments: `arrayUnion` to add, a full-array rewrite to edit an existing entry's fields)

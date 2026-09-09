@@ -1610,6 +1610,7 @@
     closeChatSearch();
     closeProjectChatLinkForm();
     currentChatProjectName = name;
+    markChatNotificationsRead(name);
     document.getElementById('project-chat-title').textContent = name;
     document.getElementById('project-chat-avatar').innerHTML = chatAvatarHtml(name, 'w-10 h-10', 'text-sm');
     document.getElementById('chat-delete-btn').classList.toggle('hidden', !isAdminUser());
@@ -2133,8 +2134,11 @@
     }
     // Marks this chat read on every render while it's open, not just the moment it's selected --
     // see markChatRead's own comment for why (a message arriving while you're already looking at
-    // it shouldn't leave the chat sitting "unread" the next time you glance at the list).
+    // it shouldn't leave the chat sitting "unread" the next time you glance at the list). Same
+    // reasoning for the @mention notification itself, one render later -- see
+    // markChatNotificationsRead's own comment.
     markChatRead(currentChatProjectName);
+    markChatNotificationsRead(currentChatProjectName);
   }
 
   // WhatsApp-style bubbles, on request ("can the chat look like whatsapp where my messages are
@@ -2622,6 +2626,22 @@
         at: new Date().toISOString(),
         read: false
       }).catch(function (e) { console.error('Failed to notify project chat mention', e); });
+    });
+  }
+
+  // Clears any unread @mention notification for this chat the moment it's actually opened --
+  // reported directly ("when the message is replied to or read, the notifications should not
+  // remain"). Before this, a mention notification only ever cleared by explicitly clicking it in
+  // the bell panel or hitting "Mark all read" -- opening the same chat by any other route (the
+  // Chat tab's own project list, a deep link, …) left it sitting unread indefinitely even though
+  // the person had, in fact, just read it. Called from both `selectChatProject` (the moment the
+  // chat is opened) and the end of `renderChatDetail` (so a *new* mention landing while the chat
+  // is already open clears itself too, not just ones that predate opening it) -- replying
+  // requires the chat to already be open, so covering "opened" also covers "replied to" without
+  // a separate check tied to sending a message.
+  function markChatNotificationsRead(name) {
+    myNotifications.filter(function (n) { return n.chatProject === name && !n.read; }).forEach(function (n) {
+      updateDoc(doc(notificationsCol, n.id), { read: true }).catch(function () { /* best-effort, see registerPresence's own comment */ });
     });
   }
 
@@ -7977,7 +7997,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-08T19:58:50Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T02:09:11Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
