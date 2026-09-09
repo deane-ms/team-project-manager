@@ -1,0 +1,33 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Mirrors firestore.rules' isMediashock() exactly -- keep the two in sync. See that file's
+    // own comment for why each clause is there (provider + verified flag pinned rather than
+    // trusting console config, .lower() for the case-folding gap).
+    function isMediashock() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email.lower().matches('.*@mediashock[.]com[.]sg');
+    }
+
+    // Chat screenshots (see "Chat image sharing" in this project's own CLAUDE.md). Scoped under
+    // the project's own Firestore doc id, one folder per project, so a project's images are at
+    // least organized the same way its chat/links already are.
+    //
+    // Read is restricted the same as write, not left open -- these can be client-confidential
+    // screenshots, which is the whole reason this feature went through Firebase Storage instead
+    // of a third-party image host in the first place. A plain <img src="..."> pointed at a
+    // Storage download URL can't carry an Authorization header, so the client fetches these with
+    // a Bearer ID token and renders the result as a blob URL instead of hot-linking the file
+    // directly -- see loadProtectedChatImage in index.html. That's what makes an auth-required
+    // read rule here actually work in a browser rather than just producing broken image icons.
+    match /chat-images/{projectId}/{fileName} {
+      allow read: if isMediashock();
+      allow write: if isMediashock()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

@@ -111,6 +111,10 @@
      above only ever matches actual <button> elements, so this restores the same press feedback
      for the one row type in the app that isn't one. */
   .chat-project-row:active { filter: brightness(0.9); }
+  /* A screenshot thumbnail with no `src` yet (see loadProtectedChatImage) has no intrinsic size,
+     so its placeholder background would render as an invisible 0x0 box without this floor.
+     Removed the moment the real image loads -- see that function's own comment. */
+  .chat-image-thumb.chat-image-loading { min-height: 120px; min-width: 160px; }
 
   @keyframes bell-nudge {
     0%, 100% { transform: rotate(0deg); }
@@ -1058,6 +1062,15 @@
   </div>
 </div>
 
+<!-- Full-size viewer for a chat screenshot thumbnail -- click anywhere (or Escape) to close.
+     `hidden` deliberately has no competing `flex` in this static class list, same
+     hidden-attribute-plus-JS-toggled-flex-class idiom as #chat-reply-preview/#chat-search-bar
+     elsewhere in this file, for the identical reason: a co-present `flex` utility class would
+     win the display property over `hidden` at rest regardless of whether the attribute is set. -->
+<div id="chat-image-lightbox" hidden class="fixed inset-0 z-[70] items-center justify-center bg-black/80 p-6 cursor-zoom-out">
+  <img id="chat-image-lightbox-img" class="max-w-full max-h-full rounded-lg shadow-pop" alt="Shared screenshot, full size">
+</div>
+
 <!-- ============ TOASTS ============ -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
 
@@ -1117,6 +1130,9 @@
     getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, deleteField, onSnapshot,
     writeBatch, query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import {
+    getStorage, ref as storageRef, uploadBytes, getDownloadURL, connectStorageEmulator
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   /* =========================================================
      FIREBASE SETUP
@@ -1127,19 +1143,26 @@
     apiKey: "AIzaSyB8-SuBoWnQRO9FY_5oEsJ9LDxbY11Mx70",
     authDomain: "pscr-project-manager.firebaseapp.com",
     projectId: "pscr-project-manager",
+    // Only used once this project is actually on the Blaze plan with Cloud Storage enabled --
+    // see "Chat image sharing" in this project's own CLAUDE.md. Harmless to leave in place
+    // before that: getStorage()/uploadBytes() calls simply fail (surfaced as a toast, not a
+    // crash) against a bucket that doesn't exist yet.
+    storageBucket: "pscr-project-manager.firebasestorage.app",
     appId: "1:989526559102:web:2fe9a21bc0234d28588b2f"
   };
   var ALLOWED_EMAIL_DOMAIN = "mediashock.com.sg";
   var USE_EMULATORS = ["localhost", "127.0.0.1"].indexOf(location.hostname) > -1;
 
   var fbApp = initializeApp(USE_EMULATORS
-    ? { projectId: "demo-flowboard", apiKey: "demo-key", authDomain: "demo-flowboard.firebaseapp.com" }
+    ? { projectId: "demo-flowboard", apiKey: "demo-key", authDomain: "demo-flowboard.firebaseapp.com", storageBucket: "demo-flowboard.appspot.com" }
     : firebaseConfig);
   var auth = getAuth(fbApp);
   var db = getFirestore(fbApp);
+  var storage = getStorage(fbApp);
   if (USE_EMULATORS) {
     connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
     connectFirestoreEmulator(db, "127.0.0.1", 8080);
+    connectStorageEmulator(storage, "127.0.0.1", 9199);
   }
 
   var googleProvider = new GoogleAuthProvider();
@@ -1942,8 +1965,12 @@
           // below the chat title should reflect the latest message"). Falls back to "No
           // messages yet" for a chat someone just created but nobody has posted in.
           var last = pdoc.chat.length ? pdoc.chat[pdoc.chat.length - 1] : null;
+          // "Photo" for an image with no caption -- same fallback chatMessageHtml's own quoted
+          // preview uses, so a screenshot with nothing typed alongside it doesn't preview as a
+          // blank "Author: " with nothing after the colon.
+          var lastBody = last ? (last.text || (last.imageUrl ? 'Photo' : '')) : '';
           var subtitle = last
-            ? escapeHtml((last.author === myName ? 'You' : (last.author || 'Unknown')) + ': ' + (last.text || ''))
+            ? escapeHtml((last.author === myName ? 'You' : (last.author || 'Unknown')) + ': ' + lastBody)
             : 'No messages yet';
           var timestamp = last ? chatListTimestamp(last.date) : '';
           // Archived/completed projects stay fully visible and functional here -- a wrapped-up
@@ -2124,6 +2151,15 @@
     logEl.innerHTML = chat.length
       ? chat.map(function (m) { return chatMessageHtml(m, myName, chat); }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No messages yet. Say hello.</p>';
+    // Every screenshot thumbnail this fresh innerHTML just created starts with no `src` (see
+    // chatMessageHtml's own comment) -- load each one now. Old blob URLs from the *previous*
+    // render are revoked first, since nothing else in this app ever releases them and a long
+    // session re-rendering this log on every live update would otherwise leak one per image
+    // per render forever.
+    revokeChatImageObjectUrls();
+    logEl.querySelectorAll('img[data-chat-image-src]').forEach(function (img) {
+      loadProtectedChatImage(img, img.getAttribute('data-chat-image-src'));
+    });
     // A fresh innerHTML wipes any <mark> highlighting from a live update mid-search (a new
     // message arriving via onSnapshot re-renders this same log) -- re-run it instead of just
     // jumping to the bottom, so the search stays usable across live updates.
@@ -2179,9 +2215,17 @@
       // Silently omitted if the original was since deleted -- same "don't guess, don't break"
       // fallback removeCommentAt's own dangling replyTo case uses for task comments.
       if (original) {
+        // An image-only original has no text to quote -- "Photo" (with the same image icon
+        // used elsewhere for this) mirrors WhatsApp's own quoted-reply label for that case,
+        // rather than rendering an empty second line.
+        var quoteBodyHtml = original.text
+          ? '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(original.text) + '</p>'
+          : original.imageUrl
+            ? '<p class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">' + svgIcon('image', 'w-3 h-3 shrink-0') + 'Photo</p>'
+            : '';
         quotedHtml = '<div class="mb-1 pl-2 border-l-2 border-brand-400/60 dark:border-brand-500/40">' +
           '<p class="text-xs font-semibold text-brand-600 dark:text-brand-400">' + escapeHtml(original.author || 'Unknown') + '</p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(original.text || '') + '</p>' +
+          quoteBodyHtml +
         '</div>';
       }
     }
@@ -2195,11 +2239,22 @@
         '<span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(m.author || 'Unknown') + '</span>' +
       '</div>';
 
+    // A screenshot renders as a thumbnail, loaded and shown as an authenticated blob URL rather
+    // than a plain <img src> pointed at the Storage download URL -- see loadProtectedChatImage's
+    // own comment (below) and storage.rules for why a bare <img> tag can't carry the auth header
+    // these files' read rule requires. `data-chat-image-src` holds the real URL for that pass to
+    // read; `src` is deliberately left unset until then; the bg color is a loading placeholder.
+    var imageHtml = m.imageUrl
+      ? '<div class="mb-1 -mx-0.5"><img class="chat-image-thumb chat-image-loading block max-w-full max-h-64 rounded-lg cursor-pointer bg-zinc-200 dark:bg-zinc-600" data-chat-image-src="' + escapeHtml(m.imageUrl) + '" alt="Shared screenshot"></div>'
+      : '';
+    var textHtml = m.text
+      ? '<p class="chat-message-text text-sm whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>'
+      : '';
+
     var bubbleHtml = '<div class="rounded-2xl px-3 py-2 ' +
         (mine ? 'bg-brand-100 dark:bg-brand-500/20 rounded-br-md' : 'bg-zinc-100 dark:bg-zinc-700 rounded-bl-md') +
         ' text-zinc-800 dark:text-zinc-100">' +
-        forwardedHtml + quotedHtml +
-        '<p class="chat-message-text text-sm whitespace-pre-wrap break-words">' + enrichCommentText(m.text) + '</p>' +
+        forwardedHtml + quotedHtml + imageHtml + textHtml +
       '</div>';
 
     // No reply/forward/delete icons here either, hover or otherwise -- both went into the
@@ -2417,6 +2472,127 @@
     });
   }
 
+  // ---- Screenshot sharing -- paste an image straight into the compose box ------------------
+  // Requested directly ("can sharing of screenshots be allowed on chat"). Needs the Firebase
+  // project on the Blaze plan with Cloud Storage enabled -- Spark stopped supporting new Storage
+  // buckets in 2024 (see the top-level Claude Projects/CLAUDE.md), which is why every other
+  // "attach something" flow in this app has stayed link-paste-only until now. See "Chat image
+  // sharing" in this project's own CLAUDE.md for the full writeup, including why a third-party
+  // image host was considered and rejected (these can be client-confidential screenshots).
+  var CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024; // matches storage.rules' own cap -- keep in sync
+
+  function uploadAndSendChatImage(file) {
+    if (!currentChatProjectName || !file) return;
+    var pdoc = projectDeadlineDoc(currentChatProjectName);
+    if (!pdoc) return;
+    if (file.type.indexOf('image/') !== 0) return;
+    if (file.size > CHAT_IMAGE_MAX_BYTES) {
+      showToast('Image is too large (max 8MB)', 'error');
+      return;
+    }
+    var input = document.getElementById('project-chat-input');
+    var caption = input.value.trim();
+    var replyTarget = chatReplyTarget;
+    // The extension only affects the stored filename (never read back) -- storage.rules checks
+    // the real upload's contentType, not this. '+' stripped so "svg+xml" can't smuggle a second
+    // path segment into the filename.
+    var ext = (file.type.split('/')[1] || 'png').split('+')[0];
+    var path = 'chat-images/' + pdoc.id + '/' + uid() + '.' + ext;
+    showToast('Uploading image…', 'info');
+    uploadBytes(storageRef(storage, path), file).then(function (snap) {
+      return getDownloadURL(snap.ref);
+    }).then(function (url) {
+      var user = auth.currentUser;
+      var newMessage = { id: uid(), text: caption, imageUrl: url, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null };
+      if (replyTarget) newMessage.replyTo = replyTarget.id;
+      return updateDoc(doc(projectsCol, pdoc.id), { chat: arrayUnion(newMessage) });
+    }).then(function () {
+      input.value = '';
+      cancelChatReply();
+      projectChatMentions.close();
+      clearProjectChatTyping();
+      if (caption) notifyOnProjectChat(caption, currentChatProjectName);
+    }).catch(function (err) {
+      showToast('Could not send image: ' + err.message, 'error');
+    });
+  }
+
+  // Paste is the primary path -- a screenshot tool (Snipping Tool, Cmd+Shift+4, …) puts an image
+  // directly on the clipboard, and this is the one place in the app an image paste is expected
+  // to do something other than paste as text (there is no text form of an image to paste anyway,
+  // so pre-empting the default paste here doesn't compete with normal typing).
+  document.getElementById('project-chat-input').addEventListener('paste', function (e) {
+    var items = (e.clipboardData || window.clipboardData || {}).items || [];
+    var imageItem = null;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.indexOf('image/') === 0) { imageItem = items[i]; break; }
+    }
+    if (!imageItem) return;
+    e.preventDefault();
+    uploadAndSendChatImage(imageItem.getAsFile());
+  });
+
+  // storage.rules requires an authenticated request to read a chat image (these can be
+  // client-confidential screenshots, the whole reason this went through Firebase Storage rather
+  // than a public third-party host) -- but a plain <img src="..."> pointed straight at the
+  // Storage download URL is an anonymous browser request with no way to attach an Authorization
+  // header, so it would just 403. Instead: fetch the file manually with a Bearer ID token, then
+  // point the <img> at a local blob URL made from the response. chatMessageHtml leaves `src`
+  // unset and stashes the real URL in `data-chat-image-src` for exactly this pass to pick up.
+  var chatImageObjectUrls = [];
+
+  function revokeChatImageObjectUrls() {
+    chatImageObjectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+    chatImageObjectUrls = [];
+  }
+
+  function loadProtectedChatImage(imgEl, storageUrl) {
+    var user = auth.currentUser;
+    if (!user) return;
+    user.getIdToken().then(function (token) {
+      return fetch(storageUrl, { headers: { Authorization: 'Bearer ' + token } });
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.blob();
+    }).then(function (blob) {
+      var objectUrl = URL.createObjectURL(blob);
+      chatImageObjectUrls.push(objectUrl);
+      imgEl.src = objectUrl;
+      // Only a floor while there's no `src` yet (an <img> with nothing loaded has no intrinsic
+      // size, so the placeholder background would otherwise render as an invisible 0x0 box) --
+      // removed the moment real content arrives, so a short/wide screenshot isn't forced to
+      // keep this height once it has actual pixels to size itself from.
+      imgEl.classList.remove('chat-image-loading');
+    }).catch(function () {
+      imgEl.replaceWith(document.createRange().createContextualFragment(
+        '<p class="text-xs italic text-zinc-400 dark:text-zinc-500 mb-1">Could not load image</p>'
+      ));
+    });
+  }
+
+  // Click a thumbnail to view it full-size -- a same-page overlay (#chat-image-lightbox) rather
+  // than opening the blob URL in a new tab, since a blob: URL is only guaranteed valid in the
+  // document that created it and browsers vary on honoring it in a freshly opened tab.
+  document.getElementById('project-chat-log').addEventListener('click', function (e) {
+    var thumb = e.target.closest('.chat-image-thumb');
+    if (!thumb || !thumb.src) return;
+    var lightbox = document.getElementById('chat-image-lightbox');
+    document.getElementById('chat-image-lightbox-img').src = thumb.src;
+    lightbox.hidden = false;
+    lightbox.classList.add('flex');
+  });
+
+  function closeChatImageLightbox() {
+    var lightbox = document.getElementById('chat-image-lightbox');
+    lightbox.hidden = true;
+    lightbox.classList.remove('flex');
+    document.getElementById('chat-image-lightbox-img').src = '';
+  }
+  document.getElementById('chat-image-lightbox').addEventListener('click', closeChatImageLightbox);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !document.getElementById('chat-image-lightbox').hidden) closeChatImageLightbox();
+  });
+
   // Reply -- WhatsApp's quoted-preview idea, not a nested/indented thread like task comments'
   // own replyTo (those form a real tree via renderCommentsLog; chat stays flat and chronological,
   // a reply is just a message that happens to carry a small quote of an earlier one).
@@ -2428,7 +2604,9 @@
     if (!original) return;
     chatReplyTarget = { id: original.id, author: original.author, text: original.text };
     document.getElementById('chat-reply-preview-author').textContent = original.author || 'Unknown';
-    document.getElementById('chat-reply-preview-text').textContent = original.text || '';
+    // An image-only message (no caption) has no text to quote -- "Photo" mirrors WhatsApp's own
+    // label for the same case, matching chatMessageHtml's quoted-preview fallback below.
+    document.getElementById('chat-reply-preview-text').textContent = original.text || (original.imageUrl ? 'Photo' : '');
     document.getElementById('chat-reply-preview').hidden = false;
     document.getElementById('chat-reply-preview').classList.add('flex');
     document.getElementById('project-chat-input').focus();
@@ -2510,10 +2688,13 @@
       id: uid(), text: original.text, date: new Date().toISOString(), author: myName,
       forwarded: true, forwardedFrom: currentChatProjectName
     };
+    // A forwarded screenshot carries the same Storage URL over -- it's the same file, still
+    // covered by the same storage.rules read check, so there's nothing to re-upload.
+    if (original.imageUrl) forwarded.imageUrl = original.imageUrl;
     // No logActivity call here either -- see removeChatMessage's comment.
     updateDoc(doc(projectsCol, targetPdoc.id), { chat: arrayUnion(forwarded) }).then(function () {
       showToast('Forwarded to ' + targetName, 'success');
-      notifyOnProjectChat(original.text, targetName);
+      if (original.text) notifyOnProjectChat(original.text, targetName);
     }).catch(function (err) {
       showToast('Could not forward message: ' + err.message, 'error');
     });
@@ -3083,7 +3264,8 @@
     bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line>',
     sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path>',
     star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>',
-    pin: '<line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>'
+    pin: '<line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>'
   };
 
   function svgIcon(name, cls) {
@@ -7997,7 +8179,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T02:09:11Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T02:41:58Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

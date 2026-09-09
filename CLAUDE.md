@@ -14,8 +14,10 @@ Google Auth) so the whole team edits one live board together with real-time upda
 
 - **`index.html`** (~3300 lines) — the entire app: markup, Tailwind styling, and vanilla ES-module
   JS in one file. This is virtually the whole codebase.
-- `firebase.json`, `.firebaserc`, `firestore.rules` — Firebase CLI project files for
-  `pscr-project-manager` (Spark/free plan).
+- `firebase.json`, `.firebaserc`, `firestore.rules`, `storage.rules` — Firebase CLI project files
+  for `pscr-project-manager`. Chat image sharing (see below) needs this project on the **Blaze**
+  (pay-as-you-go) plan with Cloud Storage enabled — Firestore usage alone would still fit inside
+  Spark's free tier, and everything else in this app assumed Spark until that feature shipped.
 - `sw.js` — a no-op service worker (exists only to satisfy PWA installability; deliberately does
   no caching, see comment in the file).
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
@@ -26,7 +28,7 @@ Hosting — `firebase.json` only configures Firestore + emulators).
 ## Commands
 
 There is no build/lint/test tooling — it's static HTML/JS served as-is. Local development uses the
-Firebase Local Emulator Suite:
+Firebase Local Emulator Suite (Auth + Firestore + Storage):
 
 ```
 firebase emulators:start --project demo-flowboard
@@ -1358,6 +1360,94 @@ to bottom:
        "add a link" form doesn't silently carry over into a different project's chat. A pushpin
        icon (`ICONS.pin`) sits next to the "Pinned links" label itself, requested directly right
        after — the section header had no visual tie to what a literal pin means beyond its text.
+     - **Chat image sharing** — requested directly ("can sharing of screenshots be allowed on
+       chat"), the first real deviation from "$0/month, needs no server" this app has taken
+       (see the top-level `Claude Projects/CLAUDE.md`'s own note on this). Two options were
+       weighed against it directly: a client-side upload to a free third-party image host
+       (`localStorage` API key, same pattern MS Creatives already uses for its AI features) was
+       rejected because chat screenshots can be client-confidential and that would put them on
+       a service Mediashock doesn't control; rendering an already-hosted image link inline with
+       no new infrastructure was rejected because it doesn't solve "paste a screenshot from your
+       clipboard," the actual ask. **Firebase Storage on the Blaze plan** won, on the reasoning
+       that an 11-person team's chat screenshots comfortably fit inside Blaze's free-tier
+       allotment (5GB storage, 1GB/day download) in practice, even though Blaze removes the hard
+       $0 guarantee Spark has.
+       - **Needs two manual steps outside this codebase before any of it works, neither of which
+         ships by pushing to `main`**: (1) upgrade the `pscr-project-manager` Firebase project
+         from Spark to Blaze (requires attaching a billing account — the actual reason Spark
+         stopped allowing new Storage buckets in 2024 in the first place) and enable Cloud
+         Storage for it; (2) deploy `storage.rules` (`firebase deploy --only storage`, or paste
+         into the Firebase console's Storage Rules tab) — same "rules aren't part of the site
+         deploy" gotcha `firestore.rules` already has, now with a second rules file to remember.
+         Until both are done, every upload attempt fails caught-and-toasted ("Could not send
+         image: ..."), not silently and not by crashing the app.
+       - **Paste is the only entry point, deliberately** — a screenshot tool (Snipping Tool,
+         Cmd+Shift+4, …) puts the image directly on the clipboard, and pasting into
+         `#project-chat-input` is the one place in this app a plain image paste is expected to do
+         something other than insert text (there's no text form of an image to paste anyway).
+         `uploadAndSendChatImage(file)` uploads to `chat-images/{projectId}/{uid()}.{ext}` in
+         Storage, gets a download URL, and sends a chat message shaped like every other one but
+         with `imageUrl` set and `text` optionally carrying whatever was already typed as a
+         caption. No drag-and-drop or file-picker button was added — paste covers the actual
+         request, and either could be layered on later reusing the same upload function if asked.
+       - **A plain `<img src="...">` pointed at the Storage download URL doesn't work, and this
+         is not a smaller-scope corner cut — it's why `storage.rules` requiring auth is even
+         possible in a browser at all.** A browser's own `<img>` tag makes an anonymous GET with
+         no way to attach an `Authorization` header, so a rules-protected file requested that way
+         gets denied outright (a broken-image icon for literally everyone, including signed-in
+         teammates) rather than degrading gracefully. `chatMessageHtml` renders the thumbnail
+         with no `src` at all — just `data-chat-image-src` holding the real URL — and
+         `loadProtectedChatImage(imgEl, url)` fetches it manually with a Bearer ID token
+         (`auth.currentUser.getIdToken()`) and points the `<img>` at a `URL.createObjectURL(blob)`
+         instead. This is *why* the read rule could be `isMediashock()`-gated rather than public:
+         the alternative most Firebase-Storage-backed apps default to (`allow read: if true`,
+         because that's the only way a bare `<img>` tag works) would have quietly undone the
+         entire reason this went through Storage instead of a public third-party host.
+         - **`chat-image-loading` is a real CSS floor (`min-height`/`min-width`), not decorative
+           polish** — an `<img>` with no `src` has no intrinsic size, so the grey placeholder
+           background would otherwise paint into an invisible 0x0 box. Removed the moment `src`
+           is actually set, so a short or very wide screenshot isn't stuck reserving more space
+           than it ends up needing.
+         - **`chatImageObjectUrls` tracks every blob URL created for the currently-rendered log,
+           revoked in a batch at the top of every `renderChatDetail`** — `renderChatDetail`
+           replaces the whole log's `innerHTML` on every live update (a new message, a reaction,
+           …), and nothing else in this app ever calls `URL.revokeObjectURL` on these, so a long
+           session would otherwise leak one blob per image per render, forever.
+       - **A click opens a same-page lightbox (`#chat-image-lightbox`), not a new tab** — a
+         `blob:` URL is only guaranteed valid in the document that created it, and browsers vary
+         on honoring it in a freshly opened tab, which a same-page overlay sidesteps entirely.
+         Click anywhere on the overlay (including the enlarged image itself, since the click
+         handler is on the overlay and clicks bubble to it) or press Escape to close — same
+         `hidden`-attribute-without-a-competing-`flex`-class idiom as `#chat-reply-preview`/
+         `#chat-search-bar` elsewhere in this file, toggled by JS instead of left in the static
+         class list.
+       - **An image-only message (no caption) shows "Photo," not a blank line, everywhere a
+         message would otherwise preview as text** — the quoted-reply preview (both the compose
+         box's `#chat-reply-preview-text` and a sent message's own quoted block in
+         `chatMessageHtml`) and the chat list's own latest-message subtitle. Same fallback logic
+         in three places rather than a shared helper, since each site builds its string
+         differently (plain `textContent` vs. HTML with an icon vs. a `<span>` folded into a
+         larger sentence) — worth consolidating if a fourth site ever needs the same fallback.
+       - **A forwarded image message reuses the same Storage URL rather than re-uploading** —
+         `forwardChatMessage` copies `imageUrl` onto the new message the same way it already
+         copies `text`; it's the same file, still covered by the same `storage.rules` read check
+         for whoever's now looking at it in the target project's chat.
+       - **Known gap, not yet solved: deleting a message or an entire chat does not delete its
+         image(s) from Storage.** `removeChatMessage`/`deleteProjectChat` only ever touch the
+         Firestore `chat` array; an orphaned file under `chat-images/{projectId}/` just sits in
+         the bucket afterward, and nothing prunes it. Low-stakes at this team's actual volume
+         (a handful of KB-to-few-MB screenshots is nowhere near Blaze's free-tier storage
+         allotment), but worth a real cleanup pass — e.g. a Storage delete alongside each of
+         those two functions' existing Firestore writes — if this ever gets used heavily enough
+         for it to matter.
+       - **Not verified against a live upload** — this environment has no Firebase CLI/emulator
+         and, as of writing, the project hadn't yet been upgraded to Blaze, so the actual
+         upload → download-URL → authenticated-fetch → blob-URL round trip has only been
+         exercised in pieces: real click/keydown/paste-interception behavior against synthetic
+         data (a real 1×1 PNG blob standing in for a fetched one, a fake clipboard image item
+         confirming the paste listener intercepts and calls `uploadAndSendChatImage`), not the
+         real Storage upload itself. Worth a real two-screenshot test — post one, forward it,
+         delete it — once Blaze is live and `storage.rules` is deployed.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via
