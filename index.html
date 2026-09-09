@@ -6975,7 +6975,7 @@
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
         '<div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
-          '<p data-tooltip="' + escapeHtml(g.project) + '" class="tooltip-top text-lg font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
+          '<p data-tooltip="' + escapeHtml(g.project) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
         '</div>' +
         '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700">' + g.tasks.map(boardTaskRowHtml).join('') + '</div>' +
       '</div>'
@@ -7701,7 +7701,7 @@
           '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
             avatarHtml(p.name, 'w-8 h-8 shrink-0', 'text-sm') +
             '<div class="min-w-0 flex-1">' +
-              '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-lg font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
+              '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
               '<div class="flex items-center gap-1.5 mt-0.5">' +
                 '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.active.length + ' active</span>' +
                 chips +
@@ -7871,7 +7871,7 @@
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
         '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
           '<div class="min-w-0 flex-1">' +
-            '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-lg font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
+            '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
             '<div class="flex items-center gap-1.5 mt-0.5">' +
               taskCountLabel +
               badges +
@@ -9269,7 +9269,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T17:22:55Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T17:19:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

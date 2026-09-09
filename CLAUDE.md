@@ -2390,18 +2390,6 @@ decides what to move.
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour
   for "someone is not available" everywhere it appears.
 
-### Group/card header title size
-
-Board's own column titles (Pipeline/In Progress/Review/Completed) went from `text-base` to
-`text-lg` on request. Applied the same bump to every other `text-base font-bold` title that plays
-the identical role — the name heading a card that groups a cluster of rows/tasks underneath it —
-rather than leaving it inconsistent across tabs: `projectGroupCardHtml`'s project name (Board's
-own grouped-by-project cards), the People tab's person-card name, and the Projects tab's
-project-card name. Deliberately did NOT touch page-level headings that sit a tier above this
-(the sidebar brand title, `#current-view-title`, "Focus of the Day", "Workload Timeline",
-"Calendar", the chat panel's project title, or the task modal's own title) — those are a
-different level of hierarchy, not "a column/card header," and bumping them wasn't asked for.
-
 ### Calendar view
 
 Rebuilt from a plain read-only month grid (dot + task name on the deadline day only, static
