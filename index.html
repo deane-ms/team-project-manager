@@ -1432,6 +1432,15 @@
   var notifListenerReady = false;
   var firedDesktopNotifIds = {};
 
+  // Durable "already sent this system alert" bookkeeping (see firestore.rules' own comment on
+  // this collection) -- one doc per task id, read into a plain map by taskId. Kept alongside the
+  // notifications state since it exists purely to stop the four reactive automations below
+  // (checkDeadlineReminders/checkStaleReviews/checkLeaveClashes/checkWorkloadSpikes) from
+  // re-notifying about a condition that's still true after a reload, not to drive any UI itself.
+  var notificationDedupCol = collection(db, "notificationDedup");
+  var notificationDedupByTaskId = {};
+  var unsubNotificationDedup = null;
+
   // Shared between the desktop popup title and the bell panel's bold line for the four
   // system-generated alerts (checkWorkloadSpikes/checkDeadlineReminders/checkStaleReviews/
   // checkLeaveClashes) -- one plain-language headline per type, instead of forcing them through
@@ -6455,13 +6464,18 @@
   ========================================================= */
   // Keyed by assignee|deadline|sorted task ids, not just assignee|deadline -- so a cluster that
   // gains or loses a task (a real, materially different pile-up) gets a fresh notification, while
-  // the exact same unchanged cluster only ever notifies once per session. Session-local, same
-  // reasoning as projectPopupShown above: reloading the page could in theory re-notify about an
-  // already-flagged, still-unresolved spike once more -- an accepted, minor inaccuracy, not
-  // worth persisting this to Firestore/localStorage just to close.
+  // the exact same unchanged cluster only ever notifies once. `workloadSpikeWarned` is the fast,
+  // same-render short-circuit; `notificationDedupByTaskId`'s `workloadSpikeFor` field (see
+  // firestore.rules' own comment on the `notificationDedup` collection) is what makes that
+  // "once" survive a page reload -- this in-memory map alone reset on every reload while the
+  // underlying condition didn't, and this app auto-reloads on every new deploy, so a still-open
+  // spike re-notified once per deploy shipped while someone had the app open (reported directly,
+  // from a screenshot of a "deadline is coming up" alert repeated six times in a row, once per
+  // deploy that session -- the same bug applied here too before it was ever screenshotted).
   var workloadSpikeWarned = {};
 
   function notifyOnWorkloadSpike(assignee, deadline, groupTasks) {
+    var signature = deadline + '|' + groupTasks.map(function (t) { return t.id; }).sort().join(',');
     setDoc(doc(notificationsCol), {
       recipient: assignee,
       type: 'workload_spike',
@@ -6473,6 +6487,12 @@
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify workload spike', e); });
+    // Stamped on every task in the cluster (not just one) so a later check sees the whole group
+    // as already-handled regardless of which member it looks at first.
+    groupTasks.forEach(function (t) {
+      setDoc(doc(notificationDedupCol, t.id), { workloadSpikeFor: signature }, { merge: true })
+        .catch(function (e) { console.error('Failed to persist workload spike dedup', e); });
+    });
   }
 
   function checkWorkloadSpikes() {
@@ -6487,8 +6507,14 @@
       Object.keys(byDeadline).forEach(function (deadline) {
         var group = byDeadline[deadline];
         if (group.length < 2) return;
-        var key = assignee + '|' + deadline + '|' + group.map(function (t) { return t.id; }).sort().join(',');
+        var signature = deadline + '|' + group.map(function (t) { return t.id; }).sort().join(',');
+        var key = assignee + '|' + signature;
         if (workloadSpikeWarned[key]) return;
+        // Every member already stamped with this exact cluster signature means some earlier
+        // session already sent this one -- a member missing it (new task joined the cluster, or
+        // this is the very first time) means it's genuinely new.
+        var alreadyPersisted = group.every(function (t) { return (notificationDedupByTaskId[t.id] || {}).workloadSpikeFor === signature; });
+        if (alreadyPersisted) { workloadSpikeWarned[key] = true; return; }
         workloadSpikeWarned[key] = true;
         notifyOnWorkloadSpike(assignee, deadline, group);
       });
@@ -6502,13 +6528,20 @@
      digest panel) but nothing proactively flags a deadline that's about to arrive -- someone who
      isn't currently looking at their own overdue list has no reason to know it's coming.
 
-     Deliberately a point check ("due in 0-2 days"), not a day-by-day countdown -- the same
-     dedup-by-key idiom as workloadSpikeWarned means a task only re-notifies if it stays in this
-     window across a page reload, which is an accepted minor inaccuracy exactly like that one, not
-     worth a Firestore-backed "already warned" flag for a reminder this low-stakes. Excludes
-     Review the same way dueUrgency/renderFocus do: once a task is sent off for review, the
-     assignee's own deadline clock isn't really running anymore, so reminding them about it would
-     be a false alarm about someone else's response time.
+     Deliberately a point check ("due in 0-2 days"), not a day-by-day countdown. Excludes Review
+     the same way dueUrgency/renderFocus do: once a task is sent off for review, the assignee's
+     own deadline clock isn't really running anymore, so reminding them about it would be a false
+     alarm about someone else's response time.
+
+     `deadlineReminderWarned` is only a same-render short-circuit -- the durable "already sent
+     this one" state is `notificationDedupByTaskId[id].deadlineReminderFor` (see firestore.rules'
+     comment on the `notificationDedup` collection). Without that persisted half, a task sitting
+     in the 0-2-day window across a page reload re-notified once per reload -- and this app
+     auto-reloads on every new deploy, so it re-fired once per deploy shipped while someone had
+     the app open. Reported directly, from a screenshot of the same "A deadline is coming up"
+     alert repeated six times in a row, which lined up exactly with six deploys shipped in one
+     session -- a real, recurring bug for anyone who keeps a tab open across a normal work day's
+     worth of releases, not a one-off dev-session artifact.
   ========================================================= */
   var DEADLINE_REMINDER_DAYS = 2;
   var deadlineReminderWarned = {};
@@ -6525,6 +6558,8 @@
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify deadline reminder', e); });
+    setDoc(doc(notificationDedupCol, task.id), { deadlineReminderFor: task.deadline }, { merge: true })
+      .catch(function (e) { console.error('Failed to persist deadline reminder dedup', e); });
   }
 
   function checkDeadlineReminders() {
@@ -6534,6 +6569,7 @@
       if (days === null || days < 0 || days > DEADLINE_REMINDER_DAYS) return;
       var key = t.id + '|' + t.deadline;
       if (deadlineReminderWarned[key]) return;
+      if ((notificationDedupByTaskId[t.id] || {}).deadlineReminderFor === t.deadline) { deadlineReminderWarned[key] = true; return; }
       deadlineReminderWarned[key] = true;
       notifyOnDeadlineApproaching(t, days);
     });
@@ -6556,6 +6592,12 @@
      Notifies the assignee, not "the reviewer" -- this app has no separate reviewer identity field
      (`reviewAudience` is Client/Internal, a label, not a person), so the assignee -- who put it in
      Review and is the one who'd actually chase a stalled sign-off -- is the useful recipient.
+
+     Like the other two: `reviewStaleWarned` is only a same-render short-circuit, and
+     `notificationDedupByTaskId[id].reviewStaleFor` (keyed on `updatedAt`, matching the in-memory
+     key) is what stops this re-notifying every time the app reloads while the task sits
+     unchanged in Review -- see checkDeadlineReminders' own comment for why that reload case is
+     common enough to matter (this app auto-reloads on every new deploy).
   ========================================================= */
   var REVIEW_STALE_DAYS = 3;
   var reviewStaleWarned = {};
@@ -6572,6 +6614,8 @@
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify stale review', e); });
+    setDoc(doc(notificationDedupCol, task.id), { reviewStaleFor: task.updatedAt }, { merge: true })
+      .catch(function (e) { console.error('Failed to persist stale review dedup', e); });
   }
 
   function checkStaleReviews() {
@@ -6581,6 +6625,7 @@
       if (days < REVIEW_STALE_DAYS) return;
       var key = t.id + '|' + t.updatedAt;
       if (reviewStaleWarned[key]) return;
+      if ((notificationDedupByTaskId[t.id] || {}).reviewStaleFor === t.updatedAt) { reviewStaleWarned[key] = true; return; }
       reviewStaleWarned[key] = true;
       notifyOnStaleReview(t, days);
     });
@@ -6593,6 +6638,11 @@
      rejected as normal/noisy, a deadline landing while genuinely away is the one that can't
      resolve itself). This just turns that same signal into a notification reaching the affected
      assignee directly, instead of only being visible to whoever happens to have the Gantt open.
+
+     Same reload-survival fix as the other two: `leaveClashWarned` is the same-render
+     short-circuit, `notificationDedupByTaskId[id].leaveClashFor` (keyed on `deadline`) is what
+     actually persists it -- see checkDeadlineReminders' own comment for the deploy-triggers-
+     reload reasoning this fixes.
   ========================================================= */
   var leaveClashWarned = {};
 
@@ -6609,6 +6659,8 @@
       at: new Date().toISOString(),
       read: false
     }).catch(function (e) { console.error('Failed to notify leave clash', e); });
+    setDoc(doc(notificationDedupCol, task.id), { leaveClashFor: task.deadline }, { merge: true })
+      .catch(function (e) { console.error('Failed to persist leave clash dedup', e); });
   }
 
   function checkLeaveClashes() {
@@ -6617,6 +6669,7 @@
       if (!isOnLeave(t.assignee, t.deadline)) return;
       var key = t.id + '|' + t.deadline;
       if (leaveClashWarned[key]) return;
+      if ((notificationDedupByTaskId[t.id] || {}).leaveClashFor === t.deadline) { leaveClashWarned[key] = true; return; }
       leaveClashWarned[key] = true;
       notifyOnLeaveClash(t);
     });
@@ -8833,6 +8886,8 @@
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
     if (unsubSuggestions) { unsubSuggestions(); unsubSuggestions = null; }
     if (unsubProjects) { unsubProjects(); unsubProjects = null; }
+    if (unsubNotificationDedup) { unsubNotificationDedup(); unsubNotificationDedup = null; }
+    notificationDedupByTaskId = {};
     if (unsubPeople) { unsubPeople(); unsubPeople = null; }
     teamPeople = [];
     if (unsubArchivedTasks) { unsubArchivedTasks(); unsubArchivedTasks = null; }
@@ -9021,6 +9076,17 @@
     }, function (err) {
       showToast('Project deadlines aren\'t loading: ' + err.message, 'error');
     });
+    // No renderAll() here -- this drives no UI, only whether the four checkX functions below
+    // decide to write a fresh notification. A brief window at startup where this hasn't loaded
+    // yet (before the tasks listener's own first snapshot) just means those checks proceed as if
+    // nothing had been sent before, same "accepted, minor, session-local inaccuracy" this file
+    // already accepts for the in-memory xWarned maps sitting alongside this.
+    unsubNotificationDedup = onSnapshot(notificationDedupCol, function (snap) {
+      notificationDedupByTaskId = {};
+      snap.docs.forEach(function (d) { notificationDedupByTaskId[d.id] = d.data(); });
+    }, function (err) {
+      console.error('notificationDedup listener error', err);
+    });
   }
 
   // A dot+count on the sidebar's own "Chat" link -- asked for directly ("does chat notifications
@@ -9203,7 +9269,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T17:04:22Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T17:13:30Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

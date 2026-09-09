@@ -602,6 +602,41 @@ to bottom:
        signal into a notification reaching the affected assignee directly. Doesn't touch leave
        *editing* at all — `canEditLeaveFor` (self-or-admin, matching the `people` collection's
        Firestore rule) is unchanged; this only reads existing leave data.
+     - **Fixed: all four re-notified once per deploy** — reported directly, from a screenshot of
+       the same "A deadline is coming up" alert repeated six times in the bell panel, which lined
+       up exactly with six deploys shipped that session. Root cause: each automation's `xWarned`
+       map (`workloadSpikeWarned`/`deadlineReminderWarned`/`reviewStaleWarned`/`leaveClashWarned`)
+       is in-memory only, so it reset on every page reload — but the underlying condition (a task
+       still due in 0-2 days, say) didn't, and this app auto-reloads on every new deploy (see
+       "Established patterns" in the top-level `CLAUDE.md`), so anyone with the app open across
+       several releases got re-notified about the same still-open thing once per release. Not a
+       one-off dev-session artifact: it would recur for a real user on any normal day with more
+       than one deploy.
+       - **Fix: a new `notificationDedup` collection**, one doc per task id, holding whichever of
+         `deadlineReminderFor`/`reviewStaleFor`/`leaveClashFor`/`workloadSpikeFor` apply — each
+         storing the exact value (`deadline`, `updatedAt`, or a cluster signature) the original
+         in-memory key was built from, so "already sent for this value" survives a reload the
+         same way the value itself would need to change for a fresh notification either way.
+         Loaded into `notificationDedupByTaskId` via its own `onSnapshot` alongside `unsubPeople`/
+         `unsubProjects`; each `xWarned` map is kept too, as the fast same-render short-circuit,
+         so a single render doesn't round-trip through this map's data more than once per task.
+       - **Deliberately its own collection, not new fields on `tasks`** — writing this
+         bookkeeping onto the task doc itself would hit the ownership-scoped `tasks` update rule
+         (see "Who can edit what" below): the person whose client happens to run the check is very
+         often not the task's creator, exactly the same reasoning `checkWorkloadSpikes` already
+         gives for not scoping itself to "the current viewer." `notificationDedup` is whole-team
+         read/write instead, same shape as the existing `projectTyping` collection — this is
+         automation bookkeeping, not task content, so it doesn't need per-owner scoping at all.
+       - **`checkWorkloadSpikes` stamps every task in a cluster**, not just one, with the same
+         cluster signature (`deadline|sorted-task-ids`) — a later check only treats the cluster as
+         already-handled if *every* member carries that exact signature, so a task joining an
+         existing cluster (a materially different pile-up, same as the original in-memory key's
+         own reasoning) still triggers a fresh notification even though its cluster-mates were
+         already stamped from before.
+       - **Known limit, accepted**: `notificationDedup` docs are never pruned when a task is
+         archived or deleted, so the collection grows by one small doc per task forever — the same
+         trade-off this file already accepts for the `activity` log, at a scale (one team's worth
+         of tasks) where it doesn't matter in practice.
    - **Filters persist across reloads** (`FILTERS_KEY = 'flowboard_filters'`, `loadFilters`/
      `persistFilters`/`restoreFilterControls`). Only the five known keys are read back, so a
      stale or hand-edited `localStorage` value can't inject anything else. Safe to persist

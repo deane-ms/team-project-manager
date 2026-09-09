@@ -227,6 +227,22 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // Durable "have we already sent this system alert" bookkeeping for the four reactive
+    // automations (checkDeadlineReminders/checkStaleReviews/checkLeaveClashes/
+    // checkWorkloadSpikes in index.html) -- one doc per task id. Their original in-memory-only
+    // dedup maps reset on every page reload, but the underlying condition (a task still due in
+    // 0-2 days, say) doesn't, and this app auto-reloads on every new deploy -- so a task that
+    // stayed "due soon" across several deploys re-notified once per reload (reported directly,
+    // from a screenshot showing the same "Pitch Deck" deadline reminder six times in a row,
+    // which lined up with six deploys shipped that session). Whole-team read/write like
+    // `projectTyping` above, deliberately NOT folded into the `tasks` collection's own
+    // ownership-scoped update rule -- this is automation bookkeeping, not task content, and the
+    // person whose client happens to run the check is very often not the task's creator (same
+    // reasoning `checkWorkloadSpikes` already documents), so it needs to stay writable by anyone.
+    match /notificationDedup/{taskId} {
+      allow read, write: if isMediashock();
+    }
+
     // Suggestions are a shared feedback board, same "whole team edits everything" model as
     // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
     // on the doc, not a subcollection, so there's nothing further to scope here).
