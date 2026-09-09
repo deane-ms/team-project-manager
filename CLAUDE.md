@@ -811,14 +811,14 @@ to bottom:
        into Review* — an error toast there would be near-constant noise for an outcome that was
        never really their permission to have in the first place. The assignee or an admin can
        always set it properly afterward via the label itself.
-     - **Superseded: task `update` is now open to the whole team** (see "Who can edit what
-       (ownership rules)" further down), so both write paths above now simply succeed for
-       anyone — the assignee-or-admin restriction this whole point describes, and the two
-       differently-handled denial paths right below it, no longer actually happen for
-       `reviewAudience`. Left as historical record of why it was ever treated as a special case,
-       not corrected in place, since the reasoning (a first pass opened it too wide, then was
-       asked to narrow it back) is exactly the kind of thing worth knowing if anyone ever
-       reintroduces per-field task ownership again.
+     - **This restriction lived through a brief fully-open interlude and is fully back now, just
+       creator-scoped instead of assignee-scoped.** Task `update` was briefly open to the whole
+       team (see "Who can edit what (ownership rules)" further down for the full history), during
+       which both write paths above simply succeeded for anyone and the two differently-handled
+       denial paths right below did nothing. That interlude ended — `reviewAudience` again falls
+       back to the general ownership check (now creator-or-admin-or-legacy-assignee, not
+       assignee-or-admin) since it isn't in the update rule's comments/status carve-out. The
+       "swallow vs. surface" split immediately below is live again for real denials.
      - **Two colors, deliberately not reused from anywhere else that colors a Board card**: blue
        for Client, zinc for Internal. Every other status/priority hue already means something
        specific on this exact row (rose/amber/sky = High/Medium/Low, purple = ready-for-review,
@@ -1741,6 +1741,17 @@ to bottom:
        already includes `filter`, so adding one here risked overwriting whatever properties an
        individual button's existing `transition` was actually covering (a bare CSS `transition`
        shorthand fully replaces the list, it doesn't merge with what's already declared).
+     - **`#focus-list`'s `hover:-translate-y-0.5` lift was getting clipped against the strip's
+       own top edge** (reported as "the animation for the focus of the day card when it moves up
+       is cropped"). Root cause: `#focus-list` only set `overflow-x: auto` (for the horizontal
+       card strip) and never touched `overflow-y` — but per the CSS spec, a horizontal-only
+       `overflow-x: auto`/`overflow-y: visible` combination isn't legal, so the browser silently
+       promotes the un-set axis from `visible` to `auto` too. With no top padding to spare, that
+       auto vertical scrollbox clipped the 2px hover-lift the instant a card tried to rise above
+       the container's own edge. Fixed with a small `pt-1.5` on `#focus-list`, not by touching the
+       card's own transform — worth remembering for any other `overflow-x-auto` strip that also
+       hosts a hover lift or similar upward transform (the People/Projects row strips don't use a
+       lift-on-hover, so they weren't affected, but a future one would hit the same clipping).
      - **`nudgeNotificationBell()`** shakes `#btn-notifications` once per snapshot when a new
        *unread* notification actually lands via the `notifications` `onSnapshot` listener —
        same `notifListenerReady`-gated "added after the first snapshot" detection
@@ -1867,6 +1878,14 @@ needs revisiting.
   a tiny stand-in wiring only the collapse/drawer/nav-click behavior under test, screenshotted in
   light, dark, collapsed, and mobile-drawer states. Still not a live-browser/Firestore check (no
   emulator in this environment) — worth a real click-through after deploying.
+- **Export/Import moved from the header's icon row into the sidebar nav** (direct request), as two
+  more `view-toggle-btn`-styled rows below a divider after Archived, `#btn-export`/`#btn-import`/
+  `#import-file-input` ids all unchanged so none of their click handlers needed touching. Reusing
+  `.view-toggle-btn` is purely cosmetic here — `setView`'s active-state toggle only ever matches
+  elements by their `data-view-btn` attribute, which these two buttons deliberately don't have, so
+  they get the same hover/tooltip look as a real nav item without ever being able to light up as
+  one. Moved because they're occasional whole-board backup/restore actions, not something reached
+  for as often as the header's bells or Add Task.
 - **Floating tooltips (`data-tooltip` + a `tooltip-right`/`tooltip-top` class) are JS-driven, not
   CSS.** Requested directly, for two spots reported in the same message: the sidebar's icon-only
   collapsed rail (nothing labels an icon once `.sidebar-label` is hidden) and a truncated Gantt
@@ -1992,11 +2011,13 @@ Four top-level collections, all flat (see `firestore.rules` for the actual acces
 client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 
 - **`tasks`** — one doc per *active* task, client-generated IDs (`uid()`, not Firestore auto-IDs).
-  Fields: name, project, priority, status, start/deadline dates, assignee, Drive link, checklist,
-  comments, time entries, plus a vestigial `dependsOn` (array of task ids — no editor,
-  round-tripped only; see "Task dependencies were removed" above). Read/create/update are open to
-  any `@mediashock.com.sg` account — see "Who can edit what (ownership rules)" below for the one
-  exception (`delete` stays scoped to the assignee, an admin, or an archive-move).
+  Fields: name, project, priority, status, start/deadline dates, assignee, `createdBy` (the
+  creator's display name, stamped once at creation — see "Who can edit what (ownership rules)"
+  below; absent on tasks saved before this field existed), Drive link, checklist, comments, time
+  entries, plus a vestigial `dependsOn` (array of task ids — no editor, round-tripped only; see
+  "Task dependencies were removed" above). Read/create are open to any `@mediashock.com.sg`
+  account; `update`/`delete` are ownership-scoped — see "Who can edit what (ownership rules)"
+  below for the current (creator-or-admin, with a legacy assignee-based fallback) shape.
   - **Archived tasks live in a separate `archivedTasks` collection, not in `tasks` with a flag.**
     `tasksCol` is loaded via one unfiltered `onSnapshot` on every single session — every tab open,
     reload, or reconnect re-downloads the *entire* collection — and archiving used to just stamp
@@ -2260,43 +2281,66 @@ decides what to move.
 
 ### Who can edit what (ownership rules)
 
-**Updating a task is open to the whole team again, regardless of assignee or admin status** —
-reverted on request ("allow other users to edit the task regardless of assignee or admin
-rights"). The board started this way (`allow read, write: if isMediashock()`), moved to an
-ownership-scoped model once the team grew past five (admin → anything, assignee → their own task,
-everyone else → comments/status only — kept below for context, since `DELETE` and `archivedTasks`
-still work this way), then moved back on this direct request. Reads were never restricted either
-way — everyone has always seen the whole board.
+**Task ownership now tracks who *created* the task, not who it's assigned to** — the third shape
+this rule has taken. The board started fully open (`allow read, write: if isMediashock()`), moved
+to an ownership-scoped model once the team grew past five (admin → anything, assignee → their own
+task, everyone else → comments/status only), briefly reverted to fully-open `update` on direct
+request ("allow other users to edit the task regardless of assignee or admin rights"), then moved
+to this creator-based model on a second, more deliberate request ("tasks can only be edited by
+the creator. Not a fully open model. And only admin can edit everything."). Reads were never
+restricted through any of this — everyone has always seen the whole board.
+
+**Why creator instead of assignee.** An assignee can be reassigned to someone who never touched
+the task, so "assignee can edit" started drifting from "the person who actually owns this task's
+content." The creator is a fact about the task that never changes. `taskData.createdBy` is
+stamped once, in `commitTaskSave`, only on the `!isEditing` (brand-new task) branch — from
+`auth.currentUser.displayName || auth.currentUser.email` — and never touched again on any
+subsequent edit, including by an admin.
+
+**Legacy fallback: tasks saved before `createdBy` existed have none.** There's no reliable way to
+know who really created an old task, so rather than making every pre-existing task admin-only
+forever, `firestore.rules`' `isCreator()`-then-`isAssignee()` fallback (`resource.data.createdBy
+== null && isAssignee(resource.data)`) treats those tasks exactly like the original
+assignee-based model. A task only "graduates" to creator-only once it's saved fresh with this
+field. Export/Import round-trips `createdBy` like any other field, so it survives a backup/restore
+(see the import handler's per-task sanitizer) — dropping it there would silently demote a
+re-imported task into the legacy bucket.
 
 | | tasks (`update`) | tasks (`delete`) |
 |---|---|---|
 | **admin** (`admins()` in `firestore.rules`) | anything | anything |
-| **assignee** | anything (same as everyone now) | their own task |
-| **anyone else** | anything | only via archiving (see below) |
+| **creator** (or assignee, if no `createdBy`) | anything | their own task |
+| **anyone else** | comments/status/completedAt/updatedAt only | only via archiving (see below) |
 
-- **This only widened `update` — `delete` kept the old ownership scoping**, since the request was
-  specifically to *edit* tasks, not to let anyone permanently delete anyone else's. A stricter
-  boundary on the more destructive operation was kept rather than assumed away by the broader ask.
-- **`reviewAudience` (the client/internal review label) lost its own narrower assignee-or-admin
-  restriction along with the rest** — it was never a separate rule, just a field the old update
-  rule's comments/status carve-out excluded (see "Review audience" elsewhere in this file for
-  the UI-side reasoning that no longer fully applies: `writeErrorMessage` on the badge-click path
-  will now simply succeed for anyone, and the drag-and-drop path's "swallow the denial silently"
-  branch has nothing left to swallow). Worth knowing this UI code still exists and is now
-  effectively dead for tasks — not removed, since the same `writeErrorMessage` helper is still
-  live for other things (see below).
+- **The comments/status carve-out is back, and it is load-bearing, not a nicety.** The update
+  rule is `isAdmin() || isCreator(...) || (legacy fallback) ||
+  changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])`. Without that last
+  clause, commenting, `@mentions`, every comment-driven notification, and dragging a card between
+  Board columns would all break for the whole team except the task's own creator. This is the
+  same carve-out the original ownership model had — it went away during the fully-open interlude
+  (nothing needed carving out of an unrestricted rule) and had to be reinstated here.
+- **`reviewAudience` is creator-scoped again as a side effect**, not a special case — it's simply
+  not in the carve-out's field list, so changing it falls back to the general
+  creator-or-admin-or-legacy-assignee check, same as before the open-`update` interlude (see
+  "Review audience" elsewhere in this file for the UI-side reasoning, which is fully live again).
 - **Archiving is allowed for everyone; a bare, unrecoverable delete is not.** Both are a `delete`
   on `tasks/{id}`, so the rule can't tell them apart by operation — it uses
   `existsAfter(/databases/$(database)/documents/archivedTasks/$(taskId))`, which reports state
   *after* the batch commits. Archive writes both halves in one `writeBatch`, a bare delete
   doesn't. This matters beyond neatness: `archiveCompletedTasks` archives the whole team's Done
   tasks in one atomic batch, and Firestore fails the *entire* batch if a single write is denied,
-  so an assignee-only archive rule would have broken that button for every non-admin.
-- **`isAssignee` matches a display name**, since that's what `tasks.assignee` has always held —
-  still relevant for the `delete` rule and for `archivedTasks` (unchanged by this reversal, still
-  ownership-scoped both ways: `update` is assignee-or-admin, `delete` mirrors the tasks rule
-  above). Someone whose Google display name doesn't match the assignee text still can't delete
-  their own task or edit an archived one; admins can always fix a wrong `people` display name.
+  so a creator-only archive rule would have broken that button for every non-admin/non-creator.
+- **`archivedTasks` mirrors the same creator-then-legacy-assignee pattern**, on both `update` and
+  `delete` — kept consistent with the active-task rule so a creator-but-not-assignee can act on
+  their own task whether it's active or archived (previously archived tasks were assignee-only,
+  which would have been an inconsistency with the new active-task rule).
+- **`isAssignee`/`isCreator` both match a display name**, since that's what `tasks.assignee` and
+  `tasks.createdBy` hold — a Google display name, with email as fallback for accounts with no
+  displayName set. Someone whose Google display name doesn't match either field still can't edit
+  their own task; admins can always fix a wrong `people` display name or step in directly.
+- **A "Created by X" line shows in the task modal header** (`#task-created-by`, populated in
+  `openTaskModal`) whenever `task.createdBy` exists — hidden for a fresh "Add Task" and for
+  legacy tasks with no creator recorded, rather than showing a misleading blank name.
 - **Admins are a hardcoded email list in the rules, not a `role` field** — a role in a document
   is only as safe as the rule guarding that document. Keep `admins()` identical to the sibling
   Content Hub's copy.
@@ -2304,11 +2348,12 @@ way — everyone has always seen the whole board.
   so replying *is* an update to someone else's doc). It was open to everyone only because
   `write` covers delete.
 - **Client-side, `writeErrorMessage(err, task)`** turns Firestore's bare
-  "Missing or insufficient permissions" into a sentence naming the assignee. Still wired into the
-  task-save and move-task handlers, but neither should actually trigger it for a task `update`
-  any more — that's now open to anyone signed in. Left in place rather than removed: it's a
-  cheap safety net if this rule is ever tightened again, and the same helper still means
-  something real for archived-task `update`s and other collections (`people`, `suggestions`).
+  "Missing or insufficient permissions" into a sentence naming the owner — `task.createdBy ||
+  task.assignee`, matching the rules file's own creator-then-assignee fallback, so the name shown
+  is always whoever the live rule would actually accept. Wired into the task-save and
+  move-task-column handlers; the client never pre-emptively disables the task modal based on
+  ownership — the form stays fully editable and Firestore's rule is the actual enforcement, with
+  this helper only turning a bare denial into a readable one.
 
 ### Auth
 

@@ -417,6 +417,25 @@
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
         <span class="sidebar-label truncate">Archived</span>
       </button>
+
+      <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
+
+      <!-- Moved out of the header's icon row (direct request) -- Export/Import are occasional
+           whole-board backup/restore actions, not something reached for as often as the bells
+           or Add Task, so they read better as rail items than as another button competing for
+           space next to notifications. Reuses .view-toggle-btn purely for matching hover/
+           tooltip styling; no data-view-btn attribute means setView's active-state toggle
+           (querySelectorAll('.view-toggle-btn')) just never matches these, so they never light
+           up as if they were a view. -->
+      <button id="btn-export" data-tooltip="Export" title="Export" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span class="sidebar-label truncate">Export</span>
+      </button>
+      <button id="btn-import" data-tooltip="Import" title="Import" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        <span class="sidebar-label truncate">Import</span>
+      </button>
+      <input type="file" id="import-file-input" accept="application/json" class="hidden">
     </nav>
 
     <!-- Account area anchored to the sidebar's bottom -- the one real relocation beyond "nav
@@ -520,13 +539,6 @@
             </div>
             <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
           </div>
-          <button id="btn-export" title="Export" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </button>
-          <button id="btn-import" title="Import" class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          </button>
-          <input type="file" id="import-file-input" accept="application/json" class="hidden">
           <button id="btn-add-task" class="inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card transition">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Task</span>
           </button>
@@ -548,7 +560,12 @@
           <span class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
         </div>
       </div>
-      <div id="focus-list" class="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1"></div>
+      <!-- pt-1.5 isn't decorative spacing -- overflow-x-auto forces the CSS overflow-y
+           computed value to auto too (a horizontal-only overflow-x is not a legal combo, so the
+           UA promotes overflow-y from its default "visible"), so without it the cards' own
+           hover:-translate-y-0.5 lift got clipped against the container's own top edge
+           (reported as "the animation is cropped when it moves up"). -->
+      <div id="focus-list" class="flex gap-3 overflow-x-auto pt-1.5 pb-2 -mx-1 px-1"></div>
     </section>
 
     <!-- ============ TOOLBAR: search / filters ============ -->
@@ -939,7 +956,14 @@
 <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
   <div class="bg-white dark:bg-zinc-800 w-full max-w-5xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">
     <div class="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
-      <h3 id="task-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Add Task</h3>
+      <div class="min-w-0">
+        <h3 id="task-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Add Task</h3>
+        <!-- Ownership moved from assignee to creator (see commitTaskSave/firestore.rules'
+             isCreator()) -- shown here since it's otherwise invisible who can actually edit a
+             task now. Hidden on a fresh "Add Task" and on any task saved before createdBy
+             existed, rather than showing a misleading blank/placeholder name. -->
+        <p id="task-created-by" class="hidden text-xs text-zinc-400 dark:text-zinc-500"></p>
+      </div>
       <div class="flex items-center gap-1">
         <button id="task-copy-link-btn" type="button" class="hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" title="Copy a link to this task card">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
@@ -4634,6 +4658,16 @@
     clearFieldErrors();
     editingTaskId = task ? task.id : null;
     document.getElementById('task-modal-title').textContent = task ? 'Edit Task' : 'Add Task';
+    // Hidden for a fresh "Add Task" and for any task saved before createdBy existed -- there's
+    // no reliable owner name to show for the latter (see firestore.rules' isCreator(), which
+    // falls back to the assignee for exactly this reason, and writeErrorMessage above).
+    var createdByEl = document.getElementById('task-created-by');
+    if (task && task.createdBy) {
+      createdByEl.textContent = 'Created by ' + task.createdBy;
+      createdByEl.classList.remove('hidden');
+    } else {
+      createdByEl.classList.add('hidden');
+    }
     document.getElementById('task-id').value = task ? task.id : '';
     document.getElementById('task-name').value = task ? task.name : '';
     document.getElementById('task-project').value = task ? task.project : '';
@@ -5738,6 +5772,15 @@
     if (!isEditing) {
       taskData.createdAt = taskData.updatedAt;
       taskData.comments = [];
+      // Requested directly ("tasks can only be edited by the creator, not a fully open model,
+      // and only admin can edit everything") -- ownership moved from `assignee` to whoever
+      // actually made the task, since an assignee can be reassigned to someone who never touched
+      // it, while the creator is a fact about the task that doesn't change. Only stamped on
+      // creation, never on an edit -- see firestore.rules' isCreator() for the matching
+      // enforcement, and its own comment on how a task saved before this field existed falls back
+      // to the old assignee-based rule instead of silently becoming admin-only forever.
+      var creatorUser = auth.currentUser;
+      taskData.createdBy = creatorUser ? (creatorUser.displayName || creatorUser.email) : null;
     }
 
     var saveBtn = document.getElementById('task-save-btn');
@@ -5953,8 +5996,12 @@
   // than as the app being broken. Any other error falls through to its real text unchanged.
   function writeErrorMessage(err, task) {
     if (!err || err.code !== 'permission-denied') return err ? err.message : 'Unknown error';
-    if (task && task.assignee) {
-      return 'Only ' + task.assignee + ' or an admin can change this task. You can still comment on it and move it between columns.';
+    // createdBy is the real owner under the current rule; a task saved before that field existed
+    // falls back to its assignee, matching firestore.rules' own isCreator()-then-isAssignee()
+    // fallback -- so this message always names whoever the live rule would actually accept.
+    var owner = task && (task.createdBy || task.assignee);
+    if (owner) {
+      return 'Only ' + owner + ' or an admin can change this task. You can still comment on it and move it between columns.';
     }
     return 'You do not have permission to change this. Ask an admin if you need to.';
   }
@@ -8194,6 +8241,10 @@
               dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter(function (id) { return typeof id === 'string'; }) : [],
               archivedAt: (t.archivedAt && !isNaN(new Date(t.archivedAt).getTime())) ? t.archivedAt : null,
               createdAt: t.createdAt || new Date().toISOString(),
+              // Preserved like every other ownership-relevant field on an import round-trip --
+              // dropping it would silently move a re-imported task into the "no createdBy, falls
+              // back to assignee" bucket firestore.rules' isCreator() treats as legacy data.
+              createdBy: (t.createdBy && typeof t.createdBy === 'string') ? t.createdBy : null,
               updatedAt: new Date().toISOString()
             };
           });
@@ -8772,7 +8823,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T15:59:29Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T16:20:05Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -57,6 +57,17 @@ service cloud.firestore {
           || data.assignee == request.auth.token.email);
     }
 
+    // A task's actual creator, stamped once at creation time (see commitTaskSave in index.html)
+    // and never touched again -- unlike `assignee`, which can be reassigned to someone who never
+    // touched the task, `createdBy` stays a fact about the task forever. Tasks saved before this
+    // field existed have none, so every place this is used falls back to isAssignee() for those,
+    // rather than treating "no createdBy" as "nobody owns this."
+    function isCreator(data) {
+      return data.createdBy != null
+        && (data.createdBy == request.auth.token.name
+          || data.createdBy == request.auth.token.email);
+    }
+
     // The set of fields an update actually changes. `diff` compares values, not just presence,
     // so a client that rewrites the whole document (the task modal does exactly that, via
     // setDoc merge:true) still only reports the fields whose values really moved.
@@ -80,29 +91,44 @@ service cloud.firestore {
     // (admin -> anything, assignee -> their own task, everyone else -> comments/status only)
     // replaced it for a while.
     //
-    // Reverted back to open UPDATE on request ("allow other users to edit the task regardless
-    // of assignee or admin rights") -- the ownership model above is still the right shape for
-    // DELETE (below) and for archivedTasks, which stay assignee/admin-scoped; this only widens
-    // who can change fields on an active task. `reviewAudience`'s own narrower assignee-or-admin
-    // restriction (see CLAUDE.md's "Review audience" section) went with it -- it was never a
-    // separate rule, just a field this update rule's old carve-out excluded, so there's nothing
-    // left to exclude it from.
+    // Briefly reverted to open UPDATE on request ("allow other users to edit the task
+    // regardless of assignee or admin rights"), then reversed again on a second, more
+    // deliberate request ("tasks can only be edited by the creator... only admin can edit
+    // everything") -- this is that second reversal. Ownership now tracks `createdBy` rather
+    // than `assignee`, since an assignee can be reassigned to someone who never made the task,
+    // while the creator is a permanent fact about it. `isCreator()`'s own comment (above) covers
+    // the legacy-data fallback for tasks saved before this field existed.
+    //
+    // The comments/status carve-out (changedKeys().hasOnly([...])) is NOT a nicety -- without
+    // it, commenting, @mentions, and dragging a card between Board columns would break for the
+    // whole team except the task's own creator. This is the same carve-out the original
+    // ownership model had; it's back because the update rule is ownership-scoped again.
+    // `reviewAudience` naturally becomes creator-scoped again too, as a side effect of not being
+    // in that carve-out list -- no separate handling needed, same as before the open-UPDATE
+    // interlude.
     //
     // Reads stay unrestricted either way: everyone has always seen the whole board.
     match /tasks/{taskId} {
       allow read: if isMediashock();
       allow create: if isMediashock();
-      allow update: if isMediashock();
+      allow update: if isMediashock() && (
+        isAdmin()
+        || isCreator(resource.data)
+        || (resource.data.createdBy == null && isAssignee(resource.data))
+        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
+      );
       // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and
       // deletes it from here. Both halves land in the same batch, so existsAfter() -- which
       // reports the state after the whole batch commits -- can tell the two apart. That is
       // what lets anyone archive anyone's finished work (the bulk "Archive completed" button
       // touches the whole team's tasks in one atomic batch, and Firestore fails the entire
       // batch if a single write is denied) while a bare, unrecoverable delete stays limited
-      // to the assignee and admins. Costs one extra document read per delete; deletes are rare.
+      // to the creator (or, for pre-createdBy tasks, the assignee) and admins. Costs one extra
+      // document read per delete; deletes are rare.
       allow delete: if isMediashock() && (
         isAdmin()
-        || isAssignee(resource.data)
+        || isCreator(resource.data)
+        || (resource.data.createdBy == null && isAssignee(resource.data))
         || existsAfter(/databases/$(database)/documents/archivedTasks/$(taskId))
       );
     }
@@ -114,16 +140,21 @@ service cloud.firestore {
     // Mirror of the tasks rule, one direction reversed. Restoring is the same move run
     // backwards -- write into tasks, delete from here, one batch -- so the same existsAfter()
     // trick lets anyone restore something out of the archive while a permanent delete from
-    // the archive stays with the assignee and admins. Update is deliberately tighter than on
-    // `tasks`: there is no reason to comment on or re-status an archived task, so nothing
-    // needs the collaborative carve-out here.
+    // the archive stays with the creator (or assignee, for pre-createdBy tasks) and admins.
+    // Update is deliberately tighter than on `tasks`: there is no reason to comment on or
+    // re-status an archived task, so nothing needs the collaborative carve-out here.
     match /archivedTasks/{taskId} {
       allow read: if isMediashock();
       allow create: if isMediashock();
-      allow update: if isMediashock() && (isAdmin() || isAssignee(resource.data));
+      allow update: if isMediashock() && (
+        isAdmin()
+        || isCreator(resource.data)
+        || (resource.data.createdBy == null && isAssignee(resource.data))
+      );
       allow delete: if isMediashock() && (
         isAdmin()
-        || isAssignee(resource.data)
+        || isCreator(resource.data)
+        || (resource.data.createdBy == null && isAssignee(resource.data))
         || existsAfter(/databases/$(database)/documents/tasks/$(taskId))
       );
     }
