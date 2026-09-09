@@ -75,43 +75,24 @@ service cloud.firestore {
 
     // The board used to be a single shared document set -- every signed-in teammate could
     // read AND write every task ("the whole team edits one live board together"). That was
-    // right at five people who all knew what each other was doing. It is not right at eleven,
-    // several of whom are client-facing rather than production, so ownership now decides who
-    // can change what. Reads are untouched: everyone still sees the whole board.
+    // right at five people who all knew what each other was doing. It stopped being right at
+    // eleven, several of whom are client-facing rather than production, so an ownership model
+    // (admin -> anything, assignee -> their own task, everyone else -> comments/status only)
+    // replaced it for a while.
     //
-    // The board is READ-shared and WRITE-scoped. Anyone on the team sees everything; who can
-    // change a task depends on whose task it is.
+    // Reverted back to open UPDATE on request ("allow other users to edit the task regardless
+    // of assignee or admin rights") -- the ownership model above is still the right shape for
+    // DELETE (below) and for archivedTasks, which stay assignee/admin-scoped; this only widens
+    // who can change fields on an active task. `reviewAudience`'s own narrower assignee-or-admin
+    // restriction (see CLAUDE.md's "Review audience" section) went with it -- it was never a
+    // separate rule, just a field this update rule's old carve-out excluded, so there's nothing
+    // left to exclude it from.
     //
-    //   admin     -> anything
-    //   assignee  -> anything on their own task
-    //   everyone  -> comments and status only
-    //
-    // The comments carve-out is not a nicety, it is load-bearing: comments live INSIDE the
-    // task document (an arrayUnion on the `comments` field), so a plain "only the assignee can
-    // update" rule would have silently disabled feedback, @mentions and every notification
-    // that follows from them for everybody except one person per task.
-    //
-    // `status` + `completedAt` + `updatedAt` travel together because that is exactly what
-    // dragging a card between Board columns writes (updateTaskStatus, plus the completedAt
-    // stamp/clear from statusTransitionEffects). Listing them individually rather than
-    // allowing a looser rule keeps everything else -- name, dates, priority, checklist, time
-    // entries, and crucially `assignee` itself -- closed. Nobody can quietly reassign a task
-    // to themselves and then edit it freely.
+    // Reads stay unrestricted either way: everyone has always seen the whole board.
     match /tasks/{taskId} {
       allow read: if isMediashock();
       allow create: if isMediashock();
-      // reviewAudience (client/internal review label) is deliberately NOT in this carve-out --
-      // unlike status, it's restricted to the assignee or an admin, on request. Anyone can still
-      // drag a task into Review (that write is just `status`/`completedAt`/`updatedAt`, already
-      // covered below); the follow-up prompt asking who the review is for only actually saves if
-      // the person doing the dragging is the assignee or an admin. See CLAUDE.md's "Review
-      // audience" section for the UI-side reasoning (writeErrorMessage on the badge-click path,
-      // silent no-op on the drag-and-drop path).
-      allow update: if isMediashock() && (
-        isAdmin()
-        || isAssignee(resource.data)
-        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
-      );
+      allow update: if isMediashock();
       // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and
       // deletes it from here. Both halves land in the same batch, so existsAfter() -- which
       // reports the state after the whole batch commits -- can tell the two apart. That is

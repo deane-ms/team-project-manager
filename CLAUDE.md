@@ -744,6 +744,14 @@ to bottom:
        into Review* — an error toast there would be near-constant noise for an outcome that was
        never really their permission to have in the first place. The assignee or an admin can
        always set it properly afterward via the label itself.
+     - **Superseded: task `update` is now open to the whole team** (see "Who can edit what
+       (ownership rules)" further down), so both write paths above now simply succeed for
+       anyone — the assignee-or-admin restriction this whole point describes, and the two
+       differently-handled denial paths right below it, no longer actually happen for
+       `reviewAudience`. Left as historical record of why it was ever treated as a special case,
+       not corrected in place, since the reasoning (a first pass opened it too wide, then was
+       asked to narrow it back) is exactly the kind of thing worth knowing if anyone ever
+       reintroduces per-field task ownership again.
      - **Two colors, deliberately not reused from anywhere else that colors a Board card**: blue
        for Client, zinc for Internal. Every other status/priority hue already means something
        specific on this exact row (rose/amber/sky = High/Medium/Low, purple = ready-for-review,
@@ -1713,9 +1721,9 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
 - **`tasks`** — one doc per *active* task, client-generated IDs (`uid()`, not Firestore auto-IDs).
   Fields: name, project, priority, status, start/deadline dates, assignee, Drive link, checklist,
   comments, time entries, plus a vestigial `dependsOn` (array of task ids — no editor,
-  round-tripped only; see "Task dependencies were removed" above). Shared read/write for any
-  `@mediashock.com.sg` account — the whole team edits the same board by design, so there's no
-  per-task ownership check.
+  round-tripped only; see "Task dependencies were removed" above). Read/create/update are open to
+  any `@mediashock.com.sg` account — see "Who can edit what (ownership rules)" below for the one
+  exception (`delete` stays scoped to the assignee, an admin, or an archive-move).
   - **Archived tasks live in a separate `archivedTasks` collection, not in `tasks` with a flag.**
     `tasksCol` is loaded via one unfiltered `onSnapshot` on every single session — every tab open,
     reload, or reconnect re-downloads the *entire* collection — and archiving used to just stamp
@@ -1979,45 +1987,55 @@ decides what to move.
 
 ### Who can edit what (ownership rules)
 
-The board was `allow read, write: if isMediashock()` on `tasks` — every teammate could change
-everything — until the team grew past five. Reads are unchanged (everyone still sees the whole
-board); **writes are now scoped by ownership**:
+**Updating a task is open to the whole team again, regardless of assignee or admin status** —
+reverted on request ("allow other users to edit the task regardless of assignee or admin
+rights"). The board started this way (`allow read, write: if isMediashock()`), moved to an
+ownership-scoped model once the team grew past five (admin → anything, assignee → their own task,
+everyone else → comments/status only — kept below for context, since `DELETE` and `archivedTasks`
+still work this way), then moved back on this direct request. Reads were never restricted either
+way — everyone has always seen the whole board.
 
-| | tasks |
-|---|---|
-| **admin** (`admins()` in `firestore.rules`) | anything |
-| **assignee** | anything on their own task |
-| **anyone else** | `comments`, `status`, `completedAt`, `updatedAt` only |
+| | tasks (`update`) | tasks (`delete`) |
+|---|---|---|
+| **admin** (`admins()` in `firestore.rules`) | anything | anything |
+| **assignee** | anything (same as everyone now) | their own task |
+| **anyone else** | anything | only via archiving (see below) |
 
-- **The comments carve-out is load-bearing, not a nicety.** Comments live *inside* the task doc
-  (an `arrayUnion` on `comments`), so a plain assignee-only update rule silently disables
-  feedback, `@mentions` and every notification that follows, for everyone except one person per
-  task. Same reason `status`/`completedAt`/`updatedAt` are listed: that trio is exactly what
-  dragging a card between Board columns writes (`updateTaskStatus` + `statusTransitionEffects`).
-  Everything else — including **`assignee` itself** — stays closed, so nobody can reassign a task
-  to themselves and then edit it freely.
-- **Archiving is allowed for everyone; deleting is not.** Both are a `delete` on `tasks/{id}`, so
-  the rule can't tell them apart by operation — it uses
+- **This only widened `update` — `delete` kept the old ownership scoping**, since the request was
+  specifically to *edit* tasks, not to let anyone permanently delete anyone else's. A stricter
+  boundary on the more destructive operation was kept rather than assumed away by the broader ask.
+- **`reviewAudience` (the client/internal review label) lost its own narrower assignee-or-admin
+  restriction along with the rest** — it was never a separate rule, just a field the old update
+  rule's comments/status carve-out excluded (see "Review audience" elsewhere in this file for
+  the UI-side reasoning that no longer fully applies: `writeErrorMessage` on the badge-click path
+  will now simply succeed for anyone, and the drag-and-drop path's "swallow the denial silently"
+  branch has nothing left to swallow). Worth knowing this UI code still exists and is now
+  effectively dead for tasks — not removed, since the same `writeErrorMessage` helper is still
+  live for other things (see below).
+- **Archiving is allowed for everyone; a bare, unrecoverable delete is not.** Both are a `delete`
+  on `tasks/{id}`, so the rule can't tell them apart by operation — it uses
   `existsAfter(/databases/$(database)/documents/archivedTasks/$(taskId))`, which reports state
   *after* the batch commits. Archive writes both halves in one `writeBatch`, a bare delete
   doesn't. This matters beyond neatness: `archiveCompletedTasks` archives the whole team's Done
   tasks in one atomic batch, and Firestore fails the *entire* batch if a single write is denied,
   so an assignee-only archive rule would have broken that button for every non-admin.
-- **`isAssignee` matches a display name**, since that's what `tasks.assignee` has always held.
-  So **someone whose Google display name doesn't match the assignee text can't edit their own
-  task.** New tasks are safe (the roster picker writes an exact `people` name); older hand-typed
-  ones may not match and become admin-only until corrected. Admins can write any `people` row,
-  so a wrong display name is fixable without a rules deploy.
+- **`isAssignee` matches a display name**, since that's what `tasks.assignee` has always held —
+  still relevant for the `delete` rule and for `archivedTasks` (unchanged by this reversal, still
+  ownership-scoped both ways: `update` is assignee-or-admin, `delete` mirrors the tasks rule
+  above). Someone whose Google display name doesn't match the assignee text still can't delete
+  their own task or edit an archived one; admins can always fix a wrong `people` display name.
 - **Admins are a hardcoded email list in the rules, not a `role` field** — a role in a document
   is only as safe as the rule guarding that document. Keep `admins()` identical to the sibling
   Content Hub's copy.
-- `suggestions` delete is now author-or-admin (update stays open — replies are an embedded array,
+- `suggestions` delete is author-or-admin (update stays open — replies are an embedded array,
   so replying *is* an update to someone else's doc). It was open to everyone only because
   `write` covers delete.
 - **Client-side, `writeErrorMessage(err, task)`** turns Firestore's bare
-  "Missing or insufficient permissions" into a sentence naming the assignee *and* the two things
-  that are still open to everyone, so a denial reads as a boundary rather than a broken app.
-  Wired into the task-save and move-task handlers.
+  "Missing or insufficient permissions" into a sentence naming the assignee. Still wired into the
+  task-save and move-task handlers, but neither should actually trigger it for a task `update`
+  any more — that's now open to anyone signed in. Left in place rather than removed: it's a
+  cheap safety net if this rule is ever tightened again, and the same helper still means
+  something real for archived-task `update`s and other collections (`people`, `suggestions`).
 
 ### Auth
 
