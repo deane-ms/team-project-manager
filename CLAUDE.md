@@ -1612,6 +1612,63 @@ to bottom:
        The remove → forced reflow (`void btn.offsetWidth`) → re-add sequence lets the animation
        restart cleanly if a second notification arrives mid-shake, instead of the class-already-
        present no-op that a bare re-add would otherwise be.
+   - **Third polish pass** — chat-specific animations plus one general one (field-validation
+     shake), asked for as an open-ended "what other animations can I add" following by "build
+     all" once a shortlist was offered:
+     - **A new chat message fades/slides in on arrival** (`.chat-message-enter`,
+       `@keyframes chat-message-in`) — but only a message this *specific chat* hasn't rendered
+       before in this session, never the whole history on first open. `renderChatDetail` tracks
+       this itself: `chatSeenMessageIds[projectName]` is `undefined` the first time a project's
+       chat is rendered at all, in which case every message in it is marked seen with nothing
+       animated (opening a chat with history shouldn't play the whole conversation sliding in);
+       on every later render, only a message id not already in that project's seen-set is new,
+       and it's added to the set either way. The set is keyed by project name and never reset —
+       switching away and back to a chat shouldn't replay its entrance animation either.
+     - **The read-receipt tick's single-to-double flip** (`.chat-receipt-flip`,
+       `@keyframes chat-receipt-flip`) — same "don't animate what's already true on first load"
+       discipline as the Board's own "N today" bounce badge: `chatReceiptSeenState[messageId]`
+       has to be a known `false` (not `undefined`, i.e. not this message's first ever render) for
+       the flip to fire, computed inline in `chatMessageHtml` right where `seen` itself is
+       computed for the tick's read-receipts feature.
+     - **A reaction pill pops in** (reusing `.chat-star-pop`'s own keyframe rather than a near-
+       identical second one) the first render it exists on — `chatSeenReactionKeys`, keyed by
+       `messageId + '|' + emoji` so the same emoji on two different messages animates
+       independently, gated by the same per-chat "not on the very first render" flag threaded
+       through from `renderChatDetail` as the message-entrance animation above.
+     - **Favouriting a chat pops the star** (`.chat-star-pop`) — applied directly in
+       `#chat-project-list`'s click handler, not inferred from a render diff like the three
+       animations above. This one's simpler because the click itself is the moment worth
+       celebrating, and the exact button element being animated gets thrown away and rebuilt the
+       moment the Firestore round-trip the click triggers re-renders the list anyway — no
+       remove-reflow-add dance needed the way `nudgeNotificationBell`'s repeatable-trigger case
+       needs one, since there's no "already has the class" state to ever collide with.
+     - **The typing indicator is three bouncing dots, not a static "…"**
+       (`renderProjectChatTypingIndicator`, `.chat-typing-dots`, `@keyframes chat-typing-bounce`)
+       — the universal chat-app convention. Switched `#project-chat-typing` from `.textContent`
+       to `.innerHTML` to insert the dots' markup, so display names now go through `escapeHtml`
+       explicitly (textContent used to do this for free); the three dots stagger via inline
+       `animation-delay` set directly in the generated HTML rather than three separate named
+       classes.
+     - **The four chat-specific floating panels never actually got the header-dropdown pop-in
+       animation the first UI polish pass gave every *other* menu/panel in the app** — noticed
+       while building the animations above, not separately reported. `#chat-reaction-picker`,
+       `#chat-new-menu`, `#chat-forward-menu`, and `#chat-message-menu` all predate that first
+       pass's sweep (they were built afterward, as the chat feature grew) and were still
+       instant on/off. Each just needed `panel-pop-in` added to its static class list — the
+       animation restarts on its own whenever `display` flips from `none` to visible, so no JS
+       change was needed, same as every other panel that already had it.
+     - **An invalid required field shakes on a failed Save** (`.field-shake`,
+       `@keyframes field-shake`) — added to `setFieldError`, the one function every task-modal
+       validation failure already funnels through. Same remove-reflow-add sequence as
+       `nudgeNotificationBell`, needed here because a person can fail validation on the *same*
+       field twice in a row (fix one field, still leave another empty, Save again) — a bare
+       `classList.add` would silently no-op the second time since the class from the first
+       failure is often still present. `clearFieldErrors` also strips `field-shake` from every
+       field alongside the existing rose border/ring classes it already resets, for hygiene —
+       not strictly required, since the animation is one-shot and doesn't loop, but keeps a
+       cleared field's class list from accumulating a stale animation class it'll never need
+       again until the next real failure re-adds it.
+     - All seven join the existing `@media (prefers-reduced-motion: reduce)` block.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.

@@ -190,9 +190,38 @@
     100% { transform: scale(1); }
   }
   .done-today-bounce { animation: done-today-bounce 0.4s ease-out; }
+  /* A new chat message fading/sliding in on arrival -- only ever applied to a message this
+     chat's own render pass hasn't shown before (see chatMessageHtml/renderChatDetail's own
+     comment on tracking that), never to the whole history on a chat's first open. */
+  @keyframes chat-message-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .chat-message-enter { animation: chat-message-in 0.25s ease-out; }
+
+  /* The read-receipt tick's one-shot transition the instant it flips from single to double --
+     see chatMessageHtml's own comment on why this is a render-time diff, not a click handler. */
+  @keyframes chat-receipt-flip { 0% { transform: scale(0.6); opacity: 0.4; } 60% { transform: scale(1.25); } 100% { transform: scale(1); opacity: 1; } }
+  .chat-receipt-flip { animation: chat-receipt-flip 0.3s ease-out; }
+
+  /* Favouriting a chat -- applied directly in the click handler, not inferred from a render
+     diff, since the click itself is the moment worth celebrating (see the click handler's own
+     comment on why this one is simpler than the message/receipt animations above). */
+  @keyframes star-pop { 0% { transform: scale(1); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
+  .chat-star-pop { animation: star-pop 0.3s ease-out; }
+
+  /* Typing indicator dots -- see renderProjectChatTypingIndicator. Staggered via inline
+     animation-delay on each span (set in JS), not three separate named keyframes/classes. */
+  @keyframes chat-typing-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-3px); opacity: 1; } }
+  .chat-typing-dots span { display: inline-block; width: 4px; height: 4px; margin: 0 1px; border-radius: 50%; background: currentColor; animation: chat-typing-bounce 1s ease-in-out infinite; }
+
+  /* An invalid required field on Save -- see setFieldError. Remove-reflow-add is what lets this
+     restart on a second failed attempt at the same field, same pattern nudgeNotificationBell
+     already uses for the identical "might need to replay while already present" problem. */
+  @keyframes field-shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-3px); } 40%, 60% { transform: translateX(3px); } }
+  .field-shake { animation: field-shake 0.4s ease-in-out; }
+
   @media (prefers-reduced-motion: reduce) {
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
-    .checklist-just-checked, .bell-nudge { animation: none; }
+    .checklist-just-checked, .bell-nudge, .chat-message-enter, .chat-receipt-flip,
+    .chat-star-pop, .chat-typing-dots span, .field-shake { animation: none; }
   }
 
   /* Whole-project celebration -- see spawnConfetti/celebrateProjectComplete. No reduced-motion
@@ -1077,7 +1106,7 @@
 <!-- Shared "add a reaction" emoji picker for the Chat tab -- one instance, repositioned via JS
      (position: fixed) to sit under whichever message's "+" was clicked. Declared here, not
      inside #project-chat-log, so #project-chat-log's own overflow-y-auto can never clip it. -->
-<div id="chat-reaction-picker" hidden class="fixed z-40 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2">
+<div id="chat-reaction-picker" hidden class="fixed z-40 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2 panel-pop-in">
   <div id="chat-reaction-tabs" class="flex flex-wrap gap-0.5 mb-1.5" role="tablist" aria-label="Emoji categories"></div>
   <div id="chat-reaction-grid" class="grid grid-cols-8 gap-0.5 max-h-40 overflow-y-auto"></div>
 </div>
@@ -1087,12 +1116,12 @@
      positioned child of it, since that pane has its own overflow-hidden (for the rounded corners
      + scrolling list) which clipped this menu's text the moment a project name was long enough
      to need the wider width below -- reported directly against a screenshot. -->
-<div id="chat-new-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1"></div>
+<div id="chat-new-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
 
 <!-- "Forward to..." picker -- same fixed-position/off-DOM-parent reasoning as the two panels
      above, opened from the message context menu below (openChatForwardMenu). Lists existing
      chats to forward *into*, excluding whichever chat is currently open. -->
-<div id="chat-forward-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1">
+<div id="chat-forward-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in">
   <p class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Forward to…</p>
   <div id="chat-forward-options"></div>
 </div>
@@ -1101,7 +1130,7 @@
      show options"). Replaced the always-present hover row (reply/forward/delete icons) and the
      permanently-visible "add a reaction" dashed "+" -- both reported as visual clutter -- with a
      single context menu holding all of it, invisible until you actually ask for it. -->
-<div id="chat-message-menu" hidden class="fixed z-40 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-1.5">
+<div id="chat-message-menu" hidden class="fixed z-40 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-1.5 panel-pop-in">
   <div id="chat-message-menu-reactions" class="flex items-center gap-0.5 px-0.5 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-700"></div>
   <button type="button" id="chat-message-menu-reply" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
     <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
@@ -1438,6 +1467,14 @@
   var chatTypingTickTimer = null;
   var lastTypingHeartbeatAt = 0;
   var activeReactionMessageId = null;
+  // Animation bookkeeping for the chat log -- see renderChatDetail/chatMessageHtml's own
+  // comments for how each is used. All three are plain in-memory maps, not per-project state
+  // that needs resetting on selectChatProject: a message/reaction id is only ever added to one
+  // once actually rendered, and re-visiting a chat should NOT replay its entrance animation, so
+  // "already seen, forever, this session" is exactly the behavior wanted.
+  var chatSeenMessageIds = {}; // project name -> {messageId: true}, gates chat-message-in
+  var chatReceiptSeenState = {}; // messageId -> last known "read by someone" boolean, gates chat-receipt-flip
+  var chatSeenReactionKeys = {}; // "messageId|emoji" -> true, gates the reaction-pop class
   // The typing doc's own local cache -- both the render (every 2s, to age out a stale entry
   // even with no new snapshot) and the heartbeat write (to dedupe/replace this person's own
   // entry) read from here instead of a fresh getDoc, since a project has to already be selected
@@ -2052,6 +2089,12 @@
     if (starBtn) {
       // Checked before the row itself -- the star is a real <button> nested inside the row's
       // role="button" <div>, and this same delegated listener sees clicks on both.
+      // Applied directly here, not inferred from a render diff like the message/receipt/reaction
+      // animations above -- the click itself is the moment worth celebrating, and this exact
+      // button element gets thrown away and rebuilt the moment the Firestore round-trip this
+      // triggers re-renders the list anyway, so there's no "already has the class" case to guard
+      // against the way nudgeNotificationBell's remove-reflow-add dance exists for.
+      starBtn.classList.add('chat-star-pop');
       toggleFavoriteChat(starBtn.getAttribute('data-project'));
       return;
     }
@@ -2169,8 +2212,20 @@
 
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     var logEl = document.getElementById('project-chat-log');
+    // Gates the chat-message-in entrance animation to genuinely NEW messages only -- the first
+    // time this project's chat is rendered in this session, every message already in it gets
+    // marked seen without animating (opening a chat with history shouldn't play the whole
+    // conversation sliding in); only a message arriving on a LATER render (someone just sent it)
+    // is new. `seenIds` persists across renders for as long as the tab stays open, keyed by
+    // project so switching chats and back doesn't replay anything either.
+    var isFirstRenderForThisChat = !chatSeenMessageIds[currentChatProjectName];
+    var seenIds = chatSeenMessageIds[currentChatProjectName] || (chatSeenMessageIds[currentChatProjectName] = {});
     logEl.innerHTML = chat.length
-      ? chat.map(function (m) { return chatMessageHtml(m, myName, chat); }).join('')
+      ? chat.map(function (m) {
+          var isNewMessage = !isFirstRenderForThisChat && !seenIds[m.id];
+          seenIds[m.id] = true;
+          return chatMessageHtml(m, myName, chat, isNewMessage, isFirstRenderForThisChat);
+        }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No messages yet. Say hello.</p>';
     // Every screenshot thumbnail this fresh innerHTML just created starts with no `src` (see
     // chatMessageHtml's own comment) -- load each one now. Old blob URLs from the *previous*
@@ -2211,17 +2266,26 @@
   // preview can look up the original by id -- unlike task comments' real threaded tree
   // (renderCommentsLog), this stays flat/chronological; a reply is just a message carrying a
   // small quote of an earlier one, closer to WhatsApp's own quoted-reply than a nested thread.
-  function chatMessageHtml(m, myName, chat) {
+  function chatMessageHtml(m, myName, chat, isNewMessage, isFirstRenderForThisChat) {
     var mine = m.author === myName;
     var reactions = m.reactions || {};
     var usedReactions = Object.keys(reactions).filter(function (e) { return (reactions[e] || []).length; });
     // No more "+" add-reaction button here -- reacting at all now goes through the right-click
     // menu (openChatMessageMenu). An existing reaction pill is still directly clickable to
     // toggle your own, since that's real information already on screen, not an idle affordance.
+    //
+    // A pill pops in (chat-star-pop's own keyframe, reused here) the first render it exists on,
+    // same "not on this chat's very first render" gating as the message entrance animation --
+    // `chatSeenReactionKeys` is keyed by message+emoji rather than just emoji, so the same emoji
+    // used on two different messages animates independently.
     var reactionsHtml = usedReactions.map(function (emoji) {
       var names = reactions[emoji] || [];
       var mineReacted = names.indexOf(myName) !== -1;
+      var reactionKey = m.id + '|' + emoji;
+      var isNewReaction = !isFirstRenderForThisChat && !chatSeenReactionKeys[reactionKey];
+      chatSeenReactionKeys[reactionKey] = true;
       return '<button type="button" class="project-chat-reaction inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border ' +
+        (isNewReaction ? 'chat-star-pop ' : '') +
         (mineReacted
           ? 'border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10'
           : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600') +
@@ -2297,12 +2361,19 @@
         });
       }).map(function (p) { return p.name; });
       var seen = readers.length > 0;
-      receiptHtml = '<span class="' + (seen ? 'text-brand-500 dark:text-brand-400' : 'text-zinc-400 dark:text-zinc-500') + '" title="' + (seen ? 'Read by ' + escapeHtml(readers.join(', ')) : 'Sent') + '">' +
+      // Flips only on the render where this message actually crosses from unread to read --
+      // `chatReceiptSeenState[m.id]` must be a known `false` (not `undefined`, i.e. not this
+      // message's very first render), same "don't animate what's already true on page load"
+      // guard the Board's own "N today" bounce badge already uses for an identical reason.
+      var wasSeen = chatReceiptSeenState[m.id];
+      var justBecameSeen = seen && wasSeen === false;
+      chatReceiptSeenState[m.id] = seen;
+      receiptHtml = '<span class="' + (seen ? 'text-brand-500 dark:text-brand-400' : 'text-zinc-400 dark:text-zinc-500') + (justBecameSeen ? ' chat-receipt-flip' : '') + '" title="' + (seen ? 'Read by ' + escapeHtml(readers.join(', ')) : 'Sent') + '">' +
         '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (seen ? ICONS.checkTickDouble : ICONS.checkTick) + '</svg>' +
       '</span>';
     }
 
-    return '<div class="flex ' + (mine ? 'justify-end' : 'justify-start') + '" data-message-row="' + m.id + '">' +
+    return '<div class="flex ' + (mine ? 'justify-end' : 'justify-start') + (isNewMessage ? ' chat-message-enter' : '') + '" data-message-row="' + m.id + '">' +
       '<div class="max-w-[78%] flex flex-col ' + (mine ? 'items-end' : 'items-start') + '">' +
         nameRowHtml + bubbleHtml +
         '<span class="flex items-center gap-1 mt-0.5">' +
@@ -3024,9 +3095,15 @@
     var names = latestChatTypingEntries
       .filter(function (e) { return e.name !== myName && (now - e.at) < PROJECT_CHAT_TYPING_TTL_MS; })
       .map(function (e) { return e.name; });
-    document.getElementById('project-chat-typing').textContent = !names.length ? ''
-      : names.length === 1 ? names[0] + ' is typing…'
-      : names.join(', ') + ' are typing…';
+    // Bouncing dots instead of a plain "…" -- the universal chat-app convention, requested
+    // directly. Switched from `.textContent` to `.innerHTML` for this, so display names go
+    // through `escapeHtml` explicitly now (textContent used to do this implicitly).
+    var typingEl = document.getElementById('project-chat-typing');
+    if (!names.length) { typingEl.innerHTML = ''; return; }
+    var label = names.length === 1 ? escapeHtml(names[0]) + ' is typing' : escapeHtml(names.join(', ')) + ' are typing';
+    typingEl.innerHTML = '<span class="inline-flex items-center gap-1">' + label +
+      '<span class="chat-typing-dots"><span style="animation-delay:0s"></span><span style="animation-delay:0.15s"></span><span style="animation-delay:0.3s"></span></span>' +
+    '</span>';
   }
 
   function sendProjectChatTypingHeartbeat() {
@@ -4201,7 +4278,7 @@
     // The trigger buttons are in here too: enhanceSelect() hides the real <select> behind
     // sr-only, so an enhanced field's error outline lives on its trigger, not on the select.
     taskForm.querySelectorAll('input, select, button[aria-haspopup="listbox"]').forEach(function (el) {
-      el.classList.remove('border-rose-400', 'ring-2', 'ring-rose-200');
+      el.classList.remove('border-rose-400', 'ring-2', 'ring-rose-200', 'field-shake');
     });
   }
 
@@ -4212,6 +4289,13 @@
       ? (inputEl.parentElement.querySelector('button[aria-haspopup="listbox"]') || inputEl)
       : inputEl;
     visibleEl.classList.add('border-rose-400');
+    // Requested directly ("field-validation shake"). Remove-reflow-add, same pattern
+    // nudgeNotificationBell already uses, so a second failed Save attempt on the same still-empty
+    // field restarts the shake instead of silently no-op'ing (the class would otherwise already
+    // be present from the first attempt).
+    visibleEl.classList.remove('field-shake');
+    void visibleEl.offsetWidth;
+    visibleEl.classList.add('field-shake');
     // Walk up until we find the field's error <p>, rather than only checking the input's
     // immediate parent -- fields wrapped in a `.relative` div for an overlaid icon (Project)
     // keep their .field-error outside that wrapper, so the old one-level lookup silently
@@ -8299,7 +8383,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T03:54:28Z";
+  var CURRENT_BUILD_VERSION = "2026-09-09T15:02:16Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
