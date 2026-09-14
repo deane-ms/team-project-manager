@@ -92,20 +92,18 @@ service cloud.firestore {
     // replaced it for a while.
     //
     // Briefly reverted to open UPDATE on request ("allow other users to edit the task
-    // regardless of assignee or admin rights"), then reversed again on a second, more
-    // deliberate request ("tasks can only be edited by the creator... only admin can edit
-    // everything") -- this is that second reversal. Ownership now tracks `createdBy` rather
-    // than `assignee`, since an assignee can be reassigned to someone who never made the task,
-    // while the creator is a permanent fact about it. `isCreator()`'s own comment (above) covers
-    // the legacy-data fallback for tasks saved before this field existed.
+    // regardless of assignee or admin rights"), then reversed to creator-only on a second,
+    // more deliberate request ("tasks can only be edited by the creator... only admin can edit
+    // everything"). That creator-only shape then generated repeated "Only <person> or an admin
+    // can change this task" denials for teammates who were the ASSIGNEE but not the original
+    // creator -- reported directly from screenshots of the save-blocked toast -- so `isAssignee`
+    // is back as a full update grant, not just the legacy no-`createdBy` fallback it briefly was.
+    // Update is now creator-OR-assignee-OR-admin; `delete` stays creator-or-admin only (see
+    // below), same split as the original ownership model.
     //
     // The comments/status carve-out (changedKeys().hasOnly([...])) is NOT a nicety -- without
-    // it, commenting, @mentions, and dragging a card between Board columns would break for the
-    // whole team except the task's own creator. This is the same carve-out the original
-    // ownership model had; it's back because the update rule is ownership-scoped again.
-    // `reviewAudience` naturally becomes creator-scoped again too, as a side effect of not being
-    // in that carve-out list -- no separate handling needed, same as before the open-UPDATE
-    // interlude.
+    // it, commenting, @mentions, and dragging a card between Board columns would break for
+    // everyone who is neither the creator nor the assignee of a given task.
     //
     // Reads stay unrestricted either way: everyone has always seen the whole board.
     match /tasks/{taskId} {
@@ -114,7 +112,7 @@ service cloud.firestore {
       allow update: if isMediashock() && (
         isAdmin()
         || isCreator(resource.data)
-        || (resource.data.createdBy == null && isAssignee(resource.data))
+        || isAssignee(resource.data)
         || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
       );
       // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and

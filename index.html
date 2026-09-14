@@ -6122,17 +6122,20 @@
 
   // Firestore reports a rules denial as a bare "Missing or insufficient permissions", which
   // tells the person nothing about what they hit or what they can still do. Task edits are
-  // scoped to the assignee and admins (see firestore.rules), so say that instead -- including
-  // the two things that ARE still open to everyone, so the message reads as a boundary rather
-  // than as the app being broken. Any other error falls through to its real text unchanged.
+  // scoped to the creator, the assignee, and admins (see firestore.rules), so say that instead --
+  // including the two things that ARE still open to everyone, so the message reads as a boundary
+  // rather than as the app being broken. Any other error falls through to its real text unchanged.
   function writeErrorMessage(err, task) {
     if (!err || err.code !== 'permission-denied') return err ? err.message : 'Unknown error';
-    // createdBy is the real owner under the current rule; a task saved before that field existed
-    // falls back to its assignee, matching firestore.rules' own isCreator()-then-isAssignee()
-    // fallback -- so this message always names whoever the live rule would actually accept.
-    var owner = task && (task.createdBy || task.assignee);
-    if (owner) {
-      return 'Only ' + owner + ' or an admin can change this task. You can still comment on it and move it between columns.';
+    // Both createdBy and assignee are full update grants under the current rule (isCreator() ||
+    // isAssignee()), so name whichever of the two are actually set, not just one -- a task saved
+    // before createdBy existed only has assignee, and one where they're the same person shouldn't
+    // repeat the name twice.
+    var owners = [];
+    if (task && task.createdBy) owners.push(task.createdBy);
+    if (task && task.assignee && task.assignee !== task.createdBy) owners.push(task.assignee);
+    if (owners.length) {
+      return 'Only ' + owners.join(' or ') + ' or an admin can change this task. You can still comment on it and move it between columns.';
     }
     return 'You do not have permission to change this. Ask an admin if you need to.';
   }

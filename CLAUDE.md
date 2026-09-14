@@ -2128,7 +2128,8 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   entries, plus a vestigial `dependsOn` (array of task ids — no editor, round-tripped only; see
   "Task dependencies were removed" above). Read/create are open to any `@mediashock.com.sg`
   account; `update`/`delete` are ownership-scoped — see "Who can edit what (ownership rules)"
-  below for the current (creator-or-admin, with a legacy assignee-based fallback) shape.
+  below for the current (update: creator-or-assignee-or-admin; delete: creator-or-admin, with a
+  legacy assignee-based fallback) shape.
   - **Archived tasks live in a separate `archivedTasks` collection, not in `tasks` with a flag.**
     `tasksCol` is loaded via one unfiltered `onSnapshot` on every single session — every tab open,
     reload, or reconnect re-downloads the *entire* collection — and archiving used to just stamp
@@ -2455,48 +2456,53 @@ polishing an existing deadline grid. Four gaps, all requested together in one li
 
 ### Who can edit what (ownership rules)
 
-**Task ownership now tracks who *created* the task, not who it's assigned to** — the third shape
-this rule has taken. The board started fully open (`allow read, write: if isMediashock()`), moved
-to an ownership-scoped model once the team grew past five (admin → anything, assignee → their own
-task, everyone else → comments/status only), briefly reverted to fully-open `update` on direct
-request ("allow other users to edit the task regardless of assignee or admin rights"), then moved
-to this creator-based model on a second, more deliberate request ("tasks can only be edited by
-the creator. Not a fully open model. And only admin can edit everything."). Reads were never
-restricted through any of this — everyone has always seen the whole board.
+**`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
+started fully open (`allow read, write: if isMediashock()`), moved to an ownership-scoped model
+once the team grew past five (admin → anything, assignee → their own task, everyone else →
+comments/status only), briefly reverted to fully-open `update` on direct request ("allow other
+users to edit the task regardless of assignee or admin rights"), then moved to creator-only on a
+second, more deliberate request ("tasks can only be edited by the creator. Not a fully open
+model. And only admin can edit everything."). That creator-only shape then generated repeated
+"Only Calcium Lo / Zenon Kwok Ze Yong or an admin can change this task" save failures — reported
+directly, from screenshots of the blocked-save toast — for teammates who were the task's
+*assignee* but not its original creator, so `isAssignee()` was added back as a full grant
+alongside `isCreator()`, not merely the legacy no-`createdBy` fallback it briefly was. Reads were
+never restricted through any of this — everyone has always seen the whole board.
 
-**Why creator instead of assignee.** An assignee can be reassigned to someone who never touched
-the task, so "assignee can edit" started drifting from "the person who actually owns this task's
-content." The creator is a fact about the task that never changes. `taskData.createdBy` is
-stamped once, in `commitTaskSave`, only on the `!isEditing` (brand-new task) branch — from
-`auth.currentUser.displayName || auth.currentUser.email` — and never touched again on any
-subsequent edit, including by an admin.
+**`delete` stays narrower: creator-or-admin only (with a legacy assignee fallback), not
+assignee.** Losing edit access to your own reassigned task was the friction that got fixed here;
+letting anyone assigned a task also be able to permanently delete it was not asked for and stays
+out of scope — same split the original ownership model drew between "can edit" and "can destroy."
 
-**Legacy fallback: tasks saved before `createdBy` existed have none.** There's no reliable way to
-know who really created an old task, so rather than making every pre-existing task admin-only
-forever, `firestore.rules`' `isCreator()`-then-`isAssignee()` fallback (`resource.data.createdBy
-== null && isAssignee(resource.data)`) treats those tasks exactly like the original
-assignee-based model. A task only "graduates" to creator-only once it's saved fresh with this
-field. Export/Import round-trips `createdBy` like any other field, so it survives a backup/restore
-(see the import handler's per-task sanitizer) — dropping it there would silently demote a
-re-imported task into the legacy bucket.
+**Why creator exists at all, alongside assignee.** An assignee can be reassigned to someone who
+never touched the task, so relying on assignee alone for `delete` would let a brand-new assignee
+delete work they didn't create. The creator is a fact about the task that never changes.
+`taskData.createdBy` is stamped once, in `commitTaskSave`, only on the `!isEditing` (brand-new
+task) branch — from `auth.currentUser.displayName || auth.currentUser.email` — and never touched
+again on any subsequent edit, including by an admin.
+
+**Legacy fallback: tasks saved before `createdBy` existed have none.** For `delete` (where
+`isAssignee` isn't already a full grant), `firestore.rules`' `isCreator()`-then-`isAssignee()`
+fallback (`resource.data.createdBy == null && isAssignee(resource.data)`) treats those tasks
+exactly like the original assignee-based model. Export/Import round-trips `createdBy` like any
+other field, so it survives a backup/restore (see the import handler's per-task sanitizer) —
+dropping it there would silently demote a re-imported task into the legacy bucket.
 
 | | tasks (`update`) | tasks (`delete`) |
 |---|---|---|
 | **admin** (`admins()` in `firestore.rules`) | anything | anything |
-| **creator** (or assignee, if no `createdBy`) | anything | their own task |
+| **creator** | anything | their own task |
+| **assignee** (not creator) | anything | comments/status/completedAt/updatedAt only |
 | **anyone else** | comments/status/completedAt/updatedAt only | only via archiving (see below) |
 
-- **The comments/status carve-out is back, and it is load-bearing, not a nicety.** The update
-  rule is `isAdmin() || isCreator(...) || (legacy fallback) ||
+- **The comments/status carve-out still matters for everyone who is neither creator nor
+  assignee.** The update rule is `isAdmin() || isCreator(...) || isAssignee(...) ||
   changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])`. Without that last
   clause, commenting, `@mentions`, every comment-driven notification, and dragging a card between
-  Board columns would all break for the whole team except the task's own creator. This is the
-  same carve-out the original ownership model had — it went away during the fully-open interlude
-  (nothing needed carving out of an unrestricted rule) and had to be reinstated here.
-- **`reviewAudience` is creator-scoped again as a side effect**, not a special case — it's simply
-  not in the carve-out's field list, so changing it falls back to the general
-  creator-or-admin-or-legacy-assignee check, same as before the open-`update` interlude (see
-  "Review audience" elsewhere in this file for the UI-side reasoning, which is fully live again).
+  Board columns would break for the rest of the team.
+- **`reviewAudience` follows the same general update check** — it's not in the carve-out's field
+  list, so changing it requires creator, assignee, or admin (see "Review audience" elsewhere in
+  this file for the UI-side reasoning).
 - **Archiving is allowed for everyone; a bare, unrecoverable delete is not.** Both are a `delete`
   on `tasks/{id}`, so the rule can't tell them apart by operation — it uses
   `existsAfter(/databases/$(database)/documents/archivedTasks/$(taskId))`, which reports state
@@ -2504,10 +2510,10 @@ re-imported task into the legacy bucket.
   doesn't. This matters beyond neatness: `archiveCompletedTasks` archives the whole team's Done
   tasks in one atomic batch, and Firestore fails the *entire* batch if a single write is denied,
   so a creator-only archive rule would have broken that button for every non-admin/non-creator.
-- **`archivedTasks` mirrors the same creator-then-legacy-assignee pattern**, on both `update` and
-  `delete` — kept consistent with the active-task rule so a creator-but-not-assignee can act on
-  their own task whether it's active or archived (previously archived tasks were assignee-only,
-  which would have been an inconsistency with the new active-task rule).
+- **`archivedTasks` still mirrors the creator-then-legacy-assignee pattern on both `update` and
+  `delete`**, deliberately not extended to the new assignee-can-update grant — nothing in the app
+  ever calls `updateDoc` on `archivedTasks` (restoring is a set-then-delete move, not an update),
+  so this match is defensive only and wasn't part of the reported problem.
 - **`isAssignee`/`isCreator` both match a display name**, since that's what `tasks.assignee` and
   `tasks.createdBy` hold — a Google display name, with email as fallback for accounts with no
   displayName set. Someone whose Google display name doesn't match either field still can't edit
