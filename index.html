@@ -8309,7 +8309,11 @@
             '<span class="font-semibold text-indigo-600 dark:text-indigo-400">AI Product Insights</span> · ' + formatShortDate(localDateOf(s.date)) +
             (s.aiCategory ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300">' + escapeHtml(s.aiCategory) + '</span>' : '') +
             (s.aiPriority && PRIORITY_META[s.aiPriority] ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + PRIORITY_META[s.aiPriority].badge + '">' + escapeHtml(s.aiPriority) + '</span>' : '') +
-            (s.aiEffort ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">' + escapeHtml(s.aiEffort) + '</span>' : '') +
+            // A clock icon (the same one this app already uses for logged time elsewhere) tells
+            // this chip apart from the priority chip right next to it at a glance -- both can
+            // read "Medium," and reported directly as confusing without something disambiguating
+            // "medium priority" from "medium-sized effort" beyond the parenthetical text alone.
+            (s.aiEffort ? '<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">' + svgIcon('clock', 'w-2.5 h-2.5') + escapeHtml(s.aiEffort) + '</span>' : '') +
           '</p>' +
           (s.aiTitle ? '<p class="text-sm font-bold text-zinc-800 dark:text-zinc-100 mt-1">' + escapeHtml(s.aiTitle) + '</p>' : '') +
           '<p class="text-sm text-zinc-700 dark:text-zinc-200 mt-1">' + escapeHtml(s.aiExpectedImpact || s.text) + '</p>' +
@@ -9707,7 +9711,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T13:36:09Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T13:40:35Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
