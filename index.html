@@ -92,6 +92,16 @@
   [data-column] { transition: background-color 0.15s ease; }
   .col-drop-target { background-color: rgba(99, 102, 241, 0.06); outline: 2px dashed #a5b4fc; outline-offset: -4px; }
   .dark .col-drop-target { background-color: rgba(99, 102, 241, 0.1); outline-color: #4f46e5; }
+  /* Gantt row hover: the sticky label cell (grid-column:1) and the day-grid cell
+     (grid-column:2/-1) are separate sibling divs, not one row element, so a plain CSS :hover
+     on either only ever lights up that one half. Both get data-gantt-row="<r>" and a JS
+     delegation (see the "Gantt row hover" listeners) toggles this class on both at once.
+     Solid colors, not rgba -- the label cell is `sticky` and needs to stay fully opaque over
+     bars scrolling underneath it (same reasoning as the frozen header row above), and a solid
+     background-color assignment simply replaces bg-white/dark:bg-zinc-800 rather than
+     compositing over it, so opacity is never a question here. */
+  .gantt-row-hover { background-color: #fafafa; }
+  .dark .gantt-row-hover { background-color: #3f3f46; }
   .checklist-item-row { transition: opacity 0.15s ease, box-shadow 0.15s ease; }
   .checklist-item-row.dragging { opacity: 0.5; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
   .checklist-item-row.drag-over { outline: 2px dashed #a5b4fc; outline-offset: -2px; }
@@ -3818,7 +3828,69 @@
   var PRIORITIES = ['High', 'Medium', 'Low'];
   var PRIORITY_WEIGHT = { High: 3, Medium: 2, Low: 1 };
   var GANTT_DAY_WIDTH = 36;
-  var GANTT_LABEL_WIDTH = 300;
+  // The Task label column used to be a flat 300px -- reported directly as too narrow for this
+  // team's long project names (the same "271231[Client]Campaign..." naming convention that
+  // forced the Chat list column to become resizable too). Same drag-to-resize idea as
+  // CHAT_LIST_WIDTH above, persisted the same way (a bare localStorage read/write, a personal
+  // display preference, not shared team state) -- see the resize handle wiring further down.
+  var GANTT_LABEL_WIDTH_KEY = 'flowboard_gantt_label_width';
+  var GANTT_LABEL_WIDTH_MIN = 180;
+  var GANTT_LABEL_WIDTH_MAX = 600;
+  var GANTT_LABEL_WIDTH_DEFAULT = 300;
+  function loadGanttLabelWidth() {
+    try {
+      var v = parseInt(localStorage.getItem(GANTT_LABEL_WIDTH_KEY), 10);
+      if (v >= GANTT_LABEL_WIDTH_MIN && v <= GANTT_LABEL_WIDTH_MAX) return v;
+    } catch (e) { /* ignore */ }
+    return GANTT_LABEL_WIDTH_DEFAULT;
+  }
+  var GANTT_LABEL_WIDTH = loadGanttLabelWidth();
+
+  // Gantt label column resize -- dragging #gantt-resize-handle (see renderGantt). Deliberately
+  // does NOT call renderGantt() on every mousemove: that would rebuild every row's HTML and
+  // recompute dayWidth against the shrinking/growing available width dozens of times a second.
+  // Instead the drag only touches the two things that actually need to move live -- the grid's
+  // own column-1 track width and the resize handle itself -- reading dayWidth/totalDays back off
+  // #gantt-grid's own data attributes (stamped there at render time) rather than recomputing
+  // them. A single real renderGantt() on mouseup is what finalizes everything (day-column widths
+  // included) against the new label width and persists it.
+  (function () {
+    var dragging = false;
+    var containerLeft = 0;
+    document.addEventListener('mousedown', function (e) {
+      if (!e.target.closest('#gantt-resize-handle')) return;
+      dragging = true;
+      e.preventDefault();
+      document.body.style.userSelect = 'none';
+      var wrap = document.getElementById('gantt-wrap');
+      var scrollWrap = wrap && wrap.firstElementChild;
+      containerLeft = scrollWrap ? scrollWrap.getBoundingClientRect().left : 0;
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      GANTT_LABEL_WIDTH = Math.min(GANTT_LABEL_WIDTH_MAX, Math.max(GANTT_LABEL_WIDTH_MIN, e.clientX - containerLeft));
+      var grid = document.getElementById('gantt-grid');
+      if (!grid) return;
+      var dayWidth = parseInt(grid.getAttribute('data-day-width'), 10);
+      var totalDays = parseInt(grid.getAttribute('data-total-days'), 10);
+      grid.style.gridTemplateColumns = GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px)';
+      var handle = document.getElementById('gantt-resize-handle');
+      if (handle) handle.style.left = (GANTT_LABEL_WIDTH - 3) + 'px';
+      var todayLine = document.getElementById('gantt-today-line');
+      if (todayLine) {
+        var todayIndex = parseInt(todayLine.getAttribute('data-today-index'), 10);
+        todayLine.style.left = (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px';
+      }
+    });
+    document.addEventListener('mouseup', function () {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      try { localStorage.setItem(GANTT_LABEL_WIDTH_KEY, String(Math.round(GANTT_LABEL_WIDTH))); } catch (e) { /* ignore */ }
+      if (currentView === 'gantt') renderGantt();
+    });
+  })();
+
   var GANTT_PROGRESS_KEY = 'flowboard_gantt_progress';
   var ganttShowProgress = (function () {
     try { return localStorage.getItem(GANTT_PROGRESS_KEY) !== 'off'; } catch (e) { return true; }
@@ -7195,7 +7267,10 @@
     // top-0 / top-8 are correct; if the frozen row ever needs to clear the app header, the fix
     // is to make the chart its own scroll container, not to offset the sticky cells.
     var html = '';
-    html += '<div class="relative" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
+    // data-day-width/data-total-days let the resize-drag handler below rebuild this exact
+    // grid-template-columns string live, without re-running the whole render on every
+    // mousemove -- see "Gantt label column resize" further down.
+    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
 
     // corner cells
     //
@@ -7204,6 +7279,7 @@
     // (z-30) -- z-40 vs z-40 did exactly that once, with this corner cell winning the tie and
     // covering the mobile nav menu.
     //
+    //   27  label column resize handle  has to out-grab the corner cell it overlaps
     //   26  corner cell ...... frozen both ways, so it must out-rank both frozen edges
     //   25  month + day header  the frozen top row
     //   20  task label column   the frozen left column
@@ -7218,6 +7294,16 @@
     // label now, which is the correct reading anyway: a frozen top row is frozen against
     // everything, including the other frozen edge.
     html += '<div class="sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
+
+    // Label column resize handle -- a thin strip pinned to the column-1/column-2 boundary,
+    // sticky the same way the label column itself is (position:sticky;left) so it stays grabbable
+    // at that boundary regardless of horizontal scroll. Spans every row via grid-row so it can be
+    // grabbed anywhere down the chart, not just in the header. Invisible at rest (the existing
+    // border-r on the label cells already marks the boundary); only tints on hover, same
+    // affordance-on-hover idea as a spreadsheet's column-resize edge.
+    html += '<div class="sticky group cursor-col-resize" id="gantt-resize-handle" title="Drag to resize the Task column" style="left:' + (GANTT_LABEL_WIDTH - 3) + 'px;top:0;grid-column:1;grid-row:1 / span ' + (2 + list.length) + ';width:6px;z-index:27;">' +
+      '<div class="w-px h-full mx-auto bg-transparent group-hover:bg-brand-400 dark:group-hover:bg-brand-500"></div>' +
+    '</div>';
 
     // month header row
     var colCursor = 2;
@@ -7264,7 +7350,7 @@
       // which mark meant what (reported directly). This way the color is attached straight to
       // the readable text it identifies; the dot alone still means priority/status, same as it
       // always has everywhere else in the app.
-      html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+      html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" data-gantt-row="' + r + '" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-xs font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
@@ -7299,7 +7385,7 @@
         ? ' · Deadline lands while ' + t.assignee + ' is away'
         : '';
 
-      html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
+      html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" data-gantt-row="' + r + '" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
       // Emitted before the bar so the bar paints over it -- neither sets a z-index, so DOM order
       // decides, the same way the day-grid content already sits under the bars.
       rowLeaveBands.forEach(function (seg) {
@@ -7327,7 +7413,7 @@
     });
 
     // today vertical line
-    html += '<div class="absolute bg-rose-400/70 pointer-events-none" style="left:' + (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
+    html += '<div class="absolute bg-rose-400/70 pointer-events-none" id="gantt-today-line" data-today-index="' + todayIndex + '" style="left:' + (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
 
     html += '</div>';
 
@@ -8826,6 +8912,33 @@
   document.addEventListener('focusout', function (e) {
     if (e.target.closest('[data-tooltip]')) hideTooltip();
   });
+
+  // Gantt row hover: the label cell (grid-column:1) and the day-grid cell (grid-column:2/-1)
+  // are separate sibling divs sharing a grid row, not one element -- a plain CSS :hover on
+  // either only ever lights up that one half. Both carry data-gantt-row="<r>" (see renderGantt),
+  // so this delegation toggles .gantt-row-hover on every element sharing that value together.
+  document.addEventListener('mouseover', function (e) {
+    var target = e.target.closest('[data-gantt-row]');
+    if (!target) return;
+    var row = target.getAttribute('data-gantt-row');
+    document.querySelectorAll('[data-gantt-row="' + row + '"]').forEach(function (el) {
+      el.classList.add('gantt-row-hover');
+    });
+  });
+  document.addEventListener('mouseout', function (e) {
+    var target = e.target.closest('[data-gantt-row]');
+    if (!target) return;
+    var row = target.getAttribute('data-gantt-row');
+    // Moving from the label cell to the day-grid cell (or back) fires mouseout on one and
+    // mouseover on the other -- relatedTarget still belongs to the same row, so don't clear
+    // the highlight for that hand-off, only when the pointer actually leaves both cells.
+    var stillInRow = e.relatedTarget && e.relatedTarget.closest &&
+      e.relatedTarget.closest('[data-gantt-row="' + row + '"]');
+    if (stillInRow) return;
+    document.querySelectorAll('[data-gantt-row="' + row + '"]').forEach(function (el) {
+      el.classList.remove('gantt-row-hover');
+    });
+  });
   // A shown tooltip's position is computed once, at show time -- cheap insurance against it
   // floating over content that has since scrolled or resized out from under it.
   document.addEventListener('scroll', hideTooltip, true);
@@ -9285,7 +9398,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-09T17:19:43Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T06:08:30Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
