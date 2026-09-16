@@ -2305,7 +2305,11 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   `orderBy` alongside the `where`, to avoid needing a composite index for a query this simple.
 - **`suggestions`** — one doc per suggestion, with replies as an embedded array
   (`{text, author, date}` objects, updated via full-array-rewrite on `updateDoc`) rather than a
-  subcollection. Shared read/write like `tasks`.
+  subcollection. Shared read/write like `tasks`, with one carve-out: a doc can only be *created*
+  with `source: 'ai'` by an admin — see "AI Product Insights (Suggestions tab)" below.
+- **`aiSuggestionImports`** — one doc per imported GitHub issue number, dedup bookkeeping for the
+  AI Product Insights import flow (below). Same shape as `notificationDedup`, but write is
+  admin-only rather than whole-team, since only an admin can trigger an import at all.
 - **`projectTyping`** — ephemeral "who's typing" presence for a project's group chat (see
   "Project group chat" above), one doc per project sharing that project's own `projects/{id}`
   doc id: `{entries: [{name, at}]}`. Whole-team read/write, same as `projects`. Not queried with
@@ -2544,8 +2548,16 @@ auth-gate/app-root visibility.
 
 ## Automated UI/UX optimization reviews
 
+**Stale as of 2026-09-16: this routine no longer exists.** A direct lookup against
+`trig_01LFPtkH67p4A3HKqjQMrUb2` returns `404 Trigger not found`, and this account currently has
+zero scheduled routines registered at all beyond the new one below. Whether it was deleted or
+simply expired isn't known — either way, nothing has fired on the schedule below for some time,
+which is the actual explanation if this repo's issue tracker looks emptier than the section below
+would suggest. Left un-recreated for now (a deliberate call, not an oversight) — the section below
+documents what it *used* to do, in case someone wants to bring it back later.
+
 A scheduled cloud routine (`https://claude.ai/code/routines/trig_01LFPtkH67p4A3HKqjQMrUb2`, cron
-`0 1-21/5 * * *`, ~5 runs/day) reviews this repo unattended and opens a GitHub issue titled
+`0 1-21/5 * * *`, ~5 runs/day) used to review this repo unattended and open a GitHub issue titled
 "UI/UX Optimization Report — <date>" when it finds something concrete — categorized 🔴 Critical /
 🟡 Refinement / 🔵 Feature Optimization, citing specific function/line. It skips creating a new
 issue if one from the last 24h already exists, and opens nothing at all if it found nothing real.
@@ -2571,3 +2583,100 @@ always a separate, manually-triggered step**: open the GitHub issue, then ask Cl
 interactive session (e.g. "implement items 1 and 3 from issue #N") — that request, in a real
 conversation, is the actual approval gate. Manage/disable the schedule at
 `https://claude.ai/code/routines`.
+
+## AI Product Insights (Suggestions tab)
+
+A second scheduled cloud routine, **"Product Evaluator — Suggestions feed"**
+(`https://claude.ai/code/routines/trig_01Tv9Mrrx9eDiaSUQ23PmYkL`, cron `0 9 * * 1`, weekly, Monday
+09:00 UTC), acts as a Product Manager/UX strategist over this specific app and produces 3-5
+prioritized product suggestions, landing in the Suggestions tab as clearly AI-flagged cards —
+never silently mixed in with real teammate posts.
+
+**Why this is human-in-the-loop, not a direct write.** The routine runs unattended with nobody
+signed in, and this app has no service-account/admin Firestore credential set up for anything
+outside a real browser session — the same infrastructure gap already documented for the
+workload-spike/deadline-reminder automations elsewhere in this file. So the routine never touches
+Firestore directly; it can only file a GitHub issue (or, if that fails, push a notification — see
+below), and nothing lands in the live `suggestions` collection until a signed-in admin reviews it
+in the app and clicks Import. This was a deliberate choice over generating a service-account key
+for the routine, weighed directly against the alternative: a service account typically bypasses
+Firestore security rules entirely, which would have been a materially bigger, riskier change than
+this app has taken on anywhere else.
+
+**What the routine does each run** (self-contained prompt, since a cloud session starts with zero
+conversation context):
+1. Reads this file in full — it's an unusually detailed, real log of "reported directly" user
+   pain points and feature history — plus `git log` for what's actively in flight, so it doesn't
+   suggest work that collides with something already underway.
+2. Runs 2-3 targeted web searches on recent, concrete feature moves from comparable tools
+   (Monday.com, TeamGantt, Asana, ClickUp, Linear) — instructed to avoid generic advice.
+3. Checks the last 14 days of open `ai-suggestions`-labeled issues and avoids re-posting the same
+   idea unless escalating it with new evidence.
+4. Outputs a plain-English summary plus a JSON block (schema below) and files it as a GitHub
+   issue titled "AI Product Suggestions — `<date>`", labeled `ai-suggestions`.
+
+```
+{
+  "suggestions": [
+    {
+      "id": "SUGG-001",
+      "category": "UX Improvement | Feature Addition | Performance | Workflow Automation",
+      "title": "Short, catchy headline (Max 8 words)",
+      "priority": "High | Medium | Low",
+      "context_trigger": "What behavior or competitor feature triggered this.",
+      "proposed_solution": "2-3 sentences, naming exact index.html functions/sections.",
+      "expected_impact": "Expected metric or UX improvement.",
+      "effort_estimate": "Low (1-2 days) | Medium (1-2 weeks) | High (1+ month)"
+    }
+  ]
+}
+```
+
+**The same GitHub issue-creation permissions gap documented above for the UI/UX routine applies
+here too — same repo, same GitHub App.** If `gh issue create` fails, the routine falls back to a
+push notification carrying the same summary and JSON instead of silently dropping the findings,
+identical fallback pattern to the UI/UX routine. This is *why* the app-side import flow (below)
+supports pasting JSON directly, not just fetching from GitHub — the fallback path still needs
+somewhere to land.
+
+**App-side import** (`AI PRODUCT SUGGESTIONS IMPORT` in index.html's module script, Suggestions
+view): an admin-only bar above the suggestions list —
+- **"Check GitHub for new suggestions"** fetches the latest `ai-suggestions`-labeled issue via
+  GitHub's public REST API, called directly from the browser with no token (this repo is public,
+  and anonymous reads of a public repo's issues don't need auth — confirmed against the live API
+  before relying on it, since a private repo would have made this whole approach a non-starter).
+- **"Paste JSON instead"** reveals a textarea for the push-notification fallback case above —
+  both entry points funnel through the same `importAiSuggestionsList()` so they can't drift into
+  two different suggestion shapes.
+- Each suggestion becomes a real `suggestions` doc: `source: 'ai'`, a fixed
+  `author: 'AI Product Insights'` (never a real display name, so it can never collide with or be
+  mistaken for a teammate's), plus `aiTitle`/`aiCategory`/`aiPriority`/`aiEffort`/
+  `aiContextTrigger`/`aiExpectedImpact`/`aiSourceIssue`. `suggestionCardHtml` renders these with a
+  sparkle-badge header (`svgIcon('sparkles', ...)`, the same icon this app already uses for the
+  "celebrate" toast) instead of a person's avatar, an indigo card border, and the category/
+  priority/effort/impact fields laid out underneath — unmistakably not a teammate's post, not just
+  a slightly different color. Replies still work normally on an AI card; only the delete
+  boundary is different (see rules note below).
+- **Why admin-only**, unlike posting an ordinary suggestion (open to the whole team): this is a
+  bulk write of AI-generated content into a shared board, not one person's own idea — a
+  meaningfully different action than the normal "suggest a change" box.
+- **Dedup**: a new `aiSuggestionImports/{issueNumber}` doc (mirrors `notificationDedup`'s shape)
+  records each imported issue so a second click can't double-post; only the GitHub-fetch path
+  writes one — a manual paste has no issue number to key on and is the admin's own responsibility
+  not to repeat.
+
+**Firestore rules changes — need the usual manual deploy, they don't ship with the site** (see
+"Firestore/Storage rules and index deploys are separate from shipping the site" in the parent
+`Claude Projects/CLAUDE.md`):
+- `suggestions`' `create` rule gained one carve-out: a doc claiming `source == 'ai'` can only be
+  created by an admin. Without this, `create` being open to the whole team (unchanged for every
+  ordinary suggestion) would let anyone hand-write a doc with that field and have it render with
+  the AI badge and fixed author name — impersonating the import flow's output rather than
+  actually going through it. `suggestions`' existing author-or-admin delete rule needed no change:
+  since `author` is always the fixed string `'AI Product Insights'` on these docs, it can never
+  match a real signed-in user's token, so an AI-authored suggestion is already effectively
+  admin-only to remove, for free.
+- New `aiSuggestionImports/{issueId}`: read open to the team, `create`/`update` admin-only (unlike
+  `notificationDedup`'s whole-team write — only an admin can trigger an import in the first place,
+  so a non-admin write here could only ever be tampering with the dedup record, not legitimate
+  use), delete denied outright.

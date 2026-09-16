@@ -973,6 +973,36 @@
             <button type="button" id="suggestion-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Post</button>
           </div>
         </div>
+        <!-- Admin-only. Pulls suggestions filed by the scheduled Product Evaluator routine
+             (see AI PRODUCT SUGGESTIONS IMPORT in the module script) into this board as real,
+             clearly-flagged suggestion cards -- a deliberate human-in-the-loop step, not an
+             automatic write, so AI-authored entries never land without someone reviewing them
+             first. Hidden entirely for non-admins via syncAiSuggestionsImportUI(), same pattern
+             as chat-delete-btn elsewhere. `flex`/`flex-col` are deliberately absent from this
+             static class list -- see the note on #chat-reply-preview for why pairing `hidden`
+             with a competing display class in the static markup silently wins over it; both are
+             toggled together in JS instead. -->
+        <div id="ai-suggestions-import-bar" class="hidden gap-2 bg-white dark:bg-zinc-800 border border-dashed border-indigo-300 dark:border-indigo-500/40 rounded-xl px-4 py-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path></svg>
+              Pulls suggestions filed by the scheduled Product Evaluator routine
+            </p>
+            <div class="flex items-center gap-2">
+              <button type="button" id="ai-suggestions-paste-toggle" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Paste JSON instead</button>
+              <button type="button" id="ai-suggestions-import-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Check GitHub for new suggestions</button>
+            </div>
+          </div>
+          <!-- Fallback for when the routine's GitHub issue creation fails -- a previously-hit,
+               documented permissions gap on this repo's GitHub App (403 on issue creation) --
+               and it can only push a notification carrying the raw JSON instead. Hidden until
+               "Paste JSON instead" is clicked; same hidden+JS-toggled-flex idiom as the bar
+               itself, for the same CSS-specificity reason. -->
+          <div id="ai-suggestions-paste-panel" class="hidden gap-2 mt-2">
+            <textarea id="ai-suggestions-paste-input" rows="4" placeholder="Paste the JSON suggestions block from the routine's push notification here" class="w-full text-xs font-mono rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+            <button type="button" id="ai-suggestions-paste-import-btn" class="self-start shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Import pasted JSON</button>
+          </div>
+        </div>
         <div id="suggestions-list" class="flex flex-col gap-3"></div>
       </div>
     </section>
@@ -1291,8 +1321,8 @@
     getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, connectAuthEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
-    getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc, deleteField, onSnapshot,
-    writeBatch, query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
+    getFirestore, collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, deleteField,
+    onSnapshot, writeBatch, query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import {
     getStorage, ref as storageRef, uploadBytes, getDownloadURL, connectStorageEmulator
@@ -1541,6 +1571,10 @@
   var suggestionsCol = collection(db, "suggestions");
   var unsubSuggestions = null;
   var suggestions = [];
+  // Bookkeeping for the AI-generated suggestions import (see "AI PRODUCT SUGGESTIONS IMPORT"
+  // further down) -- one doc per imported GitHub issue number, same "durable dedup so a second
+  // click can't double-post" shape as notificationDedup above.
+  var aiSuggestionImportsCol = collection(db, "aiSuggestionImports");
 
   /* =========================================================
      PROJECT DEADLINES -- a project's own deadline, deliberately separate from the deadlines of
@@ -8207,14 +8241,40 @@
       '</div>';
     }).join('');
 
+    // AI-authored suggestions (source: 'ai', written only by the Import flow below) get a
+    // visibly different header -- a sparkle badge instead of a person's avatar, a fixed name
+    // that can never collide with a real teammate's, and the routine's own category/priority/
+    // effort/impact fields laid out underneath -- so they read as unmistakably not a teammate's
+    // post, not just a slightly different color. Reuses PRIORITY_META's existing badge classes
+    // for the priority chip: this view has no color language of its own to protect, and the
+    // High/Medium/Low association is already familiar from every other view in this app.
+    var isAi = s.source === 'ai';
+    var headerHtml = isAi
+      ? '<div class="w-7 h-7 shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">' + svgIcon('sparkles', 'w-3.5 h-3.5') + '</div>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 flex items-center flex-wrap gap-x-1.5 gap-y-1">' +
+            '<span class="font-semibold text-indigo-600 dark:text-indigo-400">AI Product Insights</span> · ' + formatShortDate(localDateOf(s.date)) +
+            (s.aiCategory ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300">' + escapeHtml(s.aiCategory) + '</span>' : '') +
+            (s.aiPriority && PRIORITY_META[s.aiPriority] ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + PRIORITY_META[s.aiPriority].badge + '">' + escapeHtml(s.aiPriority) + '</span>' : '') +
+          '</p>' +
+          (s.aiTitle ? '<p class="text-sm font-bold text-zinc-800 dark:text-zinc-100 mt-1">' + escapeHtml(s.aiTitle) + '</p>' : '') +
+          '<p class="text-sm text-zinc-800 dark:text-zinc-100 mt-0.5 whitespace-pre-wrap">' + escapeHtml(s.text) + '</p>' +
+          (s.aiContextTrigger ? '<p class="text-xs italic text-zinc-400 dark:text-zinc-500 mt-1.5">Why now: ' + escapeHtml(s.aiContextTrigger) + '</p>' : '') +
+          (s.aiExpectedImpact || s.aiEffort ? '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">' +
+            (s.aiExpectedImpact ? '<span>Impact: ' + escapeHtml(s.aiExpectedImpact) + '</span>' : '') +
+            (s.aiEffort ? '<span>Effort: ' + escapeHtml(s.aiEffort) + '</span>' : '') +
+          '</p>' : '') +
+        '</div>'
+      : avatarHtml(s.author || '', 'w-7 h-7 shrink-0', 'text-xs') +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500"><span class="font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(s.author || 'Unknown') + '</span> · ' + formatShortDate(localDateOf(s.date)) + '</p>' +
+          '<p class="text-sm text-zinc-800 dark:text-zinc-100 mt-0.5 whitespace-pre-wrap">' + escapeHtml(s.text) + '</p>' +
+        '</div>';
+
     return (
-      '<div class="suggestion-card bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">' +
+      '<div class="suggestion-card bg-white dark:bg-zinc-800 border ' + (isAi ? 'border-indigo-200 dark:border-indigo-500/30' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card p-4">' +
         '<div class="flex items-start gap-2.5">' +
-          avatarHtml(s.author || '', 'w-7 h-7 shrink-0', 'text-xs') +
-          '<div class="min-w-0 flex-1">' +
-            '<p class="text-xs text-zinc-400 dark:text-zinc-500"><span class="font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(s.author || 'Unknown') + '</span> · ' + formatShortDate(localDateOf(s.date)) + '</p>' +
-            '<p class="text-sm text-zinc-800 dark:text-zinc-100 mt-0.5 whitespace-pre-wrap">' + escapeHtml(s.text) + '</p>' +
-          '</div>' +
+          headerHtml +
           '<button type="button" class="suggestion-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-suggestion-id="' + s.id + '" aria-label="Remove suggestion">' + svgIcon('x', 'w-3.5 h-3.5') + '</button>' +
         '</div>' +
         (repliesHtml ? '<div class="flex flex-col gap-2 mt-3 pl-9">' + repliesHtml + '</div>' : '') +
@@ -8232,6 +8292,20 @@
     container.innerHTML = list.length
       ? list.map(suggestionCardHtml).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No suggestions yet — be the first to share an idea.</p>';
+    syncAiSuggestionsImportUI();
+  }
+
+  // Admin-only affordance -- re-evaluated on every renderSuggestions() call (view switch, or a
+  // live suggestions snapshot) rather than once at load, same reasoning chat-delete-btn's own
+  // isAdminUser() toggle already uses: auth state can still be resolving the first time this
+  // view paints.
+  function syncAiSuggestionsImportUI() {
+    var bar = document.getElementById('ai-suggestions-import-bar');
+    if (!bar) return;
+    var show = isAdminUser();
+    bar.classList.toggle('hidden', !show);
+    bar.classList.toggle('flex', show);
+    bar.classList.toggle('flex-col', show);
   }
 
   document.getElementById('suggestion-add-btn').addEventListener('click', function () {
@@ -8315,6 +8389,133 @@
       e.preventDefault();
       addSuggestionReply(e.target.getAttribute('data-suggestion-id'), e.target);
     }
+  });
+
+  /* =========================================================
+     AI PRODUCT SUGGESTIONS IMPORT
+     A scheduled cloud routine (see "Scheduled Product Evaluator routine" in this project's
+     CLAUDE.md) periodically analyzes this repo's own documented user feedback plus a few
+     competitor searches, and files its recommendations as a GitHub issue labeled
+     "ai-suggestions" -- JSON matching AI_SUGGESTIONS_SCHEMA, fenced in a ```json block.
+
+     Deliberately human-in-the-loop, not a direct write: the routine runs with nobody signed in,
+     and this app has no service-account/admin Firestore credential set up for anything outside
+     a real browser session (same gap already documented for the workload-spike/deadline-reminder
+     automations elsewhere in this file) -- so nothing reaches the live `suggestions` collection
+     until an admin reviews it here and clicks Import. That's also *why* this stays admin-only
+     rather than open to the whole team the way posting a suggestion normally is: it's a bulk
+     write of AI-generated content into a shared board, not one person's own idea.
+
+     Two ways in, because the routine's own GitHub issue creation has hit a real, previously
+     documented permissions gap on this exact repo (403 Resource not accessible by integration)
+     -- when that happens the routine can only push a notification carrying the same JSON
+     instead of filing an issue, and "Check GitHub" would find nothing. "Paste JSON instead"
+     covers that case without waiting on the GitHub permission fix.
+  ========================================================= */
+  var AI_SUGGESTIONS_REPO = 'deane-ms/team-project-manager';
+  var AI_SUGGESTIONS_LABEL = 'ai-suggestions';
+
+  // The issue body carries a human-readable summary around the JSON, not just the JSON itself
+  // -- pull the fenced block out rather than assuming the whole body parses.
+  function extractAiSuggestionsJson(text) {
+    var match = /```json\s*([\s\S]*?)```/.exec(text || '');
+    var raw = match ? match[1] : (text || '').trim();
+    try {
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed.suggestions) ? parsed.suggestions : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Shared by both entry points (GitHub fetch and pasted JSON) so they can't drift into two
+  // different suggestion shapes. `dedupIssueNumber` is null for a pasted import -- there's no
+  // issue to dedupe against, so a manual paste is the admin's own responsibility not to repeat.
+  function importAiSuggestionsList(list, dedupIssueNumber) {
+    if (!list || !list.length) return Promise.reject(new Error('No suggestions found in that payload'));
+    var now = new Date().toISOString();
+    var writes = list.map(function (s) {
+      return setDoc(doc(suggestionsCol), {
+        text: s.proposed_solution || s.title || 'Untitled suggestion',
+        author: 'AI Product Insights',
+        date: now,
+        replies: [],
+        source: 'ai',
+        aiTitle: s.title || null,
+        aiCategory: s.category || null,
+        aiPriority: s.priority || null,
+        aiEffort: s.effort_estimate || null,
+        aiContextTrigger: s.context_trigger || null,
+        aiExpectedImpact: s.expected_impact || null,
+        aiSourceIssue: dedupIssueNumber || null
+      });
+    });
+    return Promise.all(writes).then(function () {
+      if (dedupIssueNumber == null) return writes.length;
+      return setDoc(doc(aiSuggestionImportsCol, String(dedupIssueNumber)), {
+        importedAt: now,
+        importedBy: auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null,
+        count: writes.length
+      }).then(function () { return writes.length; });
+    });
+  }
+
+  document.getElementById('ai-suggestions-import-btn').addEventListener('click', function () {
+    var btn = this;
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    fetch('https://api.github.com/repos/' + AI_SUGGESTIONS_REPO + '/issues?labels=' + AI_SUGGESTIONS_LABEL + '&state=all&sort=created&direction=desc&per_page=1')
+      .then(function (res) {
+        if (!res.ok) throw new Error('GitHub API returned ' + res.status);
+        return res.json();
+      })
+      .then(function (issues) {
+        var issue = issues[0];
+        if (!issue) { showToast('No AI suggestions issue found on GitHub yet', 'info'); return null; }
+        var list = extractAiSuggestionsJson(issue.body);
+        if (!list) { showToast('Found issue #' + issue.number + ' but could not read suggestions from it -- try "Paste JSON instead"', 'error'); return null; }
+        return getDoc(doc(aiSuggestionImportsCol, String(issue.number))).then(function (existing) {
+          if (existing.exists()) { showToast('Issue #' + issue.number + ' was already imported', 'info'); return null; }
+          return importAiSuggestionsList(list, issue.number).then(function (count) {
+            showToast('Imported ' + count + ' AI suggestion' + (count === 1 ? '' : 's') + ' from issue #' + issue.number, 'success');
+          });
+        });
+      })
+      .catch(function (err) {
+        showToast('Could not import AI suggestions: ' + err.message, 'error');
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      });
+  });
+
+  document.getElementById('ai-suggestions-paste-toggle').addEventListener('click', function () {
+    var panel = document.getElementById('ai-suggestions-paste-panel');
+    var show = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !show);
+    panel.classList.toggle('flex', show);
+    panel.classList.toggle('flex-col', show);
+  });
+
+  document.getElementById('ai-suggestions-paste-import-btn').addEventListener('click', function () {
+    var btn = this;
+    var input = document.getElementById('ai-suggestions-paste-input');
+    var list = extractAiSuggestionsJson(input.value);
+    if (!list) { showToast('Could not find a valid suggestions JSON block in that text', 'error'); return; }
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    importAiSuggestionsList(list, null).then(function (count) {
+      showToast('Imported ' + count + ' AI suggestion' + (count === 1 ? '' : 's'), 'success');
+      input.value = '';
+    }).catch(function (err) {
+      showToast('Could not import: ' + err.message, 'error');
+    }).finally(function () {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    });
   });
 
   /* =========================================================
@@ -8448,7 +8649,11 @@
   // filters.activitySort field, no option-swapping, `renderActivityFeed` back to the log's
   // natural (already newest-first) query order. Sort is just disabled on both views now, same
   // treatment as Search gets on the views it doesn't affect.
-  var SORT_DISABLED_VIEWS = ['projects', 'activity'];
+  // Suggestions joined this set for the same reason Projects/Activity did: renderSuggestions()
+  // always sorts newest-first and has no filters.sortBy branch at all, so the Sort control sat
+  // there fully clickable and doing nothing -- the identical "control present, wired to
+  // nothing" gap this codebase already hit and fixed twice before.
+  var SORT_DISABLED_VIEWS = ['projects', 'activity', 'suggestions'];
 
   function syncSortAvailability() {
     var select = document.getElementById('sort-by');
@@ -9398,7 +9603,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T06:08:30Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T06:40:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

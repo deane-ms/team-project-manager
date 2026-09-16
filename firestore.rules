@@ -241,11 +241,35 @@ service cloud.firestore {
       allow read, write: if isMediashock();
     }
 
+    // "Have we already imported this GitHub issue's AI suggestions" bookkeeping for the AI
+    // Product Insights import flow (see AI PRODUCT SUGGESTIONS IMPORT in index.html) -- one doc
+    // per imported issue number. Unlike notificationDedup above, write is admin-only here: only
+    // an admin can trigger an import in the first place (the UI hides the button from everyone
+    // else), so a non-admin write to this collection could only ever be someone tampering with
+    // the dedup record itself, not a legitimate use of the feature.
+    match /aiSuggestionImports/{issueId} {
+      allow read: if isMediashock();
+      allow create, update: if isMediashock() && isAdmin();
+      allow delete: if false;
+    }
+
     // Suggestions are a shared feedback board, same "whole team edits everything" model as
     // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
     // on the doc, not a subcollection, so there's nothing further to scope here).
+    //
+    // The one carve-out: a doc claiming `source == 'ai'` (the AI Product Insights import flow
+    // in index.html) can only be CREATED by an admin. Without this, `create` being wide open
+    // to the whole team would let anyone hand-write a doc with that field and have it render
+    // with the AI badge/fixed author name -- impersonating the import flow's output rather
+    // than actually going through it. Ordinary suggestions (no `source` field at all) are
+    // completely unaffected.
     match /suggestions/{suggestionId} {
-      allow read, create: if isMediashock();
+      allow read: if isMediashock();
+      allow create: if isMediashock() && (
+        !('source' in request.resource.data)
+        || request.resource.data.source != 'ai'
+        || isAdmin()
+      );
       // Replies live as an embedded array on the suggestion doc, so posting a reply IS an
       // update to somebody else's document. Update has to stay open to the whole team or the
       // feedback board stops being a conversation.
