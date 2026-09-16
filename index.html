@@ -8287,7 +8287,13 @@
     var status = SUGGESTION_STATUS_META[s.status] ? s.status : 'open';
     var statusMeta = SUGGESTION_STATUS_META[status];
     var statusBadgeHtml = isAdminUser()
-      ? '<select class="suggestion-status-select shrink-0 rounded text-[10px] font-bold uppercase tracking-wide border-0 py-0.5 pl-1.5 pr-5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + statusMeta.badge + '" data-suggestion-id="' + s.id + '" title="Change status">' +
+      // [color-scheme:light] dark:[color-scheme:dark] -- the OPTION LIST is a native, OS-rendered
+      // popup, not a normal styled element, so Tailwind's dark: classes on the <select> itself
+      // don't reliably reach it (it rendered washed-out/light regardless of theme, reported
+      // directly from a screenshot). Same fix already used for the date-picker calendar popups
+      // on #task-start/#task-deadline -- color-scheme is the actual channel for telling the
+      // browser which native widget theme to paint a popup with.
+      ? '<select class="suggestion-status-select shrink-0 rounded text-[10px] font-bold uppercase tracking-wide border-0 py-0.5 pl-1.5 pr-5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/40 [color-scheme:light] dark:[color-scheme:dark] ' + statusMeta.badge + '" data-suggestion-id="' + s.id + '" title="Change status">' +
           SUGGESTION_STATUS_ORDER.map(function (key) {
             return '<option value="' + key + '"' + (key === status ? ' selected' : '') + '>' + SUGGESTION_STATUS_META[key].label + '</option>';
           }).join('') +
@@ -9711,7 +9717,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T13:40:35Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T13:42:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
