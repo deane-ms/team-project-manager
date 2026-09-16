@@ -598,7 +598,12 @@
          and this row are both dense, and reported as running together without something to mark
          the boundary. pt-4 keeps the line from sitting flush against Focus of the Day's own
          content above it. -->
-    <div id="toolbar-row" class="flex flex-wrap items-center gap-2 justify-end pt-4 border-t border-zinc-200 dark:border-zinc-700">
+    <!-- `flex`/`flex-wrap` are deliberately absent from this static class list -- see the note
+         on #chat-reply-preview elsewhere in this file for why pairing a static display class
+         with a JS-toggled `hidden` is unreliable (Tailwind generates both as equal-specificity
+         rules; which one wins depends on generation order, not intent). syncToolbarLayout()
+         toggles all three together instead, for the views where this whole row hides outright. -->
+    <div id="toolbar-row" class="items-center gap-2 justify-end pt-4 border-t border-zinc-200 dark:border-zinc-700">
       <!-- Mobile-only filters trigger -- previously shared a row with mobile-view-trigger,
            which no longer exists (the hamburger button above opens the sidebar drawer
            instead), so this is full-width on its own now. -->
@@ -8689,7 +8694,26 @@
   var TOOLBAR_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap', 'sort-by-wrap'];
   var TOOLBAR_HIDDEN_FILTER_VIEWS = ['activity', 'chat', 'suggestions'];
 
+  // Suggestions goes one step further than Activity/Chat: even Search doesn't apply here, unlike
+  // those two (Activity searches its summary text, Chat searches project/message text) --
+  // reported directly against a screenshot of a permanently-disabled "Search doesn't apply here"
+  // box sitting there with nothing left for it to do once the four dropdowns above were already
+  // hidden. Suggestions is the first view with genuinely nothing in this whole row to offer, so
+  // rather than adding Search's wrapper and #btn-clear-filters to the per-id hidden list (Clear
+  // filters resets search text too, which stops meaning anything once the box itself is gone),
+  // the entire #toolbar-row is hidden outright for these views.
+  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions'];
+
   function syncToolbarLayout() {
+    var row = document.getElementById('toolbar-row');
+    var fullyHidden = TOOLBAR_FULLY_HIDDEN_VIEWS.indexOf(currentView) !== -1;
+    if (row) {
+      row.classList.toggle('hidden', fullyHidden);
+      row.classList.toggle('flex', !fullyHidden);
+      row.classList.toggle('flex-wrap', !fullyHidden);
+    }
+    if (fullyHidden) return;
+
     var hideFilters = TOOLBAR_HIDDEN_FILTER_VIEWS.indexOf(currentView) !== -1;
     TOOLBAR_HIDDEN_FILTER_WRAP_IDS.forEach(function (id) {
       var el = document.getElementById(id);
@@ -8700,7 +8724,6 @@
     // chats) directly below, so a lone centered search box above them read as misplaced in a way
     // it doesn't on Activity, which has nothing else in its toolbar row to sit alongside.
     var center = currentView === 'activity';
-    var row = document.getElementById('toolbar-row');
     if (row) {
       row.classList.toggle('justify-end', !center);
       row.classList.toggle('justify-center', center);
@@ -9614,7 +9637,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T06:46:52Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T06:52:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
