@@ -2655,10 +2655,26 @@ view): an admin-only bar above the suggestions list —
   mistaken for a teammate's), plus `aiTitle`/`aiCategory`/`aiPriority`/`aiEffort`/
   `aiContextTrigger`/`aiExpectedImpact`/`aiSourceIssue`. `suggestionCardHtml` renders these with a
   sparkle-badge header (`svgIcon('sparkles', ...)`, the same icon this app already uses for the
-  "celebrate" toast) instead of a person's avatar, an indigo card border, and the category/
-  priority/effort/impact fields laid out underneath — unmistakably not a teammate's post, not just
-  a slightly different color. Replies still work normally on an AI card; only the delete
-  boundary is different (see rules note below).
+  "celebrate" toast) instead of a person's avatar, an indigo card border, and category/priority/
+  effort as small chips up top — unmistakably not a teammate's post, not just a slightly
+  different color. Replies still work normally on an AI card; only the delete boundary is
+  different (see rules note below).
+  - **Plain-language first, technical detail collapsed — reported directly as "so hard to
+    understand" against a card whose primary text was `proposed_solution`** (the routine's own
+    build notes: exact `index.html` function/collection names, meant for whoever implements the
+    thing, not for someone scanning the feed to prioritize). `s.aiExpectedImpact` (falling back
+    to `s.text` if a hand-pasted JSON skipped it) is now the card's main description; a
+    **"Show technical details" toggle** (`.suggestion-ai-details-toggle`, delegated in the same
+    `#suggestions-list` click handler as the status button, toggling a sibling
+    `#ai-details-<suggestionId>` panel's `hidden` class) reveals `aiContextTrigger` ("Why now")
+    and the raw `s.text`/`proposed_solution` ("How to build it") underneath, for whoever actually
+    picks the suggestion up to build. This is a pure rendering change — it applies to every
+    AI-authored suggestion already imported, and to every future one, with no data migration.
+  - **The routine's own prompt was also tightened for future runs**, not just the rendering:
+    `expected_impact` is now explicitly instructed to read as plain, jargon-free language a
+    non-technical reader (a PM skimming the feed) can understand in one line, while
+    `proposed_solution` stays free to name exact functions/collections since it's shown collapsed
+    now, not up front.
 - **Why admin-only**, unlike posting an ordinary suggestion (open to the whole team): this is a
   bulk write of AI-generated content into a shared board, not one person's own idea — a
   meaningfully different action than the normal "suggest a change" box.

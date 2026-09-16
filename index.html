@@ -8286,6 +8286,13 @@
       : '<span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + statusMeta.badge + '">' + statusMeta.label + '</span>';
 
     var isAi = s.source === 'ai';
+    // Reported directly ("this is so hard to understand") against a card leading with
+    // s.text/proposed_solution -- the routine's own technical build notes (exact function/
+    // collection names, meant for whoever implements it) sitting as the FIRST thing a PM reads.
+    // Restructured so the plain-language line (expected_impact, or the raw text as a fallback if
+    // a hand-pasted JSON skipped it) is the primary description, with priority/category/effort
+    // as small chips up top -- and the technical detail (why-now + how-to-build) moved behind a
+    // "Show technical details" toggle for whoever actually picks this up to build.
     var headerHtml = isAi
       ? '<div class="w-7 h-7 shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">' + svgIcon('sparkles', 'w-3.5 h-3.5') + '</div>' +
         '<div class="min-w-0 flex-1">' +
@@ -8293,14 +8300,17 @@
             '<span class="font-semibold text-indigo-600 dark:text-indigo-400">AI Product Insights</span> · ' + formatShortDate(localDateOf(s.date)) +
             (s.aiCategory ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300">' + escapeHtml(s.aiCategory) + '</span>' : '') +
             (s.aiPriority && PRIORITY_META[s.aiPriority] ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + PRIORITY_META[s.aiPriority].badge + '">' + escapeHtml(s.aiPriority) + '</span>' : '') +
+            (s.aiEffort ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">' + escapeHtml(s.aiEffort) + '</span>' : '') +
           '</p>' +
           (s.aiTitle ? '<p class="text-sm font-bold text-zinc-800 dark:text-zinc-100 mt-1">' + escapeHtml(s.aiTitle) + '</p>' : '') +
-          '<p class="text-sm text-zinc-800 dark:text-zinc-100 mt-0.5 whitespace-pre-wrap">' + escapeHtml(s.text) + '</p>' +
-          (s.aiContextTrigger ? '<p class="text-xs italic text-zinc-400 dark:text-zinc-500 mt-1.5">Why now: ' + escapeHtml(s.aiContextTrigger) + '</p>' : '') +
-          (s.aiExpectedImpact || s.aiEffort ? '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">' +
-            (s.aiExpectedImpact ? '<span>Impact: ' + escapeHtml(s.aiExpectedImpact) + '</span>' : '') +
-            (s.aiEffort ? '<span>Effort: ' + escapeHtml(s.aiEffort) + '</span>' : '') +
-          '</p>' : '') +
+          '<p class="text-sm text-zinc-700 dark:text-zinc-200 mt-1">' + escapeHtml(s.aiExpectedImpact || s.text) + '</p>' +
+          (s.aiContextTrigger || s.text ?
+            '<button type="button" class="suggestion-ai-details-toggle mt-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300" data-suggestion-id="' + s.id + '">Show technical details</button>' +
+            '<div id="ai-details-' + s.id + '" class="hidden mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 space-y-1 border-t border-zinc-100 dark:border-zinc-700 pt-1.5">' +
+              (s.aiContextTrigger ? '<p><span class="font-semibold">Why now:</span> ' + escapeHtml(s.aiContextTrigger) + '</p>' : '') +
+              (s.text ? '<p><span class="font-semibold">How to build it:</span> ' + escapeHtml(s.text) + '</p>' : '') +
+            '</div>'
+          : '') +
         '</div>'
       : avatarHtml(s.author || '', 'w-7 h-7 shrink-0', 'text-xs') +
         '<div class="min-w-0 flex-1">' +
@@ -8388,6 +8398,16 @@
   }
 
   document.getElementById('suggestions-list').addEventListener('click', function (e) {
+    var aiDetailsToggle = e.target.closest('.suggestion-ai-details-toggle');
+    if (aiDetailsToggle) {
+      var panel = document.getElementById('ai-details-' + aiDetailsToggle.getAttribute('data-suggestion-id'));
+      if (panel) {
+        var showPanel = panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', !showPanel);
+        aiDetailsToggle.textContent = showPanel ? 'Hide technical details' : 'Show technical details';
+      }
+      return;
+    }
     var statusBtn = e.target.closest('.suggestion-status-btn');
     if (statusBtn) {
       // Only rendered as a <button> (clickable) for an admin in the first place -- see
@@ -9676,7 +9696,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T07:03:33Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T13:32:33Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
