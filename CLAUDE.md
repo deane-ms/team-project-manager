@@ -2703,23 +2703,31 @@ view): an admin-only bar above the suggestions list —
   isAdmin()`). An update that doesn't touch `status` — posting or removing a reply — is
   completely unaffected and stays open to the whole team, same as always.
 
-**Status label (Open/WIP/Fixed) — every suggestion, not just AI-authored ones.** Requested
-directly right after the import flow, so a suggestion (human or AI) can be tracked instead of
-just sitting in the feed forever with no indication anyone looked at it.
-- `SUGGESTION_STATUS_META`/`SUGGESTION_STATUS_CYCLE` (near `PRIORITY_META`/`DONE_META`, since it's
-  the same "small lookup object keyed by a status string, holding badge classes" shape) define
-  three states in cycle order: `open` (default) → `wip` → `fixed` → back to `open`.
-  **`fixed` deliberately reuses `DONE_META.badge`'s exact emerald classes** rather than a fresh
-  color — this app already has one established meaning for "finished, in a good way" (Board,
-  Gantt, pinned links), so Fixed borrows it instead of introducing a second.
+**Status label (Open/WIP/Fixed/Unable to Fix) — every suggestion, human-posted or AI-imported
+alike.** Requested directly right after the import flow, so a suggestion can be tracked instead
+of just sitting in the feed forever with no indication anyone looked at it. First shipped as a
+click-to-cycle badge (Open → WIP → Fixed → Open); reported back directly as easier as a dropdown,
+plus a request for a fourth state — a suggestion that's been looked at and deliberately rejected,
+not just not gotten to yet — in the same message.
+- `SUGGESTION_STATUS_META`/`SUGGESTION_STATUS_ORDER` (near `PRIORITY_META`/`DONE_META`, since
+  it's the same "small lookup object keyed by a status string, holding badge classes" shape)
+  define four states, in the dropdown's option order: `open` (default) → `wip` → `fixed` →
+  `unabletofix`. **`fixed` reuses `DONE_META.badge`'s exact emerald classes** — this app already
+  has one established meaning for "finished, in a good way" (Board, Gantt, pinned links), so
+  Fixed borrows it instead of introducing a second. **`unabletofix` reuses
+  `PRIORITY_META.High.badge`'s exact rose classes** — a different badge in a different spot on
+  the card than the priority chip (AI cards show both at once), so sharing rose doesn't collide
+  the way reusing it *within* the same badge group would.
 - **Missing `status` on a suggestion reads as `'open'`** (`SUGGESTION_STATUS_META[s.status] ?
   s.status : 'open'` in `suggestionCardHtml`) — every suggestion posted before this field existed
   needs no migration, same fix-it-forward pattern as the checklist-item-id backfill.
-- **Admin-editable by clicking the badge to cycle it; everyone else sees a plain read-only
-  `<span>`** — `suggestionCardHtml` only renders a real `<button class="suggestion-status-btn">`
-  when `isAdminUser()`, matching the pattern the AI-import bar already uses (hide the affordance
+- **Admin-editable via a real `<select class="suggestion-status-select">`, colored with the
+  current status's own badge classes so it still reads as a badge at rest; everyone else sees a
+  plain read-only `<span>`** — `suggestionCardHtml` only renders the `<select>` when
+  `isAdminUser()`, matching the pattern the AI-import bar already uses (hide the affordance
   entirely for someone who can't use it, rather than showing it disabled). The actual boundary is
-  the rules carve-out above, not this check — the click handler in `#suggestions-list`'s
-  delegated listener has a comment saying so explicitly, since a non-admin genuinely cannot reach
-  that code path through the UI at all (no button to click), but the rule is what would stop a
-  bypass.
+  the rules carve-out above, not this check — a non-admin genuinely cannot reach the `change`
+  handler through the UI at all (no `<select>` to change), but the rule is what would stop a
+  bypass. A failed write (denied by the rule, or offline) calls `renderSuggestions()` in the
+  `catch` to snap the dropdown back to the real, unchanged value rather than leaving it showing
+  whatever the admin picked but that never actually saved.

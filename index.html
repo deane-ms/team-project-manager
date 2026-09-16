@@ -3959,17 +3959,24 @@
   // once every checklist item is checked and it's out of the assignee's hands).
   var READY_FOR_REVIEW_META = { badge: 'bg-purple-100 text-purple-700 ring-1 ring-inset ring-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:ring-purple-500/25', dot: 'bg-purple-500', bar: 'bg-purple-400', barLight: 'bg-purple-100 dark:bg-purple-500/10', border: 'border-l-purple-500' };
 
-  // A suggestion's status (Suggestions tab) -- admin-editable by clicking the badge to cycle
-  // through this order, everyone else sees it read-only. 'fixed' deliberately reuses DONE_META's
-  // exact emerald shade: this app already has one color for "finished, in a good way" (Board,
-  // Gantt, pinned links), so "Fixed" borrows it rather than inventing a second. Missing/unknown
-  // `status` on a suggestion (every one that predates this field) reads as 'open', no migration.
+  // A suggestion's status (Suggestions tab) -- admin-editable via a small dropdown
+  // (.suggestion-status-select), everyone else sees it read-only. First shipped as a
+  // click-to-cycle badge; reported directly as easier as a dropdown, plus a request for a
+  // fourth state for a suggestion that's been looked at and deliberately rejected, not just not
+  // gotten to yet. 'fixed' deliberately reuses DONE_META's exact emerald shade: this app already
+  // has one color for "finished, in a good way" (Board, Gantt, pinned links), so "Fixed" borrows
+  // it rather than inventing a second. 'unabletofix' reuses PRIORITY_META.High's exact rose
+  // shade -- a different badge in a different spot on the card than the priority chip, so the
+  // shared hue doesn't collide the way reusing it within the *same* badge group would. Missing/
+  // unknown `status` on a suggestion (every one that predates this field) reads as 'open', no
+  // migration. SUGGESTION_STATUS_ORDER is the dropdown's option order.
   var SUGGESTION_STATUS_META = {
     open: { label: 'Open', badge: 'bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600' },
     wip: { label: 'WIP', badge: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25' },
-    fixed: { label: 'Fixed', badge: DONE_META.badge }
+    fixed: { label: 'Fixed', badge: DONE_META.badge },
+    unabletofix: { label: 'Unable to Fix', badge: PRIORITY_META.High.badge }
   };
-  var SUGGESTION_STATUS_CYCLE = ['open', 'wip', 'fixed'];
+  var SUGGESTION_STATUS_ORDER = ['open', 'wip', 'fixed', 'unabletofix'];
 
   // A task is "ready for review": everything on its checklist is checked off and it's sitting
   // in the Review column -- fully done from the assignee's side, just waiting on someone else's
@@ -8273,16 +8280,18 @@
     // post, not just a slightly different color. Reuses PRIORITY_META's existing badge classes
     // for the priority chip: this view has no color language of its own to protect, and the
     // High/Medium/Low association is already familiar from every other view in this app.
-    // Status label -- admin-editable (click to cycle Open -> WIP -> Fixed -> Open), everyone
-    // else sees a plain read-only badge. Defaults to 'open' for every suggestion that predates
-    // this field, same fix-it-forward approach as the checklist-item-id backfill elsewhere in
-    // this app rather than a migration script. Reuses DONE_META's exact emerald badge shape for
-    // "Fixed" -- this app's own established meaning for "finished, in a good way" everywhere
-    // else (Board, Gantt, pinned links) -- so it doesn't invent a second color for the same idea.
+    // Status label -- admin-editable via a small dropdown, everyone else sees a plain read-only
+    // badge. Defaults to 'open' for every suggestion that predates this field, same fix-it-forward
+    // approach as the checklist-item-id backfill elsewhere in this app rather than a migration
+    // script.
     var status = SUGGESTION_STATUS_META[s.status] ? s.status : 'open';
     var statusMeta = SUGGESTION_STATUS_META[status];
     var statusBadgeHtml = isAdminUser()
-      ? '<button type="button" class="suggestion-status-btn shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + statusMeta.badge + ' hover:brightness-95" data-suggestion-id="' + s.id + '" data-status="' + status + '" title="Click to change status">' + statusMeta.label + '</button>'
+      ? '<select class="suggestion-status-select shrink-0 rounded text-[10px] font-bold uppercase tracking-wide border-0 py-0.5 pl-1.5 pr-5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + statusMeta.badge + '" data-suggestion-id="' + s.id + '" title="Change status">' +
+          SUGGESTION_STATUS_ORDER.map(function (key) {
+            return '<option value="' + key + '"' + (key === status ? ' selected' : '') + '>' + SUGGESTION_STATUS_META[key].label + '</option>';
+          }).join('') +
+        '</select>'
       : '<span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + statusMeta.badge + '">' + statusMeta.label + '</span>';
 
     var isAi = s.source === 'ai';
@@ -8408,18 +8417,6 @@
       }
       return;
     }
-    var statusBtn = e.target.closest('.suggestion-status-btn');
-    if (statusBtn) {
-      // Only rendered as a <button> (clickable) for an admin in the first place -- see
-      // suggestionCardHtml -- but the real boundary is firestore.rules' `suggestions` update
-      // rule, not this check; a non-admin could never reach this branch through the UI at all.
-      var cycleIdx = SUGGESTION_STATUS_CYCLE.indexOf(statusBtn.getAttribute('data-status'));
-      var nextStatus = SUGGESTION_STATUS_CYCLE[(cycleIdx + 1) % SUGGESTION_STATUS_CYCLE.length];
-      updateDoc(doc(suggestionsCol, statusBtn.getAttribute('data-suggestion-id')), { status: nextStatus }).catch(function (err) {
-        showToast('Could not update status: ' + err.message, 'error');
-      });
-      return;
-    }
     var replyBtn = e.target.closest('.suggestion-reply-add-btn');
     if (replyBtn) {
       var card = replyBtn.closest('.suggestion-card');
@@ -8461,6 +8458,20 @@
       e.preventDefault();
       addSuggestionReply(e.target.getAttribute('data-suggestion-id'), e.target);
     }
+  });
+
+  // Status dropdown -- applies to every suggestion, human-posted or AI-imported alike (see the
+  // comment above `var status = ...` in suggestionCardHtml: statusBadgeHtml is built once,
+  // outside the isAi branch). Only rendered as a real <select> for an admin in the first place;
+  // the actual boundary is firestore.rules' `suggestions` update carve-out, not this check -- a
+  // non-admin can't reach this handler through the UI at all (no select to change).
+  document.getElementById('suggestions-list').addEventListener('change', function (e) {
+    var select = e.target.closest('.suggestion-status-select');
+    if (!select) return;
+    updateDoc(doc(suggestionsCol, select.getAttribute('data-suggestion-id')), { status: select.value }).catch(function (err) {
+      showToast('Could not update status: ' + err.message, 'error');
+      renderSuggestions(); // snap the dropdown back to the real, unchanged value on failure
+    });
   });
 
   /* =========================================================
@@ -9696,7 +9707,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T13:32:33Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T13:36:09Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
