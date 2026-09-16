@@ -273,7 +273,16 @@ service cloud.firestore {
       // Replies live as an embedded array on the suggestion doc, so posting a reply IS an
       // update to somebody else's document. Update has to stay open to the whole team or the
       // feedback board stops being a conversation.
-      allow update: if isMediashock();
+      //
+      // The one field carved out of that: `status` (Open/WIP/Fixed, index.html's
+      // suggestionCardHtml + SUGGESTION_STATUS_CYCLE) is admin-only to change. The UI already
+      // only renders it as a clickable button for an admin -- everyone else sees a plain
+      // read-only badge -- but that's just the affordance; this is the actual boundary. Any
+      // update that doesn't touch `status` at all (a reply) stays open to everyone as before.
+      allow update: if isMediashock() && (
+        !changedKeys().hasAny(['status'])
+        || isAdmin()
+      );
       // Removing someone else's suggestion outright is not collaboration, though -- that was
       // open to everyone purely because `write` covers delete, not because anyone decided it
       // should be. Author or admin.

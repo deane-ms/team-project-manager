@@ -2305,8 +2305,10 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   `orderBy` alongside the `where`, to avoid needing a composite index for a query this simple.
 - **`suggestions`** — one doc per suggestion, with replies as an embedded array
   (`{text, author, date}` objects, updated via full-array-rewrite on `updateDoc`) rather than a
-  subcollection. Shared read/write like `tasks`, with one carve-out: a doc can only be *created*
-  with `source: 'ai'` by an admin — see "AI Product Insights (Suggestions tab)" below.
+  subcollection. Shared read/write like `tasks`, with two carve-outs: a doc can only be *created*
+  with `source: 'ai'` by an admin, and its `status` field (Open/WIP/Fixed — every suggestion, not
+  just AI ones) can only be *changed* by an admin — see "AI Product Insights (Suggestions tab)"
+  below for both.
 - **`aiSuggestionImports`** — one doc per imported GitHub issue number, dedup bookkeeping for the
   AI Product Insights import flow (below). Same shape as `notificationDedup`, but write is
   admin-only rather than whole-team, since only an admin can trigger an import at all.
@@ -2680,3 +2682,28 @@ view): an admin-only bar above the suggestions list —
   `notificationDedup`'s whole-team write — only an admin can trigger an import in the first place,
   so a non-admin write here could only ever be tampering with the dedup record, not legitimate
   use), delete denied outright.
+- `suggestions`' `update` rule gained a second carve-out alongside the reply-collaboration one:
+  any update that touches `status` requires `isAdmin()` (`!changedKeys().hasAny(['status']) ||
+  isAdmin()`). An update that doesn't touch `status` — posting or removing a reply — is
+  completely unaffected and stays open to the whole team, same as always.
+
+**Status label (Open/WIP/Fixed) — every suggestion, not just AI-authored ones.** Requested
+directly right after the import flow, so a suggestion (human or AI) can be tracked instead of
+just sitting in the feed forever with no indication anyone looked at it.
+- `SUGGESTION_STATUS_META`/`SUGGESTION_STATUS_CYCLE` (near `PRIORITY_META`/`DONE_META`, since it's
+  the same "small lookup object keyed by a status string, holding badge classes" shape) define
+  three states in cycle order: `open` (default) → `wip` → `fixed` → back to `open`.
+  **`fixed` deliberately reuses `DONE_META.badge`'s exact emerald classes** rather than a fresh
+  color — this app already has one established meaning for "finished, in a good way" (Board,
+  Gantt, pinned links), so Fixed borrows it instead of introducing a second.
+- **Missing `status` on a suggestion reads as `'open'`** (`SUGGESTION_STATUS_META[s.status] ?
+  s.status : 'open'` in `suggestionCardHtml`) — every suggestion posted before this field existed
+  needs no migration, same fix-it-forward pattern as the checklist-item-id backfill.
+- **Admin-editable by clicking the badge to cycle it; everyone else sees a plain read-only
+  `<span>`** — `suggestionCardHtml` only renders a real `<button class="suggestion-status-btn">`
+  when `isAdminUser()`, matching the pattern the AI-import bar already uses (hide the affordance
+  entirely for someone who can't use it, rather than showing it disabled). The actual boundary is
+  the rules carve-out above, not this check — the click handler in `#suggestions-list`'s
+  delegated listener has a comment saying so explicitly, since a non-admin genuinely cannot reach
+  that code path through the UI at all (no button to click), but the rule is what would stop a
+  bypass.

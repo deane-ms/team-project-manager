@@ -3959,6 +3959,18 @@
   // once every checklist item is checked and it's out of the assignee's hands).
   var READY_FOR_REVIEW_META = { badge: 'bg-purple-100 text-purple-700 ring-1 ring-inset ring-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:ring-purple-500/25', dot: 'bg-purple-500', bar: 'bg-purple-400', barLight: 'bg-purple-100 dark:bg-purple-500/10', border: 'border-l-purple-500' };
 
+  // A suggestion's status (Suggestions tab) -- admin-editable by clicking the badge to cycle
+  // through this order, everyone else sees it read-only. 'fixed' deliberately reuses DONE_META's
+  // exact emerald shade: this app already has one color for "finished, in a good way" (Board,
+  // Gantt, pinned links), so "Fixed" borrows it rather than inventing a second. Missing/unknown
+  // `status` on a suggestion (every one that predates this field) reads as 'open', no migration.
+  var SUGGESTION_STATUS_META = {
+    open: { label: 'Open', badge: 'bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600' },
+    wip: { label: 'WIP', badge: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25' },
+    fixed: { label: 'Fixed', badge: DONE_META.badge }
+  };
+  var SUGGESTION_STATUS_CYCLE = ['open', 'wip', 'fixed'];
+
   // A task is "ready for review": everything on its checklist is checked off and it's sitting
   // in the Review column -- fully done from the assignee's side, just waiting on someone else's
   // approval. An empty checklist doesn't count (nothing to have finished).
@@ -8261,6 +8273,18 @@
     // post, not just a slightly different color. Reuses PRIORITY_META's existing badge classes
     // for the priority chip: this view has no color language of its own to protect, and the
     // High/Medium/Low association is already familiar from every other view in this app.
+    // Status label -- admin-editable (click to cycle Open -> WIP -> Fixed -> Open), everyone
+    // else sees a plain read-only badge. Defaults to 'open' for every suggestion that predates
+    // this field, same fix-it-forward approach as the checklist-item-id backfill elsewhere in
+    // this app rather than a migration script. Reuses DONE_META's exact emerald badge shape for
+    // "Fixed" -- this app's own established meaning for "finished, in a good way" everywhere
+    // else (Board, Gantt, pinned links) -- so it doesn't invent a second color for the same idea.
+    var status = SUGGESTION_STATUS_META[s.status] ? s.status : 'open';
+    var statusMeta = SUGGESTION_STATUS_META[status];
+    var statusBadgeHtml = isAdminUser()
+      ? '<button type="button" class="suggestion-status-btn shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + statusMeta.badge + ' hover:brightness-95" data-suggestion-id="' + s.id + '" data-status="' + status + '" title="Click to change status">' + statusMeta.label + '</button>'
+      : '<span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ' + statusMeta.badge + '">' + statusMeta.label + '</span>';
+
     var isAi = s.source === 'ai';
     var headerHtml = isAi
       ? '<div class="w-7 h-7 shrink-0 rounded-full bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">' + svgIcon('sparkles', 'w-3.5 h-3.5') + '</div>' +
@@ -8288,7 +8312,10 @@
       '<div class="suggestion-card bg-white dark:bg-zinc-800 border ' + (isAi ? 'border-indigo-200 dark:border-indigo-500/30' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card p-4">' +
         '<div class="flex items-start gap-2.5">' +
           headerHtml +
-          '<button type="button" class="suggestion-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-suggestion-id="' + s.id + '" aria-label="Remove suggestion">' + svgIcon('x', 'w-3.5 h-3.5') + '</button>' +
+          '<div class="flex items-center gap-1.5 shrink-0">' +
+            statusBadgeHtml +
+            '<button type="button" class="suggestion-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-suggestion-id="' + s.id + '" aria-label="Remove suggestion">' + svgIcon('x', 'w-3.5 h-3.5') + '</button>' +
+          '</div>' +
         '</div>' +
         (repliesHtml ? '<div class="flex flex-col gap-2 mt-3 pl-9">' + repliesHtml + '</div>' : '') +
         '<div class="flex items-center gap-2 mt-3 pl-9">' +
@@ -8361,6 +8388,18 @@
   }
 
   document.getElementById('suggestions-list').addEventListener('click', function (e) {
+    var statusBtn = e.target.closest('.suggestion-status-btn');
+    if (statusBtn) {
+      // Only rendered as a <button> (clickable) for an admin in the first place -- see
+      // suggestionCardHtml -- but the real boundary is firestore.rules' `suggestions` update
+      // rule, not this check; a non-admin could never reach this branch through the UI at all.
+      var cycleIdx = SUGGESTION_STATUS_CYCLE.indexOf(statusBtn.getAttribute('data-status'));
+      var nextStatus = SUGGESTION_STATUS_CYCLE[(cycleIdx + 1) % SUGGESTION_STATUS_CYCLE.length];
+      updateDoc(doc(suggestionsCol, statusBtn.getAttribute('data-suggestion-id')), { status: nextStatus }).catch(function (err) {
+        showToast('Could not update status: ' + err.message, 'error');
+      });
+      return;
+    }
     var replyBtn = e.target.closest('.suggestion-reply-add-btn');
     if (replyBtn) {
       var card = replyBtn.closest('.suggestion-card');
@@ -9637,7 +9676,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T06:52:28Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T07:03:33Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
