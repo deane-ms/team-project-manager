@@ -2242,38 +2242,6 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         in a separate report, not on the chart itself, and its own users have publicly asked for
         an on-chart version that doesn't exist yet -- this is that, tuned to what this team
         actually finds worth a warning rather than a straight port of TeamGantt's own metric.
-  - **Client identity is a real, optional `client` field now, not re-parsed from the name every
-    time** — SUGG-003 from the AI Product Insights routine (see "AI Product Insights" further
-    down): this team's project-naming convention (a long space-free date+`[Client]`+campaign
-    string) had already caused the identical class of bug in at least six separate spots, each
-    fixed reactively as it was hit — the confirm modal, Focus of the Day card, chat list, New-chat
-    dropdown menu, `projectInitials()`'s own bracket-parsing fallback, and multiple tooltip
-    additions. Rather than fix a seventh spot reactively, three functions now share one source of
-    truth:
-    - **`deriveProjectClient(name)`** reuses the exact bracket-then-camelCase-split logic
-      `projectInitials()` already relied on informally, but returns the full parsed name
-      ("Little Paddington") instead of two-letter initials.
-    - **`projectClientFor(name)`** reads the explicit override (`client` on the project's own
-      `projects/{id}` doc, same doc the deadline/chat already live on) and falls back to
-      `deriveProjectClient(name)` when nobody's corrected it — so every project shows a client
-      identity from the moment it exists, not just once someone manually sets one.
-    - **`projectInitials(name)` was rewritten to read through `projectClientFor()`** instead of
-      keeping its own copy of the bracket-extraction logic — correcting a client via the
-      override now also fixes the small colored initials circle everywhere it's used
-      (`chatAvatarHtml`, and therefore the Chat tab's project list and header, satisfying the
-      suggestion's `renderChatProjectList` call-out without that function needing its own
-      change).
-    - **The override is set from the Projects tab** (`projectCardHtml`'s new `clientRow`,
-      `projectClientEditing` module var, delegated handlers on `#projects-grid`) — same
-      progressive-disclosure shape as the deadline field, but inverted: since every project
-      *always* has a derivable client guess, there's no empty state to hide behind a "+"
-      affordance the way an unset deadline has. Instead the badge always shows (the override if
-      set, else the auto-derived guess), with a quiet pencil icon revealing a text input on
-      click. Saving an empty value clears the override back to the auto-derived guess
-      (`setProjectClient` writes `null`, not `''`) rather than forcing the badge to show nothing.
-    - **No `firestore.rules` change needed** — `client` is just another field on the `projects/
-      {id}` doc, and the update rule's `!changedKeys().hasAny(['chat'])` clause already covers
-      any write that doesn't touch `chat`, same as the pre-existing `deadline`/`name` fields.
 - **`people`** — the **team roster**: one doc per teammate, **doc ID = their Firebase uid**,
   `{name, email, photoURL, lastSeen}`, upserted by `registerPresence(user)` on every sign-in
   (`onAuthStateChanged`, deliberately *before* `startListeners` so a first-time signer-in is
