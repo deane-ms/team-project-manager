@@ -983,12 +983,20 @@
              with a competing display class in the static markup silently wins over it; both are
              toggled together in JS instead. -->
         <div id="ai-suggestions-import-bar" class="hidden gap-2 bg-white dark:bg-zinc-800 border border-dashed border-indigo-300 dark:border-indigo-500/40 rounded-xl px-4 py-3">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <!-- flex-wrap, not a sm: breakpoint switch -- this view's own container is capped at
+               max-w-2xl (672px), narrower than the viewport-width breakpoint sm:flex-row was
+               keying off. At that actual width, the label sentence plus both buttons don't fit
+               on one line, and with no wrapping the row simply overflowed past the bar's own
+               dashed border instead of dropping the button group to its own line (reported
+               directly from a screenshot as the buttons "overlapping"). Wrapping on real
+               available width, not a viewport guess, is what actually fixes it regardless of
+               how wide the browser window itself is. -->
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <p class="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
               <svg class="w-3.5 h-3.5 shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path></svg>
               Pulls suggestions filed by the scheduled Product Evaluator routine
             </p>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <button type="button" id="ai-suggestions-paste-toggle" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Paste JSON instead</button>
               <button type="button" id="ai-suggestions-import-btn" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Check GitHub for new suggestions</button>
             </div>
@@ -8675,8 +8683,11 @@
   // Chat joined the same hidden set once it became a standalone tab -- it's a project list +
   // one thread, not a task list either, so none of these four apply there any more than they do
   // on Activity.
+  // Suggestions joined for the identical reason, reported directly against a screenshot of all
+  // four dropdowns sitting fully clickable above a feedback board that has no priority, project,
+  // assignee, or meaningful sort order of its own (renderSuggestions is always newest-first).
   var TOOLBAR_HIDDEN_FILTER_WRAP_IDS = ['filter-priority-wrap', 'filter-project-wrap', 'filter-people-wrap', 'sort-by-wrap'];
-  var TOOLBAR_HIDDEN_FILTER_VIEWS = ['activity', 'chat'];
+  var TOOLBAR_HIDDEN_FILTER_VIEWS = ['activity', 'chat', 'suggestions'];
 
   function syncToolbarLayout() {
     var hideFilters = TOOLBAR_HIDDEN_FILTER_VIEWS.indexOf(currentView) !== -1;
@@ -9603,7 +9614,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T06:40:20Z";
+  var CURRENT_BUILD_VERSION = "2026-09-16T06:46:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
