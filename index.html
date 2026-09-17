@@ -7405,7 +7405,14 @@
       // order isn't reliable (Tailwind's CDN injects its stylesheet asynchronously, not
       // necessarily in HTML source order). A dedicated !important class sidesteps the same
       // class of bug instead of risking it twice.
-      html += '<div class="sticky top-0 z-[25] bg-zinc-50 dark:bg-zinc-700 border-b border-l border-zinc-200 dark:border-zinc-700 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      // bg-zinc-200/dark:bg-zinc-600, not bg-zinc-50/dark:bg-zinc-700 -- reported directly
+      // against a screenshot where the month row and the plain-weekday cells in the day row
+      // right underneath shared the exact same background, so the two header rows read as one
+      // undifferentiated block. Deliberately not reusing the weekend cells' own bg-zinc-100/
+      // dark:bg-zinc-800 either, or the month row would coincidentally match "weekend" in light
+      // mode -- three genuinely distinct tones now: month (lightest in dark mode, most
+      // prominent) > weekday > weekend (darkest/most muted), an ascending step in light mode.
+      html += '<div class="sticky top-0 z-[25] bg-zinc-200 dark:bg-zinc-600 border-b border-l border-zinc-300 dark:border-zinc-500 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-600 dark:text-zinc-200" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -9749,7 +9756,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-17T04:42:47Z";
+  var CURRENT_BUILD_VERSION = "2026-09-17T04:48:01Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
