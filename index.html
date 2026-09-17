@@ -116,6 +116,11 @@
      guessing Tailwind's own injection timing, which isn't something this file controls anyway. */
   .gantt-row-hover { background-color: #f4f4f5 !important; }
   .dark .gantt-row-hover { background-color: #3f3f46 !important; }
+  /* A visibly stronger left-border tone than the month header's own border-b (zinc-200/700),
+     marking the boundary between adjacent months clearly instead of relying on the label text
+     alone to say where one month ends and the next begins. */
+  .gantt-month-divider { border-left-color: #d4d4d8 !important; }
+  .dark .gantt-month-divider { border-left-color: #71717a !important; }
   .checklist-item-row { transition: opacity 0.15s ease, box-shadow 0.15s ease; }
   .checklist-item-row.dragging { opacity: 0.5; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
   .checklist-item-row.drag-over { outline: 2px dashed #a5b4fc; outline-offset: -2px; }
@@ -7391,7 +7396,16 @@
       // Opaque background, not dark:bg-zinc-700/80. Raising the z-index alone was not enough:
       // at 80% the bars scrolling underneath still showed through the header as ghost blocks,
       // which is its own kind of "obstructed". Every cell in these two header rows is solid now.
-      html += '<div class="sticky top-0 z-[25] bg-zinc-50 dark:bg-zinc-700 border-b border-zinc-200 dark:border-zinc-700 flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      // border-l via .gantt-month-divider, not a second Tailwind border-color utility layered
+      // on top of border-zinc-200/700 -- reported directly against a screenshot where two
+      // adjacent months were barely distinguishable (same background, only the label text
+      // itself marked where one ended and the next began). border-color and border-left-color
+      // both apply to the same longhand property, so which one wins depends on cascade ORDER
+      // between the two Tailwind-generated rules -- and per the row-hover fix just above, that
+      // order isn't reliable (Tailwind's CDN injects its stylesheet asynchronously, not
+      // necessarily in HTML source order). A dedicated !important class sidesteps the same
+      // class of bug instead of risking it twice.
+      html += '<div class="sticky top-0 z-[25] bg-zinc-50 dark:bg-zinc-700 border-b border-l border-zinc-200 dark:border-zinc-700 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
       colCursor += m.span;
     });
 
@@ -9735,7 +9749,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-17T04:40:55Z";
+  var CURRENT_BUILD_VERSION = "2026-09-17T04:42:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
