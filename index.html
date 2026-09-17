@@ -101,10 +101,21 @@
      background-color assignment simply replaces bg-white/dark:bg-zinc-800 rather than
      compositing over it, so opacity is never a question here. */
   /* zinc-100, not zinc-50 -- #fafafa on a bg-white cell was nearly imperceptible (reported
-     directly, "highlight the row in the task column as well," against a screenshot where the
-     label column showed no visible change despite the mechanism above already covering it). */
-  .gantt-row-hover { background-color: #f4f4f5; }
-  .dark .gantt-row-hover { background-color: #3f3f46; }
+     directly, "highlight the row in the task column as well," against a screenshot). That report
+     turned out to name a second, real bug on top of the visibility one: the label cell's own
+     bg-white/dark:bg-zinc-800 was winning over this class entirely, not just outshining it.
+     Root cause, confirmed with an isolated Playwright test dumping the actual generated
+     stylesheet: the Tailwind CDN's dark-mode rule compiles to
+     `.dark\:bg-zinc-800:is(.dark *)` -- specificity (0,2,0), identical to `.dark .gantt-row-hover`
+     below -- and the CDN injects its generated <style> tag into <head> ASYNCHRONOUSLY (after its
+     own script tag finishes executing, not synchronously during initial parse), landing AFTER
+     this static <style> block in the cascade regardless of source order in the HTML. That broke
+     the "a later custom rule beats an earlier-in-source Tailwind one" assumption this codebase's
+     own .col-drop-target relies on elsewhere -- worth re-checking that one too if it's ever
+     reported as not fully working. !important is the reliable fix here: it doesn't depend on
+     guessing Tailwind's own injection timing, which isn't something this file controls anyway. */
+  .gantt-row-hover { background-color: #f4f4f5 !important; }
+  .dark .gantt-row-hover { background-color: #3f3f46 !important; }
   .checklist-item-row { transition: opacity 0.15s ease, box-shadow 0.15s ease; }
   .checklist-item-row.dragging { opacity: 0.5; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
   .checklist-item-row.drag-over { outline: 2px dashed #a5b4fc; outline-offset: -2px; }
@@ -9722,7 +9733,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-17T04:02:00Z";
+  var CURRENT_BUILD_VERSION = "2026-09-17T04:37:36Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
