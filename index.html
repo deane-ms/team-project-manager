@@ -7378,7 +7378,9 @@
     // sitting on top of the month and day numbers (reported from a screenshot). Header outranks
     // label now, which is the correct reading anyway: a frozen top row is frozen against
     // everything, including the other frozen edge.
-    html += '<div class="sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-xs font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
+    // text-sm, not text-xs -- reported directly ("the title 'Tasks' in the top of the task
+    // column"), matching the same size bump the project title badge already got below it.
+    html += '<div class="sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-sm font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
 
     // Label column resize handle -- a thin strip pinned to the column-1/column-2 boundary,
     // sticky the same way the label column itself is (position:sticky;left) so it stays grabbable
@@ -9756,7 +9758,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-17T04:48:01Z";
+  var CURRENT_BUILD_VERSION = "2026-09-17T05:33:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
