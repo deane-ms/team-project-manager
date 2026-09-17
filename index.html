@@ -100,7 +100,10 @@
      bars scrolling underneath it (same reasoning as the frozen header row above), and a solid
      background-color assignment simply replaces bg-white/dark:bg-zinc-800 rather than
      compositing over it, so opacity is never a question here. */
-  .gantt-row-hover { background-color: #fafafa; }
+  /* zinc-100, not zinc-50 -- #fafafa on a bg-white cell was nearly imperceptible (reported
+     directly, "highlight the row in the task column as well," against a screenshot where the
+     label column showed no visible change despite the mechanism above already covering it). */
+  .gantt-row-hover { background-color: #f4f4f5; }
   .dark .gantt-row-hover { background-color: #3f3f46; }
   .checklist-item-row { transition: opacity 0.15s ease, box-shadow 0.15s ease; }
   .checklist-item-row.dragging { opacity: 0.5; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18); }
@@ -7419,7 +7422,9 @@
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" data-gantt-row="' + r + '" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
-          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-xs font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
+          // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
+          // so it is easier to identify and discern") against a screenshot of this exact badge.
+          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-sm font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
         '</div>' +
       '</div>';
@@ -9717,7 +9722,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-16T14:02:51Z";
+  var CURRENT_BUILD_VERSION = "2026-09-17T04:02:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
