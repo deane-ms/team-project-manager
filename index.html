@@ -7436,7 +7436,9 @@
           // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
           // so it is easier to identify and discern") against a screenshot of this exact badge.
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-sm font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
-          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
+          // dark:text-white, not the previous dark:text-zinc-500 -- reported directly against a
+          // screenshot as too dim to read against the row's dark background.
+          '<p class="text-xs text-zinc-400 dark:text-white truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
         '</div>' +
       '</div>';
 
@@ -9733,7 +9735,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-17T04:37:36Z";
+  var CURRENT_BUILD_VERSION = "2026-09-17T04:40:55Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
