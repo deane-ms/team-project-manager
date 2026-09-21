@@ -7554,10 +7554,15 @@
       // other status badge in this app) rather than as a separate unlabeled swatch next to the
       // priority dot -- an earlier version used a plain color bar here and it wasn't intuitive
       // which mark meant what (reported directly). This way the color is attached straight to
-      // the readable text it identifies; the dot alone still means priority/status, same as it
-      // always has everywhere else in the app.
+      // the readable text it identifies.
+      //
+      // NO priority dot in this column, unlike the Board rows and the People/Projects/Focus
+      // cards, which all still have one. Removed on request: "colors are already shown in the
+      // bars, so the dots are redundant and will only confuse." That is specific to this view --
+      // a Gantt row already renders the same `pm` colour as a full-width bar a few hundred pixels
+      // to the right, so the dot was a second, smaller copy of a signal already on screen. The
+      // other views have no bar, which is exactly why they keep theirs.
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" data-gantt-row="' + r + '" style="grid-column:1;grid-row:' + rowIdx + ';">' +
-        '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '"></span>' +
         '<div class="min-w-0">' +
           // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
           // so it is easier to identify and discern") against a screenshot of this exact badge.
@@ -9913,7 +9918,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T08:13:10Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T08:14:05Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

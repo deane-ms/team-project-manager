@@ -2339,9 +2339,15 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         share a color. Palette hues (orange/teal/indigo/fuchsia/cyan/lime/pink/violet)
         deliberately exclude rose/amber/sky/emerald/purple, since those already mean
         High/Medium/Low/Done/Ready-for-review elsewhere and a project landing on one of those by
-        coincidence would read as a false status signal. The priority dot stays exactly where and
-        what it always was -- two distinct signals (a colored tag = which project, a plain dot =
-        priority/status), not two competing swatches.
+        coincidence would read as a false status signal.
+      - **The Gantt row's priority dot is gone** (the Board, People, Projects and Focus cards all
+        still have theirs). It survived the `projectColor` rework above on the reasoning that a
+        colored tag and a plain dot are two distinct signals rather than two competing swatches —
+        true as far as it went, but it missed that this view *also* paints the same `pm` colour as
+        a full-width bar a few hundred pixels to the right. Removed on request: "colors are
+        already shown in the bars, so the dots are redundant and will only confuse." The reasoning
+        is view-specific and does not transfer: the other views have no bar, which is precisely
+        why they keep their dot.
       - `computeGanttDeadlineStacks(list)` **went through two designs.** The first flagged any
         two of one assignee's plotted (non-`Done`) tasks whose *date ranges* overlapped at all --
         shipped, then reported back as not actually useful: one person working across several
