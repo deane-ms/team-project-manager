@@ -3933,9 +3933,22 @@
   }
   var GANTT_LABEL_WIDTH = loadGanttLabelWidth();
 
-  // Should the next renderGantt centre on today, or put the person back where they were?
-  // Set when the Timeline tab is opened and cleared the moment it is honoured -- so opening
-  // Timeline always lands on today, while scrolling within it is left completely free.
+  // "Nobody has scrolled this chart yet", NOT "centre exactly once".
+  //
+  // It started as the latter -- set on tab open, cleared by the first render that honoured it --
+  // and the Timeline still opened at the range start. The mechanism itself was fine (verified in
+  // isolation: setting scrollLeft straight after an innerHTML swap sticks, and the 30%-into-the-
+  // day-area maths is right), so the one-shot was being consumed by a render other than the one
+  // left on screen -- renderGantt runs from setView, from renderAll on every tasks/people/
+  // projects snapshot, from the Progress toggle and from the label-resize mouseup, and a
+  // 60-second presence heartbeat alone is enough to fire one. Whichever of those consumed it,
+  // the next render took the `else` branch and restored a scroll position of 0.
+  //
+  // Expressing the real intent removes the ordering question entirely: keep re-centring on every
+  // render for as long as the person has not touched the chart, and stop the moment they do.
+  // Cleared by real input on the pane (wheel/pointerdown/touch/keys), never by the programmatic
+  // scroll below -- which is why this does not listen for 'scroll', an event our own centring
+  // would fire and immediately cancel itself with.
   var ganttCenterOnToday = true;
 
   // Gantt label column resize -- dragging #gantt-resize-handle (see renderGantt). Deliberately
@@ -7683,11 +7696,19 @@
       if (ganttCenterOnToday) {
         var visibleDayAreaWidth = Math.max(0, pane.clientWidth - GANTT_LABEL_WIDTH);
         pane.scrollLeft = Math.max(0, todayIndex * dayWidth - visibleDayAreaWidth * 0.3);
-        ganttCenterOnToday = false;
       } else {
         pane.scrollLeft = prevScrollLeft;
         pane.scrollTop = prevScrollTop;
       }
+      // Deliberately NOT a 'scroll' listener: the line above fires one, so the flag would clear
+      // itself the instant it was honoured. These are the events only a person generates.
+      // The pane is rebuilt on every render, so these are attached fresh each time and die with
+      // it -- no accumulation, nothing to tear down.
+      var releaseCenter = function () { ganttCenterOnToday = false; };
+      pane.addEventListener('wheel', releaseCenter, { passive: true, once: true });
+      pane.addEventListener('pointerdown', releaseCenter, { once: true });
+      pane.addEventListener('touchstart', releaseCenter, { passive: true, once: true });
+      pane.addEventListener('keydown', releaseCenter, { once: true });
     }
   }
 
@@ -9918,7 +9939,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T08:14:05Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T08:22:06Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

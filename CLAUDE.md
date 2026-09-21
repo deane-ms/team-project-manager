@@ -372,8 +372,26 @@ to bottom:
        column-only problem.
      - **The chart centres on today when the Timeline tab is opened, and never moves on its own
        after that** — asked for in exactly those terms ("it should be free scrolling but coming
-       back to Timeline tab should default to showing today"). `ganttCenterOnToday` is set in
-       `setView('gantt')` and cleared the moment `renderGantt` honours it; every other render
+       back to Timeline tab should default to showing today").
+       - **`ganttCenterOnToday` means "nobody has scrolled this chart yet", NOT "centre once".**
+         It shipped as the latter — set on tab open, cleared by the first render that honoured
+         it — and the Timeline still opened at the range start, reported back directly. The
+         mechanism was never the problem: setting `scrollLeft` straight after an `innerHTML` swap
+         was verified to stick, and the 30%-into-the-day-area maths is correct. The one-shot was
+         simply being consumed by a render *other than* the one left on screen. `renderGantt`
+         runs from `setView`, from `renderAll` on every tasks/people/projects snapshot, from the
+         Progress toggle and from the label-resize mouseup — the 60-second presence heartbeat
+         alone is enough to fire one. Whichever consumed it, the next render took the `else`
+         branch and restored a scroll position of 0.
+       - **So it now re-centres on every render until the person actually touches the chart**,
+         which removes the ordering question rather than trying to win it. Cleared by real input
+         on the pane — `wheel`/`pointerdown`/`touchstart`/`keydown`, attached fresh each render
+         and dying with the pane. **Deliberately not a `scroll` listener**: the centring itself
+         fires one, so the flag would cancel itself the instant it was honoured.
+       - Verified by driving the exact sequence that broke the one-shot: open (1543 = today),
+         three unrelated re-renders (1543 each), user scrolls to 900, re-render (900 preserved),
+         reopen the tab (1543 again).
+       - The older half, still true: `ganttCenterOnToday` is set in `setView('gantt')`; every other render
        captures the outgoing pane's `scrollLeft`/`scrollTop` before the `innerHTML` swap and
        restores them afterward. The old code re-centred on *every* render and justified it as
        "instead of leaving that to chance" — which was harmless only because it was simultaneously
