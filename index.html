@@ -678,7 +678,11 @@
           <span id="filter-people-label" class="truncate">Everyone</span>
           <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
-        <div id="filter-people-menu" class="hidden absolute left-0 mt-1 z-20 min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
+        <!-- z-[28], not z-20: the Gantt's frozen header/corner cells sit at 25/26, and this
+             toolbar sits ABOVE the chart in the DOM, so at z-20 the header painted straight
+             through an open dropdown on the Timeline tab (reported from a screenshot). 28 clears
+             the chart while staying under the app header's own panels at z-30. -->
+        <div id="filter-people-menu" class="hidden absolute left-0 mt-1 z-[28] min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
           <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-700">
             <button type="button" id="filter-people-select-all" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Select all</button>
             <button type="button" id="filter-people-clear" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Clear</button>
@@ -5672,7 +5676,11 @@
     var menu = document.createElement('div');
     menu.id = menuId;
     menu.setAttribute('role', 'listbox');
-    menu.className = 'absolute left-0 mt-1 z-20 hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
+    // z-[28] for the same reason as #filter-people-menu above -- the Gantt's frozen header and
+    // corner cells are z-25/z-26 and the toolbar precedes the chart in the DOM, so a z-20 menu
+    // was painted through on the Timeline tab. Harmless inside the task modal, which is z-50 and
+    // establishes its own stacking context, so its menus only ever compete with their siblings.
+    menu.className = 'absolute left-0 mt-1 z-[28] hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
     wrapper.appendChild(menu);
 
     var entry = { wrapper: wrapper, menu: menu, trigger: trigger };
@@ -9871,7 +9879,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T08:01:17Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T08:04:44Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

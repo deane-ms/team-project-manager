@@ -314,8 +314,16 @@ to bottom:
    - **`renderGantt` stacking tiers** (all below 30, so a sticky Gantt cell can never cover the
      app header at `z-40` or its notification/user-menu panels at `z-30` — `z-40` vs `z-40` did
      exactly that once, with the corner cell covering the mobile nav menu):
-     `26` corner · `25` month + day header (the frozen top row) · `20` task label column (the
-     frozen left column) · `15` today line · `0` leave bands then bars.
+     `28` the toolbar's own dropdown menus · `26` corner · `25` month + day header (the frozen
+     top row) · `20` task label column (the frozen left column) · `15` today line · `0` leave
+     bands then bars.
+     - **The toolbar dropdowns are in this list because they collide with the chart, even though
+       they are not part of it.** `#filter-people-menu` and every `enhanceSelect()` menu
+       (Priority, Project, Sort) were `z-20`, and the toolbar sits *above* the Gantt in the DOM —
+       so on the Timeline tab the frozen header painted straight through an open dropdown,
+       reported from a screenshot of the People list with day columns running across it. They are
+       `z-[28]` now: clear of the chart's 26, still under the app header's panels at 30. Anything
+       new that floats over `<main>` needs a z-index above 26 for the same reason.
      - **The header used to be `z-10`, *below* the label column's `z-20`**, on the reasoning that
        the two can never overlap because "one owns the header rows, the other owns a task row."
        That holds only while nothing scrolls. A sticky header travels down over the rows beneath
