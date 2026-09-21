@@ -274,6 +274,25 @@
     100% { transform: translateY(100vh) translateX(var(--confetti-drift, 0px)) rotate(var(--confetti-rot, 480deg)); opacity: 0; }
   }
 
+  /* The chart is its own scroll pane, and that is what makes the frozen Task column work at
+     all. Before this, #gantt-wrap set no overflow whatsoever, so the nearest scrollport was
+     <main> (overflow-y-auto, which per spec forces overflow-x to auto too) -- scrolling right to
+     reach later dates dragged the ENTIRE page sideways, Focus strip and toolbar included, and
+     the sticky label cells had no chart-local scrollport to freeze against.
+     Both axes are scrolled here on purpose: overflow-x alone is not expressible (a box cannot
+     scroll one axis and leave the other visible), and with an unbounded height there would be
+     nothing to scroll vertically -- which would leave `sticky top-0` on the month/day header
+     resolving against a container that never scrolls, breaking the frozen top row to fix the
+     frozen column. A bounded height gives both a real scrollport, i.e. proper spreadsheet-style
+     frozen panes. overscroll-behavior stops a flick at the chart's edge from chaining out and
+     scrolling the page instead. */
+  #gantt-wrap {
+    overflow: auto;
+    overscroll-behavior: contain;
+    max-height: calc(100vh - 17rem);
+    min-height: 18rem;
+  }
+
   .gantt-bar { transition: filter 0.15s ease; }
   .gantt-bar:hover { filter: brightness(0.95); }
 
@@ -3944,9 +3963,12 @@
       dragging = true;
       e.preventDefault();
       document.body.style.userSelect = 'none';
+      // The pane's left edge, not the grid's. The label column and the drag handle are both
+      // sticky, so they paint at the pane's left edge regardless of how far the chart is
+      // scrolled -- measuring from the grid instead would shift the drag by exactly scrollLeft
+      // and make the column jump the moment you resize it while scrolled away from the start.
       var wrap = document.getElementById('gantt-wrap');
-      var scrollWrap = wrap && wrap.firstElementChild;
-      containerLeft = scrollWrap ? scrollWrap.getBoundingClientRect().left : 0;
+      containerLeft = wrap ? wrap.getBoundingClientRect().left : 0;
     });
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
@@ -7389,7 +7411,9 @@
     // column to fill the whole card, so a 1-day task's bar could balloon out to hundreds of
     // pixels wide and look like an oversized solid block rather than a normal task bar.
     var GANTT_MAX_DAY_WIDTH = 120;
-    var availableWidth = wrap.parentElement.clientWidth - GANTT_LABEL_WIDTH;
+    // wrap's own clientWidth, not its parent's -- now that wrap is the scroll pane, this is the
+    // real visible width and it already excludes a vertical scrollbar when one is present.
+    var availableWidth = wrap.clientWidth - GANTT_LABEL_WIDTH;
     var dayWidth = Math.min(GANTT_MAX_DAY_WIDTH, Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays)));
 
     // DO NOT give these sticky header cells a top offset to clear the app's own sticky header.
@@ -7404,7 +7428,15 @@
     // data-day-width/data-total-days let the resize-drag handler below rebuild this exact
     // grid-template-columns string live, without re-running the whole render on every
     // mousemove -- see "Gantt label column resize" further down.
-    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;">';
+    //
+    // width:max-content is what actually makes the frozen Task column work -- do not drop it.
+    // With min-width:100% alone, the grid BOX is only as wide as the scroll pane while its
+    // columns overflow it, and a sticky element is constrained to its containing block -- so the
+    // label cells could travel about one paneful and then slid off to the left. Measured in an
+    // isolated fixture: scrolled 1400px right, the label sat 869px LEFT of the pane's edge; with
+    // max-content it sits exactly ON it. min-width:100% stays for the opposite case, a short
+    // date range whose columns do not fill the pane.
+    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;width:max-content;">';
 
     // corner cells
     //
@@ -7586,12 +7618,11 @@
     // of this code did) put "today" -- and any bar near it -- at a raw viewport-x that could
     // land *underneath* the label column on any card narrower than ~1000px, rendering that
     // bar visually overlapping the task names instead of in the day grid where it belongs.
-    var scrollWrap = wrap.firstElementChild;
-    if (scrollWrap) {
-      var visibleDayAreaWidth = Math.max(0, scrollWrap.clientWidth - GANTT_LABEL_WIDTH);
-      var target = todayIndex * dayWidth - visibleDayAreaWidth * 0.3;
-      scrollWrap.scrollLeft = Math.max(0, target);
-    }
+    // Scroll the PANE, not the grid inside it. This used to set scrollLeft on
+    // wrap.firstElementChild (the grid), which has never been a scroll container -- so "keep
+    // today in view" has silently done nothing for as long as it has existed.
+    var visibleDayAreaWidth = Math.max(0, wrap.clientWidth - GANTT_LABEL_WIDTH);
+    wrap.scrollLeft = Math.max(0, todayIndex * dayWidth - visibleDayAreaWidth * 0.3);
   }
 
   function syncGanttProgressToggle() {
@@ -9815,7 +9846,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T02:17:47Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T07:42:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
