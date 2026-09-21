@@ -438,6 +438,30 @@ to bottom:
      `renderFocus` reserves up to `FOCUS_REVIEW_RESERVED` (2) slots for the highest-priority
      Review tasks before filling the rest of the 6 normally — guaranteed a little visibility
      without letting Review tasks dominate the strip the way the old urgency boost did.
+   - **The Sort dropdown drives the Focus of the Day strip too** — asked for directly ("Focus of
+     the day should also apply to sorting"). It decides **both which six and their order**, via
+     the same `sortTasksForDisplay()` the Board columns use, so "Sort: Deadline" really means the
+     six soonest rather than the six highest-scoring shown in date order.
+     - **`sortBy === 'focus'` keeps the old path exactly, reserved Review slots and all.** Those
+       two slots exist to stop Review tasks being crowded out of a focus-*scored* strip (see
+       `dueUrgency`'s Review exemption); under an explicit Deadline/Priority/Project sort there is
+       no score to be crowded out of, and holding two slots back would contradict the sort the
+       person just picked.
+     - **`FOCUS_CAPTIONS` re-labels the strip per mode** ("— next 6 by deadline", etc.), set from
+       inside `renderFocus` rather than the sort handler so the caption can never describe an
+       order the list isn't in. The default text stays "highest priority & most urgent,
+       auto-sorted", which stops being true the moment another sort is chosen.
+     - **The `sort-by` change handler had to gain a `renderFocus()` call** — it drove the Board
+       and the secondary views but never the strip, which didn't matter while the strip ignored
+       `filters.sortBy` entirely. Without it the sort appears to do nothing up there until some
+       unrelated change triggers a full `renderAll()`.
+     - **The strip still ignores the Priority/Project/People filters and the search box** — only
+       *sorting* was asked for, and it remains `activeTasks()`-wide rather than filtered. Worth
+       revisiting as its own decision if the split ever reads as inconsistent.
+     - Verified with an isolated Node port of the selection logic against synthetic tasks (same
+       two-track approach as the Calendar span logic): focus mode still returns 6 and still keeps
+       both Review tasks; deadline returns the six soonest in date order; priority leads with
+       every High; project groups alphabetically and sorts the unprojected task last overall.
    - **`focusScore(t)`** (shared by `renderFocus` and the Board's "Sort: Focus" option) weighs
      deadline proximity above priority tier, not just alongside it: a Low-priority task due
      today outscores a High-priority task due in three weeks. Priority (`PRIORITY_WEIGHT × 1000`)

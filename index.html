@@ -594,7 +594,7 @@
             <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
           </div>
           <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Focus of the Day</h2>
-          <span class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
+          <span id="focus-caption" class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
         </div>
       </div>
       <!-- pt-1.5 isn't decorative spacing -- overflow-x-auto forces the CSS overflow-y
@@ -6974,6 +6974,14 @@
   /* =========================================================
      RENDER: FOCUS OF THE DAY
   ========================================================= */
+  // One line per sort mode. Set as textContent, so a literal & is correct here (not &amp;).
+  var FOCUS_CAPTIONS = {
+    focus: '— highest priority & most urgent, auto-sorted',
+    priority: '— top 6 by priority',
+    deadline: '— next 6 by deadline',
+    project: '— 6 tasks, ordered by project'
+  };
+
   function renderFocus() {
     var container = document.getElementById('focus-list');
     var candidates = activeTasks().filter(function (t) { return t.status !== 'Done'; });
@@ -6986,12 +6994,33 @@
     // dominating the strip; anything beyond that still competes for the remaining slots
     // normally, same as before.
     var FOCUS_TOTAL = 6, FOCUS_REVIEW_RESERVED = 2;
-    var reserved = sortByFocus(candidates.filter(function (t) { return t.status === 'Review'; })).slice(0, FOCUS_REVIEW_RESERVED);
-    var reservedIds = {};
-    reserved.forEach(function (t) { reservedIds[t.id] = true; });
-    var openPool = candidates.filter(function (t) { return !reservedIds[t.id]; });
-    var fill = sortByFocus(openPool).slice(0, FOCUS_TOTAL - reserved.length);
-    var top = sortByFocus(reserved.concat(fill));
+    var top;
+
+    if (filters.sortBy === 'focus') {
+      // Default, and the only mode the reserved-Review slots make sense in -- they exist to stop
+      // Review tasks being crowded out of a focus-SCORED strip (see dueUrgency's Review
+      // exemption). Under an explicit Deadline/Priority/Project sort there is no score to be
+      // crowded out of, and silently holding two slots back would contradict the sort the person
+      // just picked.
+      var reserved = sortByFocus(candidates.filter(function (t) { return t.status === 'Review'; })).slice(0, FOCUS_REVIEW_RESERVED);
+      var reservedIds = {};
+      reserved.forEach(function (t) { reservedIds[t.id] = true; });
+      var openPool = candidates.filter(function (t) { return !reservedIds[t.id]; });
+      var fill = sortByFocus(openPool).slice(0, FOCUS_TOTAL - reserved.length);
+      top = sortByFocus(reserved.concat(fill));
+    } else {
+      // The Sort dropdown drives this strip too now -- asked for directly ("Focus of the day
+      // should also apply to sorting"). It decides BOTH which six and their order, via the same
+      // sortTasksForDisplay() the Board columns use, so "Sort: Deadline" really does mean the
+      // six soonest rather than the six highest-scoring shown in deadline order. The caption
+      // below changes with it, since "highest priority & most urgent" stops being true.
+      top = sortTasksForDisplay(candidates).slice(0, FOCUS_TOTAL);
+    }
+
+    // Kept in renderFocus rather than the sort handler so it can never drift out of step with
+    // the list it describes -- every path that re-renders the strip re-labels it too.
+    var caption = document.getElementById('focus-caption');
+    if (caption) caption.textContent = FOCUS_CAPTIONS[filters.sortBy] || FOCUS_CAPTIONS.focus;
 
     if (top.length === 0) {
       container.innerHTML = '<div class="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500 py-4 px-1">' +
@@ -9118,7 +9147,11 @@
   document.getElementById('sort-by').addEventListener('change', function (e) {
     filters.sortBy = e.target.value;
     persistFilters();
-    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
+    // renderFocus() included deliberately: this handler drove the Board and the secondary views
+    // but never the Focus strip, so before the strip honoured filters.sortBy at all there was
+    // nothing to update -- now there is, and leaving it out would make the sort appear to do
+    // nothing up there until some unrelated change triggered a full renderAll().
+    renderFocus(); renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
   });
   document.getElementById('btn-clear-filters').addEventListener('click', function () {
     // Object.assign only shallow-copies -- DEFAULT_FILTERS.assignees is overridden with a fresh
@@ -9879,7 +9912,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T08:04:44Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T08:09:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
