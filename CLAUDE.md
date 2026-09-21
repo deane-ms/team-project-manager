@@ -325,14 +325,30 @@ to bottom:
        (`dark:bg-zinc-700/80`, and the weekend/today tints at `/70`, `/40`, `/10`), so bars
        scrolling underneath still showed through as ghost blocks. Every cell in both header rows
        is a solid colour now.
-     - **There is exactly ONE scroll pane, and it is the `overflow-auto` box `renderGantt`
-       emits** (`max-height: 600px`), not `#gantt-wrap` — which has no `overflow` of its own and
-       must keep it that way. A pass that added `overflow: auto` to `#gantt-wrap` as well shipped
-       and was reverted within the hour: it nested a second scroller around the existing one, and
-       the two scrollbars were reported directly ("do not have two separate scroll bars... make it
-       all into one"). **Before changing anything here, check which element actually scrolls** —
-       `wrap.firstElementChild` was the grid before that box was introduced and is the pane now,
-       so stale assumptions about it are easy to carry in.
+     - **There is exactly ONE scroll pane: the `overflow-auto` box `renderGantt` emits**, and it
+       **must carry no height cap**. `#gantt-wrap` has no `overflow` of its own and must keep it
+       that way. Two separate passes each added a second vertical scroller here and both were
+       reported the same day:
+       - adding `overflow: auto` to `#gantt-wrap` as well (nesting a second scroller around the
+         existing one) — "do not have two separate scroll bars... make it all into one";
+       - the pane's own `max-height: 600px`, which made it overflow vertically and draw its own
+         scrollbar a few pixels from the page's — "it is still showing two vertical scrollbars?"
+       With the height unconstrained the box grows to fit every row, so nothing overflows
+       vertically and only the page's scrollbar is drawn. It still scrolls **horizontally**
+       (the grid inside is `width: max-content`), which is what the frozen column sticks against
+       — so `overflow-auto` itself has to stay.
+       **Before changing anything here, check which element actually scrolls** —
+       `wrap.firstElementChild` was the grid before that box existed and is the pane now, so
+       stale assumptions about it are easy to carry in.
+     - **The month/day header no longer freezes while you scroll the page, and that is the
+       accepted cost of one scrollbar.** A sticky element resolves against its nearest
+       scroll-container ancestor, and the pane is still one even when only its horizontal axis
+       overflows — so `sticky top-0` is pinned to a box that never scrolls vertically. The frozen
+       *column* is unaffected (it sticks against the axis that does scroll). Getting the header
+       frozen back while still showing one scrollbar means sizing the whole Timeline view to the
+       viewport so the pane becomes the page's only vertical scroller — a layout change, not a
+       height tweak. **Do not just put `max-height` back; that is exactly where the second
+       scrollbar came from.**
      - **`width: max-content` on `#gantt-grid` is what actually freezes the Task column** —
        reported directly ("freeze the task column so it always stays in view"). Nothing to do with
        `overflow`, which is why the first attempt (adding a scroll pane) changed nothing visible

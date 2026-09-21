@@ -7595,7 +7595,24 @@
     var prevScrollLeft = outgoingPane ? outgoingPane.scrollLeft : 0;
     var prevScrollTop = outgoingPane ? outgoingPane.scrollTop : 0;
 
-    wrap.innerHTML = '<div class="overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg" style="max-height:600px;">' + html + '</div>';
+    // NO max-height here, deliberately. This box used to carry max-height:600px, which made it
+    // overflow vertically and grow its OWN vertical scrollbar -- sitting right beside the page's,
+    // two vertical scrollbars a few pixels apart. Reported directly, from a screenshot.
+    //
+    // With the height unconstrained the box grows to fit every row, so nothing overflows
+    // vertically and no vertical scrollbar is drawn; it still scrolls HORIZONTALLY, because the
+    // grid inside it is width:max-content and wider than the card. That horizontal scroll is
+    // what the frozen Task column sticks against, so overflow-auto has to stay.
+    //
+    // The trade, worth knowing before anyone "fixes" this back: a sticky element resolves against
+    // its nearest scroll-container ancestor, and this box is still one even when only one axis
+    // actually overflows -- so the month/day header's `sticky top-0` is now pinned to a box that
+    // never scrolls vertically, i.e. it scrolls up with the page instead of staying put. Keeping
+    // that frozen while still showing only one vertical scrollbar needs the whole Timeline view
+    // sized to the viewport so this pane becomes the only vertical scroller on the page -- a
+    // layout change, not a height tweak. Don't just put max-height back; that's where the second
+    // scrollbar came from.
+    wrap.innerHTML = '<div class="overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg">' + html + '</div>';
 
     // Rebuilding innerHTML resets the new pane's scroll to 0 (the range start), which can leave
     // today out of view on any range extending more than a screen-width into the future.
@@ -9854,7 +9871,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T07:54:10Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T08:01:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
