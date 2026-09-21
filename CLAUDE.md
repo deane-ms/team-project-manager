@@ -637,6 +637,40 @@ to bottom:
          archived or deleted, so the collection grows by one small doc per task forever — the same
          trade-off this file already accepts for the `activity` log, at a scale (one team's worth
          of tasks) where it doesn't matter in practice.
+     - **Fixed again: the persisted layer above didn't actually work, and the duplicates came
+       straight back.** Reported a second time, from a screenshot of "A deadline is coming up"
+       three times over for one task and three more for another. Two separate races, both closed
+       by `runTaskAutomations()`:
+       - **The dedup map was read before its own listener had delivered anything.**
+         `unsubNotificationDedup` and `unsubTasks` are attached together in `startListeners`, and
+         the tasks snapshot routinely resolves first — so on every cold load the four checks read
+         an empty `notificationDedupByTaskId`, concluded nothing had ever been sent, and sent it
+         all again. The in-memory `xWarned` map then suppressed any repeat for the rest of that
+         session, which is exactly why it looked like "once per reload" both times. **The comment
+         on that listener explicitly called this window a "minor, accepted inaccuracy" — it was
+         not minor; it defeated the entire persisted layer on the only path that layer existed
+         for.** All four checks now run only through `runTaskAutomations()`, which returns early
+         unless `notificationDedupReady` is true, and the dedup listener calls it itself once its
+         first snapshot lands — so whichever listener finishes *second* is the one that runs them,
+         with both halves of the data present.
+       - **Every teammate's browser was racing to send the same alert.** These checks scan the
+         whole board (`activeTasks()`, deliberately not filtered — see `checkWorkloadSpikes`'
+         own note), and all four notify the task's *assignee*, so N open sessions each decided
+         independently to send the same notification. The persisted dedup can't help here: it
+         only suppresses a repeat once somebody's write has already landed, which is no use when
+         everyone checks at the same moment. **`isOwnNotification(recipientName)` now gates all
+         four** — a browser only ever evaluates alerts addressed to the person using it, so
+         exactly one client can generate a given alert. The trade: an alert is created when its
+         recipient next has the app open, rather than by whoever happens to be online first.
+         That costs nothing in practice — these are in-app notifications, and the desktop popup
+         already required the recipient's own tab to be open.
+       - **On a listener error, `notificationDedupReady` deliberately stays false and all four
+         automations stay silent.** The most likely cause of that error is `notificationDedup`'s
+         `firestore.rules` block never having been deployed (rules don't ship with the site —
+         see the top-level `CLAUDE.md`), and with no way to know what's already been sent,
+         sending nothing beats re-sending everything on every reload. **If these alerts ever go
+         completely quiet, check the browser console for `notificationDedup listener error`
+         before assuming the automations themselves broke.**
    - **Filters persist across reloads** (`FILTERS_KEY = 'flowboard_filters'`, `loadFilters`/
      `persistFilters`/`restoreFilterControls`). Only the five known keys are read back, so a
      stale or hand-edited `localStorage` value can't inject anything else. Safe to persist

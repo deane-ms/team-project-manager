@@ -1512,6 +1512,22 @@
   var notificationDedupCol = collection(db, "notificationDedup");
   var notificationDedupByTaskId = {};
   var unsubNotificationDedup = null;
+  // Has the notificationDedup collection delivered its first snapshot yet? Until it has, the map
+  // above is empty and every "have I already sent this?" check reads as "no" -- see
+  // runTaskAutomations for why that was re-sending the same alert on every single page load.
+  var notificationDedupReady = false;
+
+  // The four automations below all notify a task's ASSIGNEE. Every signed-in teammate's browser
+  // runs them over the whole board, so without this guard N open sessions each independently
+  // decide to send the same alert and race to write it -- the persisted dedup only stops a
+  // repeat once somebody's write has already landed, which is no help when they all check at
+  // once. Restricting each check to tasks the viewer is themselves the recipient of means
+  // exactly one browser can ever generate a given alert.
+  function isOwnNotification(recipientName) {
+    var u = auth.currentUser;
+    var myName = u ? (u.displayName || u.email) : null;
+    return !!myName && !!recipientName && recipientName === myName;
+  }
 
   // Shared between the desktop popup title and the bell panel's bold line for the four
   // system-generated alerts (checkWorkloadSpikes/checkDeadlineReminders/checkStaleReviews/
@@ -6662,6 +6678,7 @@
       (byAssignee[t.assignee] = byAssignee[t.assignee] || []).push(t);
     });
     Object.keys(byAssignee).forEach(function (assignee) {
+      if (!isOwnNotification(assignee)) return;
       var byDeadline = {};
       byAssignee[assignee].forEach(function (t) { (byDeadline[t.deadline] = byDeadline[t.deadline] || []).push(t); });
       Object.keys(byDeadline).forEach(function (deadline) {
@@ -6725,6 +6742,7 @@
   function checkDeadlineReminders() {
     activeTasks().forEach(function (t) {
       if (!t.assignee || t.status === 'Done' || t.status === 'Review' || !t.deadline) return;
+      if (!isOwnNotification(t.assignee)) return;
       var days = daysUntil(t.deadline);
       if (days === null || days < 0 || days > DEADLINE_REMINDER_DAYS) return;
       var key = t.id + '|' + t.deadline;
@@ -6781,6 +6799,7 @@
   function checkStaleReviews() {
     activeTasks().forEach(function (t) {
       if (!t.assignee || t.status !== 'Review' || !t.updatedAt) return;
+      if (!isOwnNotification(t.assignee)) return;
       var days = daysBetween(parseDate(localDateOf(t.updatedAt)), todayMidnight());
       if (days < REVIEW_STALE_DAYS) return;
       var key = t.id + '|' + t.updatedAt;
@@ -6826,6 +6845,7 @@
   function checkLeaveClashes() {
     activeTasks().forEach(function (t) {
       if (!t.assignee || t.status === 'Done' || !t.deadline) return;
+      if (!isOwnNotification(t.assignee)) return;
       if (!isOnLeave(t.assignee, t.deadline)) return;
       var key = t.id + '|' + t.deadline;
       if (leaveClashWarned[key]) return;
@@ -6833,6 +6853,35 @@
       leaveClashWarned[key] = true;
       notifyOnLeaveClash(t);
     });
+  }
+
+  /* ---------------------------------------------------------
+     THE ONE ENTRY POINT for the four notification automations above.
+
+     Gated on notificationDedupReady, and that gate is the actual fix for "the same 'A deadline
+     is coming up' alert, three times over" (reported twice, the second time from a screenshot of
+     six near-identical rows in the bell panel).
+
+     The persisted dedup layer these four share (the notificationDedup collection) exists
+     precisely so an alert already sent survives a reload -- but it was being queried before its
+     own listener had delivered anything. Both listeners attach together in startListeners, and
+     the tasks snapshot routinely wins that race, so on a cold load every check read an empty
+     notificationDedupByTaskId, concluded nothing had ever been sent, and sent it again. The
+     in-memory xWarned map then suppressed any repeat for the rest of that session, which is
+     exactly why it presented as "once per reload" -- and this app auto-reloads on every deploy.
+     The comment on that listener called the window a "minor, accepted inaccuracy"; it was not
+     minor, it defeated the persisted layer entirely on the one path that mattered.
+
+     Skipping here is safe rather than lossy: the dedup listener calls this again the moment its
+     first snapshot lands, so whichever listener finishes second runs the checks with both halves
+     of the data present.
+  --------------------------------------------------------- */
+  function runTaskAutomations() {
+    if (!notificationDedupReady) return;
+    checkWorkloadSpikes();
+    checkDeadlineReminders();
+    checkStaleReviews();
+    checkLeaveClashes();
   }
 
   function archiveTask(id) {
@@ -9377,6 +9426,7 @@
     if (unsubProjects) { unsubProjects(); unsubProjects = null; }
     if (unsubNotificationDedup) { unsubNotificationDedup(); unsubNotificationDedup = null; }
     notificationDedupByTaskId = {};
+    notificationDedupReady = false;
     if (unsubPeople) { unsubPeople(); unsubPeople = null; }
     teamPeople = [];
     if (unsubArchivedTasks) { unsubArchivedTasks(); unsubArchivedTasks = null; }
@@ -9515,10 +9565,7 @@
       }
       renderAll();
       checkProjectDeadlinePopups();
-      checkWorkloadSpikes();
-      checkDeadlineReminders();
-      checkStaleReviews();
-      checkLeaveClashes();
+      runTaskAutomations();
     }, function (err) {
       showToast('Live sync error: ' + err.message, 'error');
     });
@@ -9573,7 +9620,17 @@
     unsubNotificationDedup = onSnapshot(notificationDedupCol, function (snap) {
       notificationDedupByTaskId = {};
       snap.docs.forEach(function (d) { notificationDedupByTaskId[d.id] = d.data(); });
+      // Whichever of this and the tasks listener resolves SECOND is the one that actually gets
+      // to run the checks -- the tasks handler skips them while this is still false, and this
+      // runs them itself once the map is populated. Cheap to call on later snapshots too: every
+      // check re-reads this map and short-circuits on anything already recorded.
+      notificationDedupReady = true;
+      runTaskAutomations();
     }, function (err) {
+      // Leaving notificationDedupReady false on a hard failure is deliberate. If this collection
+      // cannot be read (most likely its firestore.rules block never got deployed -- rules do not
+      // ship with the site), the automations have no way to know what has already been sent, and
+      // sending nothing beats re-sending everything on every reload.
       console.error('notificationDedup listener error', err);
     });
   }
@@ -9758,7 +9815,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-17T05:33:20Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T02:17:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
