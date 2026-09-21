@@ -5565,19 +5565,30 @@
     renderChecklistEditor();
   }
 
-  document.getElementById('task-time-add-btn').addEventListener('click', function () {
+  // Shared by the Log/Save button's own click AND by Save Task itself -- typing hours into this
+  // row and clicking Save Task directly (without first clicking Log/Save here) used to silently
+  // drop whatever was typed, since it only ever entered currentTimeEntries via this button.
+  // Reported directly ("doesn't matter if I click add or log, clicking Save Task should save the
+  // details for me"). Returns true if a pending entry was actually captured, false if the hours
+  // field was empty/invalid -- callers that don't care can ignore the return value.
+  function commitPendingTimeEntry() {
     var hoursEl = document.getElementById('task-time-hours');
     var noteEl = document.getElementById('task-time-note');
     var billableEl = document.getElementById('task-time-billable');
     var overtimeEl = document.getElementById('task-time-overtime');
     var hours = parseFloat(hoursEl.value);
-    if (!hours || hours <= 0) return;
+    if (!hours || hours <= 0) return false;
     var minutes = Math.round(hours * 60);
     var billable = billableEl.getAttribute('data-active') === 'true';
     var overtime = overtimeEl.getAttribute('data-active') === 'true';
     var note = noteEl.value.trim();
     var checklistItemId = checklistItemIdForNote(note);
     commitTimeEntry(minutes, note, billable, overtime, checklistItemId);
+    return true;
+  }
+
+  document.getElementById('task-time-add-btn').addEventListener('click', function () {
+    commitPendingTimeEntry();
   });
 
   document.getElementById('task-time-log').addEventListener('click', function (e) {
@@ -6046,6 +6057,10 @@
 
   function commitTaskSave() {
     clearFieldErrors();
+
+    // Capture any hours/note still sitting in the Time Tracking row that the user never clicked
+    // Log/Save on -- see commitPendingTimeEntry's own comment for why this has to happen here too.
+    commitPendingTimeEntry();
 
     var nameEl = document.getElementById('task-name');
     var projectEl = document.getElementById('task-project');
@@ -9939,7 +9954,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T08:22:06Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T09:39:22Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
