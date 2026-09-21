@@ -274,25 +274,6 @@
     100% { transform: translateY(100vh) translateX(var(--confetti-drift, 0px)) rotate(var(--confetti-rot, 480deg)); opacity: 0; }
   }
 
-  /* The chart is its own scroll pane, and that is what makes the frozen Task column work at
-     all. Before this, #gantt-wrap set no overflow whatsoever, so the nearest scrollport was
-     <main> (overflow-y-auto, which per spec forces overflow-x to auto too) -- scrolling right to
-     reach later dates dragged the ENTIRE page sideways, Focus strip and toolbar included, and
-     the sticky label cells had no chart-local scrollport to freeze against.
-     Both axes are scrolled here on purpose: overflow-x alone is not expressible (a box cannot
-     scroll one axis and leave the other visible), and with an unbounded height there would be
-     nothing to scroll vertically -- which would leave `sticky top-0` on the month/day header
-     resolving against a container that never scrolls, breaking the frozen top row to fix the
-     frozen column. A bounded height gives both a real scrollport, i.e. proper spreadsheet-style
-     frozen panes. overscroll-behavior stops a flick at the chart's edge from chaining out and
-     scrolling the page instead. */
-  #gantt-wrap {
-    overflow: auto;
-    overscroll-behavior: contain;
-    max-height: calc(100vh - 17rem);
-    min-height: 18rem;
-  }
-
   .gantt-bar { transition: filter 0.15s ease; }
   .gantt-bar:hover { filter: brightness(0.95); }
 
@@ -3947,6 +3928,11 @@
   }
   var GANTT_LABEL_WIDTH = loadGanttLabelWidth();
 
+  // Should the next renderGantt centre on today, or put the person back where they were?
+  // Set when the Timeline tab is opened and cleared the moment it is honoured -- so opening
+  // Timeline always lands on today, while scrolling within it is left completely free.
+  var ganttCenterOnToday = true;
+
   // Gantt label column resize -- dragging #gantt-resize-handle (see renderGantt). Deliberately
   // does NOT call renderGantt() on every mousemove: that would rebuild every row's HTML and
   // recompute dayWidth against the shrinking/growing available width dozens of times a second.
@@ -3963,12 +3949,12 @@
       dragging = true;
       e.preventDefault();
       document.body.style.userSelect = 'none';
-      // The pane's left edge, not the grid's. The label column and the drag handle are both
-      // sticky, so they paint at the pane's left edge regardless of how far the chart is
-      // scrolled -- measuring from the grid instead would shift the drag by exactly scrollLeft
-      // and make the column jump the moment you resize it while scrolled away from the start.
+      // The scroll pane's left edge. The label column and this handle are both sticky, so they
+      // paint at that edge however far the chart is scrolled -- measuring from the grid instead
+      // would shift the drag by exactly scrollLeft.
       var wrap = document.getElementById('gantt-wrap');
-      containerLeft = wrap ? wrap.getBoundingClientRect().left : 0;
+      var pane = wrap && wrap.firstElementChild;
+      containerLeft = pane ? pane.getBoundingClientRect().left : 0;
     });
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
@@ -7411,8 +7397,6 @@
     // column to fill the whole card, so a 1-day task's bar could balloon out to hundreds of
     // pixels wide and look like an oversized solid block rather than a normal task bar.
     var GANTT_MAX_DAY_WIDTH = 120;
-    // wrap's own clientWidth, not its parent's -- now that wrap is the scroll pane, this is the
-    // real visible width and it already excludes a vertical scrollbar when one is present.
     var availableWidth = wrap.clientWidth - GANTT_LABEL_WIDTH;
     var dayWidth = Math.min(GANTT_MAX_DAY_WIDTH, Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays)));
 
@@ -7605,24 +7589,46 @@
 
     html += '</div>';
 
+    // Read the OUTGOING pane before innerHTML replaces it -- its scroll position goes with it,
+    // and the restore below needs the value the person was actually looking at.
+    var outgoingPane = wrap.firstElementChild;
+    var prevScrollLeft = outgoingPane ? outgoingPane.scrollLeft : 0;
+    var prevScrollTop = outgoingPane ? outgoingPane.scrollTop : 0;
+
     wrap.innerHTML = '<div class="overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg" style="max-height:600px;">' + html + '</div>';
 
-    // Rebuilding innerHTML always resets scrollLeft to 0 (the range start), which can leave
-    // "today" scrolled out of view on any range that extends more than a screen-width of
-    // days into the future. Re-center it every render instead of leaving that to chance.
+    // Rebuilding innerHTML resets the new pane's scroll to 0 (the range start), which can leave
+    // today out of view on any range extending more than a screen-width into the future.
     //
-    // The sticky Task label column doesn't scroll away -- it's pinned at the viewport's own
-    // left edge (0 to GANTT_LABEL_WIDTH) for as long as the view is scrolled at all. So "30%
-    // into view" has to mean 30% into the day-column area that's actually left over after
-    // that column, not 30% of the whole card width. Getting this wrong (as an earlier version
-    // of this code did) put "today" -- and any bar near it -- at a raw viewport-x that could
-    // land *underneath* the label column on any card narrower than ~1000px, rendering that
-    // bar visually overlapping the task names instead of in the day grid where it belongs.
-    // Scroll the PANE, not the grid inside it. This used to set scrollLeft on
-    // wrap.firstElementChild (the grid), which has never been a scroll container -- so "keep
-    // today in view" has silently done nothing for as long as it has existed.
-    var visibleDayAreaWidth = Math.max(0, wrap.clientWidth - GANTT_LABEL_WIDTH);
-    wrap.scrollLeft = Math.max(0, todayIndex * dayWidth - visibleDayAreaWidth * 0.3);
+    // CENTRE ON TODAY ONLY WHEN THE TIMELINE TAB IS OPENED, then leave scrolling entirely alone.
+    // Asked for in exactly those terms: "it should be free scrolling but coming back to Timeline
+    // tab should default to showing today."
+    //
+    // This used to re-centre on EVERY render, described as "instead of leaving that to chance" --
+    // harmless only because it was simultaneously setting scrollLeft on an element that does not
+    // scroll, so it never actually ran. The moment that was fixed, every unrelated snapshot (a
+    // teammate editing a different task, a roster heartbeat, a project deadline change) would
+    // have yanked the chart back to today while someone was reading next month. The Content Hub's
+    // chat log had the identical bug and is fixed the same way: capture, then restore.
+    //
+    // `pane` is the overflow-auto box emitted just above -- NOT #gantt-wrap (no overflow of its
+    // own) and NOT the grid inside it. Easy to get wrong: the grid is what firstElementChild
+    // used to be before that box existed.
+    //
+    // "30% into view" is measured against the day area left over after the frozen label column,
+    // not the whole card width -- otherwise today lands at an x that can sit underneath the
+    // label column on any card narrower than ~1000px.
+    var pane = wrap.firstElementChild;
+    if (pane) {
+      if (ganttCenterOnToday) {
+        var visibleDayAreaWidth = Math.max(0, pane.clientWidth - GANTT_LABEL_WIDTH);
+        pane.scrollLeft = Math.max(0, todayIndex * dayWidth - visibleDayAreaWidth * 0.3);
+        ganttCenterOnToday = false;
+      } else {
+        pane.scrollLeft = prevScrollLeft;
+        pane.scrollTop = prevScrollTop;
+      }
+    }
   }
 
   function syncGanttProgressToggle() {
@@ -8825,6 +8831,8 @@
     // testing the column's new 400px default: without this, every fresh sign-in landed on the
     // 200px floor the first time someone opened Chat, not 400.
     if (view === 'chat') applyChatListWidth();
+    // Opening Timeline always lands on today -- see ganttCenterOnToday.
+    if (view === 'gantt') ganttCenterOnToday = true;
     renderCurrentSecondaryView();
   }
 
@@ -9846,7 +9854,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T07:42:18Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T07:54:10Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

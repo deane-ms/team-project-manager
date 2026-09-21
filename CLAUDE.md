@@ -325,32 +325,43 @@ to bottom:
        (`dark:bg-zinc-700/80`, and the weekend/today tints at `/70`, `/40`, `/10`), so bars
        scrolling underneath still showed through as ghost blocks. Every cell in both header rows
        is a solid colour now.
-     - **The chart is its own scroll pane now, and both frozen edges depend on it.**
-       `#gantt-wrap` sets `overflow: auto` plus a bounded `max-height`. Before that it set **no
-       `overflow` at all**, so the nearest scrollport was `<main>` (`overflow-y-auto`, which per
-       spec forces `overflow-x` to `auto` too): scrolling right to reach later dates dragged the
-       *entire page* sideways, Focus strip and toolbar included, and the sticky label cells had no
-       chart-local scrollport to freeze against. Reported directly ("freeze the task column so it
-       always stays in view"). Both axes scroll deliberately — a box cannot scroll one axis and
-       leave the other `visible`, and with an unbounded height there would be nothing to scroll
-       vertically, which would leave `sticky top-0` resolving against a never-scrolling container
-       and break the frozen top row in the act of fixing the frozen column.
-     - **`width: max-content` on `#gantt-grid` is load-bearing — do not drop it.** This, not the
-       `overflow` change, is what actually made the column freeze. With `min-width: 100%` alone
-       the grid *box* is only as wide as the pane while its columns overflow it, and **a sticky
-       element is constrained to its containing block** — so the label cells could travel roughly
-       one paneful and then slid off to the left. Verified in an isolated fixture rather than
-       guessed: scrolled 1400px right, the label's `getBoundingClientRect().left` was **869px to
-       the left of** the pane; with `max-content` it lands exactly *on* the pane's left edge.
-       `min-width: 100%` stays for the opposite case (a short date range whose columns don't fill
-       the pane). The vertical header was never affected, which is why the top row looked correct
-       throughout and made this read as a column-only problem.
-     - **Two long-broken things fixed as a consequence**: `scrollLeft` for "keep today in view"
-       was being set on `wrap.firstElementChild` (the grid), which has never been a scroll
-       container — so that feature had silently done nothing for as long as it existed; it now
-       drives `wrap` itself. And the label-resize drag measured `containerLeft` from the grid's
-       rect, which moves negative as the chart scrolls — it now measures the pane, so resizing
-       while scrolled away from the start no longer jumps.
+     - **There is exactly ONE scroll pane, and it is the `overflow-auto` box `renderGantt`
+       emits** (`max-height: 600px`), not `#gantt-wrap` — which has no `overflow` of its own and
+       must keep it that way. A pass that added `overflow: auto` to `#gantt-wrap` as well shipped
+       and was reverted within the hour: it nested a second scroller around the existing one, and
+       the two scrollbars were reported directly ("do not have two separate scroll bars... make it
+       all into one"). **Before changing anything here, check which element actually scrolls** —
+       `wrap.firstElementChild` was the grid before that box was introduced and is the pane now,
+       so stale assumptions about it are easy to carry in.
+     - **`width: max-content` on `#gantt-grid` is what actually freezes the Task column** —
+       reported directly ("freeze the task column so it always stays in view"). Nothing to do with
+       `overflow`, which is why the first attempt (adding a scroll pane) changed nothing visible
+       except adding a second scrollbar.
+       With `min-width: 100%` alone the grid *box* is only as wide as the pane while its columns
+       overflow it, and **a sticky element is constrained to its containing block** — so the label
+       cells could travel roughly one paneful and then slid off to the left. Verified in an
+       isolated fixture rather than guessed: scrolled 1400px right, the label's
+       `getBoundingClientRect().left` sat **869px to the left of** the pane; with `max-content` it
+       lands exactly *on* the pane's left edge. `min-width: 100%` stays for the opposite case (a
+       short date range whose columns don't fill the pane). The vertical header was never
+       affected, which is why the top row looked correct throughout and made this read as a
+       column-only problem.
+     - **The chart centres on today when the Timeline tab is opened, and never moves on its own
+       after that** — asked for in exactly those terms ("it should be free scrolling but coming
+       back to Timeline tab should default to showing today"). `ganttCenterOnToday` is set in
+       `setView('gantt')` and cleared the moment `renderGantt` honours it; every other render
+       captures the outgoing pane's `scrollLeft`/`scrollTop` before the `innerHTML` swap and
+       restores them afterward. The old code re-centred on *every* render and justified it as
+       "instead of leaving that to chance" — which was harmless only because it was simultaneously
+       setting `scrollLeft` on an element that does not scroll, so it never ran at all. Fixing
+       that without this would have meant any unrelated snapshot (a teammate's edit, a roster
+       heartbeat, a project-deadline change) yanking the chart back to today mid-read. The Content
+       Hub's chat log had the identical bug and is fixed the same way.
+     - **Two long-broken things fixed as a consequence**: "keep today in view" was setting
+       `scrollLeft` on the grid rather than the pane, so it had silently done nothing for as long
+       as it existed. And the label-resize drag measured `containerLeft` from the grid's rect,
+       which moves negative as the chart scrolls — both now read the pane
+       (`wrap.firstElementChild`), so resizing while scrolled away from the start no longer jumps.
      - **Do not give these cells a `top` offset to clear the app's own sticky header.** Tried
        and reverted the same day. `position: sticky` with `top: 200px` does not mean "stop 200px
        down once you scroll there" — it means "never come closer than 200px to the scroll
