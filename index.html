@@ -582,47 +582,26 @@
         </div>
       </div>
     </div>
-  </header>
-
-  <main class="flex-1 min-h-0 overflow-y-auto app-container w-full mx-auto px-4 sm:px-6 pt-5 pb-16 flex flex-col gap-6">
-
-    <!-- ============ FOCUS OF THE DAY ============ -->
-    <section id="focus-section">
-      <div class="flex items-center justify-between mb-2.5">
-        <div class="flex items-center gap-2">
-          <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center">
-            <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
-          </div>
-          <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Focus of the Day</h2>
-          <span id="focus-caption" class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
-        </div>
-      </div>
-      <!-- pt-1.5 isn't decorative spacing -- overflow-x-auto forces the CSS overflow-y
-           computed value to auto too (a horizontal-only overflow-x is not a legal combo, so the
-           UA promotes overflow-y from its default "visible"), so without it the cards' own
-           hover:-translate-y-0.5 lift got clipped against the container's own top edge
-           (reported as "the animation is cropped when it moves up"). -->
-      <div id="focus-list" class="flex gap-3 overflow-x-auto pt-1.5 pb-2 -mx-1 px-1"></div>
-    </section>
-
     <!-- ============ TOOLBAR: search / filters ============ -->
-    <!-- Used to share a row with the header's own title/stats, directly under it -- moved here,
-         below Focus of the Day and right-aligned, since that put the busiest, most control-dense
-         row of the page immediately under a stats line already asking for attention (reported
-         directly). Focus of the Day itself is un-gated by data-view (see #focus-section above)
-         and appears above every view, not just Board, so this row now does too -- one shared
-         toolbar, one shared position, on all 8 views. View switching lives in the sidebar, not
-         here. -->
-    <!-- Top border, not just the gap-6 <main> already puts between sections -- Focus of the Day
-         and this row are both dense, and reported as running together without something to mark
-         the boundary. pt-4 keeps the line from sitting flush against Focus of the Day's own
-         content above it. -->
+    <!-- Lives in <header>, as a second row under the title/stats line.
+         It has been in both places, for reasons that each held at the time:
+         - Originally in the header, sharing ONE row with the title and stats. Reported as too
+           much crammed under a line already asking for attention.
+         - Then moved into <main>, below Focus of the Day. That fixed the crowding, but once the
+           Sort dropdown started driving the Focus strip too (see renderFocus), the control sat
+           BELOW the thing it controls -- reported directly: "move the sort and search bars back
+           to header since now Focus of the day applies".
+         - Now back in the header but on its OWN row rather than sharing the h-16 title row, so
+           it sits above everything it affects without recreating the original crowding.
+         Nothing in the JS queries these by position or by ancestor, so moving the markup needs
+         no script changes -- syncToolbarLayout()/syncSearchAvailability()/syncSortAvailability()
+         all work off ids. -->
     <!-- `flex`/`flex-wrap` are deliberately absent from this static class list -- see the note
          on #chat-reply-preview elsewhere in this file for why pairing a static display class
          with a JS-toggled `hidden` is unreliable (Tailwind generates both as equal-specificity
          rules; which one wins depends on generation order, not intent). syncToolbarLayout()
          toggles all three together instead, for the views where this whole row hides outright. -->
-    <div id="toolbar-row" class="items-center gap-2 justify-end pt-4 border-t border-zinc-200 dark:border-zinc-700">
+    <div id="toolbar-row" class="items-center gap-2 justify-end px-4 sm:px-6 py-2.5 border-t border-zinc-200 dark:border-zinc-700">
       <!-- Mobile-only filters trigger -- previously shared a row with mobile-view-trigger,
            which no longer exists (the hamburger button above opens the sidebar drawer
            instead), so this is full-width on its own now. -->
@@ -702,6 +681,28 @@
       <button id="btn-clear-filters" class="text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
       </div>
     </div>
+  </header>
+
+  <main class="flex-1 min-h-0 overflow-y-auto app-container w-full mx-auto px-4 sm:px-6 pt-5 pb-16 flex flex-col gap-6">
+
+    <!-- ============ FOCUS OF THE DAY ============ -->
+    <section id="focus-section">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center">
+            <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+          </div>
+          <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Focus of the Day</h2>
+          <span id="focus-caption" class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
+        </div>
+      </div>
+      <!-- pt-1.5 isn't decorative spacing -- overflow-x-auto forces the CSS overflow-y
+           computed value to auto too (a horizontal-only overflow-x is not a legal combo, so the
+           UA promotes overflow-y from its default "visible"), so without it the cards' own
+           hover:-translate-y-0.5 lift got clipped against the container's own top edge
+           (reported as "the animation is cropped when it moves up"). -->
+      <div id="focus-list" class="flex gap-3 overflow-x-auto pt-1.5 pb-2 -mx-1 px-1"></div>
+    </section>
 
     <!-- ============ BOARD VIEW ============ -->
     <section id="view-board" data-view class="active-view flex-1">
@@ -9912,7 +9913,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T08:09:28Z";
+  var CURRENT_BUILD_VERSION = "2026-09-21T08:13:10Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
