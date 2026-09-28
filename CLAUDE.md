@@ -2548,6 +2548,38 @@ to reverse. All three landed on the recommended option:
   - Verified with an isolated Node port: a no-task joiner is listed, an unknown department key
     places nobody, an active search is not undermined by the roster half, and the landing rule
     honours an explicit choice (including "All") over the department default.
+- **First-login prompt + auto-parking** — "when the person logs in for the first time, they
+  should be able to choose their department. Once chosen, their projects should automatically be
+  parked under each teamspace."
+  - **`#department-modal`** is its own modal rather than an `openConfirm`, which only has room
+    for two choices — this needs every department plus a way out. Same `modal-backdrop` /
+    `modal-pop-in` shell as every other modal, so it inherits the open animation and the shared
+    Escape/backdrop handling for free. Each option shows how many projects it would file.
+  - **`departmentChosen` is a separate flag from `department`, and that distinction matters.**
+    Gating the prompt on `department` being empty would re-ask, on every single visit, anyone who
+    deliberately answered "no department" — an explicit "none" and never-having-been-asked are
+    indistinguishable otherwise. "Not now" also sets it, so the prompt is a one-time question
+    rather than a nag; the People card is always there for a later change of mind.
+  - **`maybePromptDepartment()` defers while any modal is open**, the same courtesy
+    `checkProjectDeadlinePopups` extends — there is always another snapshot to offer it on.
+  - **`parkMyProjectsInDepartment()` is STRICTLY ADDITIVE, and that is the whole design.** It
+    unions the department in and never replaces. That is what makes it safe to run per person in
+    turn: when two people from different teams share a project, the first to choose files it
+    under theirs and the second *adds* theirs, leaving it correctly in both. Replacing would mean
+    whoever chose last silently evicted the other team from their own project. Projects already
+    carrying the department are skipped, so re-running is free and produces no duplicate writes.
+  - Counts **archived work too** — a project whose tasks are finished still belongs to the team
+    that did it — and ignores tasks with no project.
+  - The same parking runs when a department is set from the People card, not just from the modal,
+    so there is one code path and one behaviour; the toast names how many projects moved.
+  - Verified with an isolated Node port covering the property that actually matters: a shared
+    project ends up holding *both* departments rather than the last writer winning, archived work
+    is included, projectless tasks are ignored, re-running is a no-op, and chips come out in
+    `DEPARTMENTS` order regardless of who chose first.
+- **Adding a department is one array entry plus one badge colour.** `DEPARTMENTS` and
+  `DEPARTMENT_BADGE` are the only two places: the switcher, its counts, the People-card select,
+  the first-login modal and the Projects-card checkboxes all derive from them. **Marketing was
+  added exactly that way**, on request, with no other change.
 - Verified with an isolated Node port of the scoping rules (cross-department project visible in
   both, unknown keys ignored, all three unfiled routes equivalent, counts adding up) plus a
   real-browser DOM check that the switcher renders in the sidebar above the nav and opens with

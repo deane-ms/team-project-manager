@@ -1262,6 +1262,25 @@
 </div>
 
 <!-- ============ CONFIRM MODAL ============ -->
+<!-- Shown once, on a teammate's first sign-in after teamspaces shipped: pick a department, and
+     the projects you already have tasks in get filed under it. Its own modal rather than
+     openConfirm, which only has room for two choices -- this needs three departments plus a way
+     out. Same modal-backdrop / modal-pop-in shell as every other modal here, so it inherits the
+     open animation and the shared Escape/backdrop handling. -->
+<div id="department-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="department-modal-title">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-md rounded-2xl shadow-pop overflow-hidden modal-pop-in">
+    <div class="p-5">
+      <div class="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-500/15 flex items-center justify-center mb-3">
+        <svg class="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+      </div>
+      <h3 id="department-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Which team are you on?</h3>
+      <p id="department-modal-body" class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Flowboard will open on your team's work, and the projects you're already on will be filed there.</p>
+      <div id="department-modal-options" class="flex flex-col gap-2 mt-4"></div>
+      <button type="button" id="department-modal-skip" class="w-full mt-2 text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 py-2">Not now</button>
+    </div>
+  </div>
+</div>
+
 <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
   <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden modal-pop-in">
     <div class="p-5">
@@ -2129,9 +2148,13 @@
      filed at all (they are otherwise created lazily, only when someone sets a deadline or starts
      a chat), which is what ensureProjectDoc below is for.
   ========================================================= */
+  // Adding a department is this array plus a DEPARTMENT_BADGE colour -- the switcher, its
+  // counts, the People-card select, the first-login modal and the Projects-card checkboxes all
+  // derive from here, so nothing else needs touching. Marketing was added exactly that way.
   var DEPARTMENTS = [
     { key: 'suits', label: 'Suits' },
     { key: 'production', label: 'Production' },
+    { key: 'marketing', label: 'Marketing' },
     { key: 'admin', label: 'Admin' }
   ];
   // 'all' and 'unassigned' are teamspaces you can be IN, but never values stored on a project:
@@ -2230,6 +2253,7 @@
   var DEPARTMENT_BADGE = {
     suits: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
     production: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+    marketing: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
     admin: 'bg-stone-200 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300'
   };
 
@@ -2255,14 +2279,62 @@
     return DEPARTMENTS.some(function (d) { return d.key === key; }) ? key : null;
   }
 
+  // Every project this person has tasks in -- active and archived both, since a project whose
+  // work is finished still belongs to the team that did it.
+  function projectsForPerson(name) {
+    var found = {};
+    tasks.concat(archivedTasks).forEach(function (t) {
+      if (t.assignee === name && t.project) found[t.project] = true;
+    });
+    return Object.keys(found);
+  }
+
+  /* Files every project someone is on into their department. Asked for directly: "once chosen,
+     their projects should automatically be parked under each teamspace."
+
+     STRICTLY ADDITIVE -- it unions the department in, never replaces what is already there.
+     That is what makes it safe to run for each person in turn: when Aqila (Suits) and Deane
+     (Production) both work on the Bosch pitch, the first to choose files it under Suits and the
+     second adds Production, leaving it correctly in both. Replacing would mean whoever picked
+     last silently evicted the other team from their own project.
+
+     Projects already carrying the department are skipped entirely, so re-running this is free
+     and changing your mind later never produces duplicate writes. */
+  function parkMyProjectsInDepartment(name, key) {
+    var mine = projectsForPerson(name).filter(function (pname) {
+      return projectDepartments(pname).indexOf(key) === -1;
+    });
+    if (!mine.length) return Promise.resolve(0);
+    return Promise.all(mine.map(function (pname) {
+      var next = projectDepartments(pname).concat([key]);
+      // Canonical order, so two projects filed under the same pair render identically.
+      next = DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return next.indexOf(k) !== -1; });
+      return ensureProjectDoc(pname).then(function (id) {
+        return updateDoc(doc(projectsCol, id), { departments: next });
+      });
+    })).then(function () {
+      logActivity('project_departments', 'Filed ' + mine.length + ' of ' + name + "'s project" +
+        (mine.length === 1 ? '' : 's') + ' under ' + departmentLabel(key));
+      return mine.length;
+    });
+  }
+
   function setPersonDepartment(name, key) {
     var person = teamPeople.find(function (pp) { return pp.name === name; });
     if (!person) { showToast('No roster entry for ' + name + ' yet -- they need to sign in once.', 'error'); return; }
-    updateDoc(doc(peopleCol, person.id), { department: key || null }).then(function () {
+    // departmentChosen records that they were ASKED and answered -- including answering "no
+    // department". Without it, an explicit "none" is indistinguishable from never having been
+    // prompted, and the first-login modal would reappear on every visit.
+    updateDoc(doc(peopleCol, person.id), { department: key || null, departmentChosen: true }).then(function () {
       logActivity('project_departments', key
         ? name + ' joined ' + departmentLabel(key)
         : name + ' left their department');
-      renderAll();
+      if (!key) { renderAll(); return; }
+      return parkMyProjectsInDepartment(name, key).then(function (n) {
+        if (n) showToast('Filed ' + n + ' project' + (n === 1 ? '' : 's') + ' under ' + departmentLabel(key), 'success');
+        renderTeamspaceSwitcher();
+        renderAll();
+      });
     }).catch(function (err) {
       showToast(err && err.code === 'permission-denied'
         ? 'Only ' + name + ' or an admin can change their department.'
@@ -2275,6 +2347,71 @@
   // stored: the moment anyone picks a teamspace themselves (including picking All), that choice
   // is persisted and this stops applying. Deferred to the roster listener because the answer
   // lives in `teamPeople`, which is empty at module load when loadTeamspace() first runs.
+  var departmentPromptShown = false;
+
+  function openDepartmentModal(name) {
+    var modal = document.getElementById('department-modal');
+    var opts = document.getElementById('department-modal-options');
+    if (!modal || !opts) return;
+    opts.innerHTML = DEPARTMENTS.map(function (d) {
+      var n = projectsForPerson(name).length;
+      return '<button type="button" data-choose-dept="' + escapeHtml(d.key) + '" ' +
+        'class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">' +
+        '<span>' + escapeHtml(d.label) + '</span>' +
+        '<span class="text-xs font-medium text-zinc-400 dark:text-zinc-500">' + n + ' project' + (n === 1 ? '' : 's') + '</span>' +
+      '</button>';
+    }).join('');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function closeDepartmentModal() {
+    var modal = document.getElementById('department-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  // Asked once per person, the first time they sign in after this shipped. Deliberately gated on
+  // departmentChosen rather than on `department` being empty, so someone who answers "no
+  // department" is not asked again every visit.
+  function maybePromptDepartment() {
+    if (departmentPromptShown) return;
+    var u = auth.currentUser;
+    var myName = u ? (u.displayName || u.email) : null;
+    if (!myName) return;                       // roster can arrive before auth settles
+    var me = teamPeople.find(function (pp) { return pp.name === myName; });
+    if (!me) return;                           // our own registerPresence write hasn't landed yet
+    if (me.departmentChosen || me.department) { departmentPromptShown = true; return; }
+    // Never interrupt something already on screen -- same courtesy checkProjectDeadlinePopups
+    // extends. It'll be offered again on the next snapshot, of which there are plenty.
+    if (anyModalOpen()) return;
+    departmentPromptShown = true;
+    openDepartmentModal(myName);
+  }
+
+  document.addEventListener('click', function (e) {
+    var choice = e.target.closest('[data-choose-dept]');
+    if (choice) {
+      var u = auth.currentUser;
+      var myName = u ? (u.displayName || u.email) : null;
+      closeDepartmentModal();
+      if (myName) {
+        setPersonDepartment(myName, choice.getAttribute('data-choose-dept'));
+        setTeamspace(choice.getAttribute('data-choose-dept'));
+      }
+      return;
+    }
+    if (e.target.closest('#department-modal-skip')) {
+      var u2 = auth.currentUser;
+      var myName2 = u2 ? (u2.displayName || u2.email) : null;
+      closeDepartmentModal();
+      // "Not now" records that they were asked, so it isn't a nag -- they can still set one any
+      // time from their own People card.
+      if (myName2) setPersonDepartment(myName2, '');
+    }
+  });
+
   var teamspaceDefaultApplied = false;
   function applyDefaultTeamspaceOnce() {
     if (teamspaceDefaultApplied) return;
@@ -10149,6 +10286,7 @@
       // Needs the roster, so it can't live in loadTeamspace() at module init. Self-limiting --
       // see applyDefaultTeamspaceOnce; it calls setTeamspace, which renders on its own.
       applyDefaultTeamspaceOnce();
+      maybePromptDepartment();
       // Full re-render (renderAll -> renderCurrentSecondaryView already covers the Chat tab's
       // online strip too, so a heartbeat write shows up there immediately, not just on the 30s
       // aging-out tick): this collection now carries personal leave as well as the roster, and
@@ -10388,7 +10526,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T02:56:45Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T03:07:33Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
