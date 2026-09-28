@@ -25,6 +25,44 @@ Google Auth) so the whole team edits one live board together with real-time upda
 Live at https://deane-ms.github.io/team-project-manager/ (deployed via GitHub Pages, not Firebase
 Hosting — `firebase.json` only configures Firestore + emulators).
 
+## Standing design rule: count the clutter, not just the feature
+
+**Every UI change here is judged on the visual noise it adds, not only on whether it works.**
+Stated directly: *"make sure moving forward that all designs should take visual clutter into
+consideration."* This is a bar to clear before shipping, not a nice-to-have.
+
+The reason is specific to this app: a handful of people look at it all day. A control that
+technically works but adds noise costs attention on *every* visit, while the feature behind it
+might be used weekly. Clutter has been reported here repeatedly, and **in every single case the
+fix was to remove or relocate something, never to add**:
+
+| Reported | Fix |
+|---|---|
+| Timeline priority dots | Deleted — the bar already painted that colour |
+| Departments row on every People card | Moved to the profile menu |
+| People card header | Split into identity and workload lines |
+| Per-project teamspace filing | Deleted; departments derived from assignees instead |
+
+Concrete checks, each learned from one of the above:
+
+- **Before adding to an existing row, ask what that surface is FOR.** The People header packed
+  identity chips into a row already carrying workload counts — two unlike kinds of fact at equal
+  weight, so neither could be scanned. The Board card's metadata row had already made and fixed
+  the same mistake. Unlike groups need separate lines, not more `gap`.
+- **Variable-width chips destroy the scannability of anything after them.** Numbers meant to be
+  compared down a column must start at the same x on every card.
+- **Don't render a control for a value most rows will never set.** Progressive disclosure is the
+  established pattern (`+ Time off`, `+ Deadline`); a permanently-open form on every card reads
+  as something you are required to fill in.
+- **A set-once preference about yourself belongs in the profile menu**, not repeated on every
+  person's card.
+- **Prefer deriving over asking.** Project departments are computed from assignees: less UI, less
+  state, nothing to maintain, and it cannot drift out of date.
+- **Removing a redundant signal is a real fix**, not a cop-out. If a value is already visible
+  somewhere on the same row, a second rendering of it is noise.
+- **Two chips must never carry the same word.** "Admin" the department and "Admin" the role were
+  briefly both on one card; the role became "Admin rights".
+
 ## Commands
 
 There is no build/lint/test tooling — it's static HTML/JS served as-is. Local development uses the
