@@ -2519,9 +2519,35 @@ to reverse. All three landed on the recommended option:
 - **No `firestore.rules` change and no deploy.** `projects` already allows `create`, and its
   `update` rule only guards `chat` (`!changedKeys().hasAny(['chat'])` passes when only
   `departments` changes) — the same reason `pinned` needed no rule when it was added.
-- **Not built, and not asked for: per-person department membership.** Departments own projects,
-  not people; the People filter already answers "whose work is this". Worth revisiting only if
-  someone actually wants their sidebar to default to their own department.
+- **Per-person department** (`people/{uid}.department`) — asked for right after the teamspaces
+  themselves ("can I have each member be assigned to a department from the get go?"). Set from a
+  small select on the People card, self-or-admin via the existing `canEditLeaveFor` gate; it
+  writes to the same `people/{uid}` doc as leave, which `firestore.rules` already scopes that
+  way, so this needed **no rules change either**.
+  - **SINGLE department per person, unlike a project's several.** A project genuinely spans
+    teams (a pitch is Suits *and* Production); a person has one home team, the request was
+    phrased in the singular, and it keeps the landing-teamspace rule unambiguous. Someone who
+    works across teams switches with one click — that is what the switcher is for.
+  - **It is NOT a second scoping axis for tasks.** Which teamspace a piece of *work* belongs to
+    stays entirely decided by the project's `departments`. If a person's department also filtered
+    tasks, the app would hold two answers to "is this task in this teamspace" and they would
+    disagree the moment somebody helps another team out. A person's department does exactly two
+    things: label them on their People card, and pick the teamspace they land in.
+  - **`applyDefaultTeamspaceOnce()` is the "from the get go" half** — someone who has never
+    picked a teamspace starts in their own department instead of All. It runs from the `people`
+    snapshot handler, not `loadTeamspace()`, because the answer lives in `teamPeople`, which is
+    empty at module load. Self-limiting: the moment anyone picks a teamspace themselves —
+    *including* picking All — that choice is persisted and this stops applying.
+  - **`renderPeople` now unions two lists: people with work here, and people who belong here.**
+    It was task-derived only, so a teammate with no current tasks never appeared — including a
+    new joiner, who is precisely the person you want to hand a department to. The roster half is
+    teamspace-aware (a department shows its members plus whoever is working on its projects; All
+    shows the whole roster) and is **skipped entirely while search/priority/project is
+    narrowing**, or a roster member with no matching tasks would show up anyway and read as the
+    search being broken. A zero-task card renders fine on the existing "All caught up" state.
+  - Verified with an isolated Node port: a no-task joiner is listed, an unknown department key
+    places nobody, an active search is not undermined by the roster half, and the landing rule
+    honours an explicit choice (including "All") over the department default.
 - Verified with an isolated Node port of the scoping rules (cross-department project visible in
   both, unknown keys ignored, all three unfiled routes equivalent, counts adding up) plus a
   real-browser DOM check that the switcher renders in the sidebar above the nav and opens with
