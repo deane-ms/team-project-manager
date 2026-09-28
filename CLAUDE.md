@@ -45,6 +45,8 @@ fix was to remove or relocate something, never to add**:
 | Departments row on every People card | Moved to the profile menu |
 | People card header | Split into identity and workload lines |
 | Per-project teamspace filing | Deleted; departments derived from assignees instead |
+| Task name inside every Timeline bar | Deleted — the frozen label column already carries it |
+| Folder name clipped in WIP Meeting rows | Split onto its own line, where it wraps in full |
 
 Concrete checks, each learned from one of the above:
 
