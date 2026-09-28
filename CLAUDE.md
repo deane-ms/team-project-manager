@@ -81,9 +81,19 @@ the emulators instead of the real Firebase project — no config changes needed 
 
 ## Deploying
 
-There's no CI/deploy script in this repo. When shipping a change to `index.html`, bump both:
+There's no CI/deploy script in this repo. When shipping a change to `index.html`, bump both to
+**the same** timestamp:
 - `CURRENT_BUILD_VERSION` (near the bottom of the module script in `index.html`)
-- `version.txt` (same timestamp)
+- `version.txt`
+
+**Bumping only one of them puts every client into a reload loop**, and `check-syntax.mjs` now
+fails on the mismatch for that reason. The client reloads whenever `version.txt` differs from the
+constant baked into the page it is running — so if they drift, that is still true after the
+reload, and it never converges: a reload every 5s (`reloadIfPendingAndSafe`) and one on every
+`visibilitychange`. It has shipped once, from bumping `version.txt` alone, and it reached the
+team as *"why does the notification popup again each time I minimize and maximize the desktop
+app?"* — the visibilitychange half of the loop, reported by its most visible symptom rather than
+as "the app is reloading", which is what it actually was.
 
 **Syntax-check before shipping.** There's no build step, so nothing catches a broken `<script>` —
 and because it's one big `type="module"`, a single syntax error anywhere kills the *entire* app,
@@ -118,8 +128,8 @@ Both paths run the same script, so there's one place to fix if the markup ever c
 
 The deployed page polls `version.txt` every 60s and auto-reloads clients once it changes — but
 `reloadIfPendingAndSafe()` will never reload out from under a user with a modal open, so a stale
-tab can sit on `pendingBuildVersion` for a while. If the two timestamps drift, clients get stuck
-thinking a reload is pending even after they're already current.
+tab can sit on `pendingBuildVersion` for a while. (That modal guard is also the only reason the
+drift loop above is survivable rather than a hard lock-out: anyone mid-edit keeps their draft.)
 
 ## Architecture
 

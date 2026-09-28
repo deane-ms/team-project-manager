@@ -7,6 +7,15 @@
 // which took the live board down completely until someone noticed). Nothing about the deployed
 // HTML looks wrong, so this is invisible without an actual parse.
 //
+// It also checks that index.html's CURRENT_BUILD_VERSION and version.txt carry the SAME stamp.
+// Different failure, same shape of damage, and the same reason it needs a machine: the deployed
+// page looks perfectly fine either way. The client polls version.txt and reloads when it differs
+// from the constant baked into the page it is already running -- so if the two drift, that
+// condition is true immediately after the reload as well, and every client reloads in a loop
+// (every 5s via reloadIfPendingAndSafe, and on every visibilitychange). Shipped exactly once,
+// by bumping version.txt alone; it presented as "the app reloads whenever I minimize and
+// maximize it", which is the visibilitychange half of the loop.
+//
 // Run directly (`node scripts/check-syntax.mjs`), via the pre-push hook in .githooks/, or in CI
 // (.github/workflows/syntax-check.yml).
 
@@ -87,6 +96,39 @@ if (failures.length) {
 if (!checked) {
   console.error(`No inline scripts found in ${files.join(', ')} -- did the file move or the markup change?`);
   process.exit(1);
+}
+
+// ---- build-stamp drift (see the header comment for why this is fatal, not cosmetic) ----
+// Only meaningful when checking the real index.html; skipped when pointed at other files.
+if (files.includes('index.html')) {
+  const html = readFileSync(resolve(repoRoot, 'index.html'), 'utf8');
+  const baked = html.match(/CURRENT_BUILD_VERSION\s*=\s*["']([^"']*)["']/);
+  let stamp = null;
+  try {
+    stamp = readFileSync(resolve(repoRoot, 'version.txt'), 'utf8').trim();
+  } catch {
+    // falls through to the same error below
+  }
+
+  if (!baked) {
+    console.error('\nCould not find CURRENT_BUILD_VERSION in index.html -- did it get renamed?');
+    process.exit(1);
+  }
+  if (!stamp) {
+    console.error('\nversion.txt is missing or empty. Clients poll it to decide when to reload.');
+    process.exit(1);
+  }
+  if (baked[1] !== stamp) {
+    console.error('\nBuild stamps disagree -- every client would reload in a loop.\n');
+    console.error(`  index.html CURRENT_BUILD_VERSION : ${baked[1]}`);
+    console.error(`  version.txt                      : ${stamp}\n`);
+    console.error('The page reloads whenever version.txt differs from the constant baked into it,');
+    console.error('so a mismatch is still true after the reload: it never converges. Set both to');
+    console.error('the same timestamp before pushing:\n');
+    console.error('  date -u +"%Y-%m-%dT%H:%M:%SZ"\n');
+    process.exit(1);
+  }
+  console.log(`Build stamp matches (${stamp}).`);
 }
 
 console.log(`\nSyntax check passed (${checked} inline script${checked === 1 ? '' : 's'}).`);
