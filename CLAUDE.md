@@ -22,6 +22,9 @@ Google Auth) so the whole team edits one live board together with real-time upda
   no caching, see comment in the file).
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
 
+Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP**, Activity,
+Suggestions, Archived.
+
 Live at https://deane-ms.github.io/team-project-manager/ (deployed via GitHub Pages, not Firebase
 Hosting — `firebase.json` only configures Firestore + emulators).
 
@@ -2765,6 +2768,80 @@ decides what to move.
   denial or dropped connection can't log something that never happened. Its own
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour
   for "someone is not available" everywhere it appears.
+
+### Events → WIP (the standing company sync)
+
+A labelled **Events** category in the sidebar rail, holding one view: **WIP**. One screen the
+whole company reads together, built as a meeting **agenda** rather than another dashboard —
+what has to be decided today, then what is coming, then who will not be here for it.
+
+**Nothing in it is new data.** Every number comes from the helpers the board and the
+notification automations already use: `dueUrgency`, `isOnLeave`/`leavePeriodOn`, the
+"≥2 open High-priority tasks on one person for one day" rule `checkWorkloadSpikes` notifies on,
+and `REVIEW_STALE_DAYS`. This is the whole reason it is safe to add — a summary that computes
+"overdue" its own way eventually disagrees with the board it is summarising, in front of
+everyone. If you change a threshold, change it in the one place and this follows.
+
+Three sections, and the shape of them is where the design work is:
+
+- **Needs a decision** — overdue, crunch days, a deadline landing while its owner is away, a
+  project its own task dates say it will miss, and work stuck in review. **One flat list with a
+  chip for the kind, not five labelled sub-lists**: they are all "somebody has to say something
+  about this", and five headers over lists that are usually one row long is most of a screen
+  spent on scaffolding. Rows that stand for exactly one task carry `data-open-task` and ride the
+  existing document-level delegation; roll-ups have nothing single to open and are plain `div`s.
+- **The next N days** — the chronological spine. One row per day that has anything on it, empty
+  days skipped entirely. Project deadlines and task deadlines share a day's row, because in the
+  meeting they are the same question.
+- **Away** — one row per leave *period* overlapping the window, including periods that started
+  before today and run into it.
+
+Three things it deliberately does NOT do, each of which is the obvious version of itself:
+
+- **Overdue rolls up per PERSON, not per task.** The meeting question is "where are you at?"
+  asked of someone; fifteen late tasks listed individually would push everything else below the
+  fold.
+- **Leave is not drawn on the spine**, even though it is a date. A two-week absence would stamp
+  the same name onto fourteen consecutive rows and drown the deadlines those rows exist to show.
+  It is listed once, as a period. The only place leave meets a specific day is when it collides
+  with a deadline — and that is an alert, not a calendar entry. Same reasoning keeps overdue out
+  of the spine (which is forward-looking), so nothing is printed twice.
+- **"Project has open tasks" is not the at-risk test.** Every live project has open tasks, so
+  that fires on all of them every week, which is the same as firing on none. The test is whether
+  the project's own task dates already contradict its deadline: a task that is late, one dated
+  past the project date, or one with no date at all to schedule against. An on-track project
+  says nothing here and keeps its date on the spine below.
+
+**Scoping goes two ways on purpose**, and this is the part most likely to be "fixed" by mistake:
+
+- It **respects the teamspace switcher** — that is a workspace-level scope whose current value is
+  permanently visible in the rail, and running a Production-only WIP is a real use. Leave is
+  scoped by `personInTeamspace`, the same rule `taskInTeamspace` applies to tasks.
+- It **ignores the search/priority/project/assignee filter bar**, and hides the toolbar outright
+  (`TOOLBAR_FULLY_HIDDEN_VIEWS`). Those filters persist across sessions by design, so a narrowing
+  somebody left set last Tuesday would silently delete items from a meeting agenda with nothing
+  on screen to say so. A hidden filter is survivable on a board you are scanning; it is not
+  survivable on the list you are using to decide what the company works on next. **Do not
+  "unify" this by routing the view through `applyFilters`.**
+
+The window is 1 / 2 / 4 weeks, persisted to `flowboard_wip_range`, inclusive at both ends (a
+7-day window is today plus the next six). Overdue is **never** windowed — late is late.
+
+**Not a stored event record.** There is no `events` collection, no create/edit/delete UI, and
+nothing in Firestore for this feature at all — WIP is a standing meeting whose content is
+entirely derived from tasks, projects and leave, so there is nothing to save and nothing to keep
+current. A second event becomes one more nav item under the same header. That is also why
+**Events is the rail's one written label**: the other groups are loose sets of views separated by
+dividers, this one is a named category meant to grow. The header carries `.sidebar-label`, so it
+disappears with the dividers when the rail collapses to icons (that rule positions it absolute,
+so it costs no height and no flex gap either — verified, not assumed).
+
+`personInTeamspace` was **completed** as part of this. It already existed in a narrower form that
+answered neither `'all'` nor `'unassigned'`: its only caller (`renderPeople`) checked `'all'`
+itself before calling, and nothing had yet asked it about `'unassigned'` — which it got wrong,
+since that is not a department key, so `indexOf` found it in nobody's list and the Unassigned
+teamspace listed no roster members at all. That is the one teamspace where people with no
+department are the entire point.
 
 ### Calendar view
 
