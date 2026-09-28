@@ -22,8 +22,8 @@ Google Auth) so the whole team edits one live board together with real-time upda
   no caching, see comment in the file).
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
 
-Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP**, Activity,
-Suggestions, Archived.
+Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**,
+Activity, Suggestions, Archived.
 
 Live at https://deane-ms.github.io/team-project-manager/ (deployed via GitHub Pages, not Firebase
 Hosting — `firebase.json` only configures Firestore + emulators).
@@ -2779,11 +2779,11 @@ decides what to move.
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour
   for "someone is not available" everywhere it appears.
 
-### Events → WIP (the standing company sync)
+### Events → WIP Meeting (the standing company sync)
 
-A labelled **Events** category in the sidebar rail, holding one view: **WIP**. One screen the
-whole company reads together, built as a meeting **agenda** rather than another dashboard —
-what has to be decided today, then what is coming, then who will not be here for it.
+A labelled **Events** category in the sidebar rail, holding one view: **WIP Meeting**. One
+screen the whole company reads together, built as a meeting **agenda** rather than another
+dashboard — what has to be decided today, then what is coming, then who will not be here for it.
 
 **Nothing in it is new data.** Every number comes from the helpers the board and the
 notification automations already use: `dueUrgency`, `isOnLeave`/`leavePeriodOn`, the
