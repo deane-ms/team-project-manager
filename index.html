@@ -9850,7 +9850,7 @@
         // a WIP meeting exists to protect.
         return '<div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-brand-50 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/25">' +
           '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Project due</span>' +
-          '<span class="min-w-0 text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+          '<span class="min-w-0 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(name) + '</span>' +
         '</div>';
       }).join('');
 
@@ -9859,11 +9859,24 @@
         return w !== 0 ? w : a.name.localeCompare(b.name);
       }).map(function (t) {
         var meta = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
-        return '<button type="button" data-open-task="' + t.id + '" class="group flex items-center gap-2 w-full text-left">' +
-          '<span class="w-2 h-2 rounded-full shrink-0 ' + meta.dot + '" title="' + escapeHtml(t.priority) + ' priority"></span>' +
-          '<span class="min-w-0 truncate text-sm text-zinc-700 dark:text-zinc-200 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
-          '<span class="shrink-0 hidden sm:inline text-xs text-zinc-400 dark:text-zinc-500 truncate max-w-[10rem]">' + escapeHtml(t.project) + '</span>' +
-          '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(t.assignee || 'Unassigned') + '</span>' +
+        // Task name + owner on the first line, project on its own line beneath it. The project
+        // here is a Drive folder name ("261028[Google]SMB AU_Data_Q4") -- long, and front-loaded
+        // with a date code, so sharing a line with the task name truncated it to uselessness:
+        // every name cut at the same "261028[Google]..." prefix tells the room nothing. Given
+        // its own line it wraps instead, and is always readable in full. Same two-line shape as
+        // the Decide-today rows above, so the two panels read alike. `break-words` is for the
+        // folder names with no spaces in them, which would overflow rather than wrap without it.
+        return '<button type="button" data-open-task="' + t.id + '" class="group flex items-start gap-2 w-full text-left">' +
+          '<span class="w-2 h-2 mt-1.5 rounded-full shrink-0 ' + meta.dot + '" title="' + escapeHtml(t.priority) + ' priority"></span>' +
+          '<span class="min-w-0 flex-1">' +
+            '<span class="flex items-baseline gap-2">' +
+              '<span class="min-w-0 truncate text-sm text-zinc-700 dark:text-zinc-200 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
+              '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(t.assignee || 'Unassigned') + '</span>' +
+            '</span>' +
+            // Still hidden on phones: a wrapped folder name costs two or three lines at that
+            // width, and the phone read is "what is due", not "where the files live".
+            '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">' + escapeHtml(t.project) + '</span>' +
+          '</span>' +
         '</button>';
       }).join('');
 
@@ -11026,7 +11039,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T06:15:39Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T07:56:35Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
