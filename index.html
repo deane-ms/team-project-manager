@@ -403,7 +403,11 @@
   <aside id="sidebar" class="shrink-0 h-screen flex flex-col bg-white dark:bg-zinc-800 border-r border-zinc-200 dark:border-zinc-700">
     <div class="flex items-center gap-2.5 px-4 h-16 border-b border-zinc-100 dark:border-zinc-700 shrink-0">
       <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card shrink-0">
-        <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+        <!-- A "PM" wordmark rather than a glyph, on request. Text, not an icon -- so this is not
+             an exception to this codebase's "every icon is inline SVG, never emoji/icon fonts"
+             rule, which is about iconography. tracking-tight because two caps at this size
+             otherwise read as two separate letters rather than one mark. -->
+        <span class="text-white text-xs font-black tracking-tight leading-none select-none" aria-hidden="true">PM</span>
       </div>
       <h1 class="sidebar-label text-sm font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none truncate">MS Project Manager</h1>
     </div>
@@ -1273,10 +1277,11 @@
       <div class="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-500/15 flex items-center justify-center mb-3">
         <svg class="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
       </div>
-      <h3 id="department-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Which team are you on?</h3>
-      <p id="department-modal-body" class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Flowboard will open on your team's work. You can switch to any other teamspace whenever you like.</p>
+      <h3 id="department-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Which teams are you on?</h3>
+      <p id="department-modal-body" class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Pick as many as apply — you can change this any time from the People tab. Flowboard will open on your work, and you can switch teamspaces whenever you like.</p>
       <div id="department-modal-options" class="flex flex-col gap-2 mt-4"></div>
-      <button type="button" id="department-modal-skip" class="w-full mt-2 text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 py-2">Not now</button>
+      <button type="button" id="department-modal-save" class="w-full mt-3 text-sm font-bold px-4 py-2.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700">Continue</button>
+      <button type="button" id="department-modal-skip" class="w-full mt-1 text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 py-2">Not now</button>
     </div>
   </div>
 </div>
@@ -2204,9 +2209,12 @@
      project no longer has an opinion at all. */
   function taskInTeamspace(t) {
     if (currentTeamspace === 'all') return true;
-    var dept = personDepartment(t && t.assignee);
-    if (currentTeamspace === 'unassigned') return !dept;
-    return dept === currentTeamspace;
+    var deps = personDepartments(t && t.assignee);
+    // Unassigned is not a department -- it is the catch-all for work whose assignee has not
+    // picked one yet (or answered "Not now", or is a hand-typed name with no roster row). It is
+    // meant to empty out, not to be lived in.
+    if (currentTeamspace === 'unassigned') return deps.length === 0;
+    return deps.indexOf(currentTeamspace) !== -1;
   }
 
   // DERIVED, never stored: which departments actually have work on this project, computed from
@@ -2220,8 +2228,7 @@
     var seen = {};
     tasks.concat(archivedTasks).forEach(function (t) {
       if (t.project !== name) return;
-      var d = personDepartment(t.assignee);
-      if (d) seen[d] = true;
+      personDepartments(t.assignee).forEach(function (d) { seen[d] = true; });
     });
     return DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return seen[k]; });
   }
@@ -2276,22 +2283,43 @@
      disagree the moment somebody helps out another team. A person's department does exactly two
      things: it labels them on the People card, and it picks the teamspace they land in.
   --------------------------------------------------------- */
-  function personDepartment(name) {
+  /* Which departments a person is in. MULTIPLE, not one -- asked for directly: "can we allow
+     people to choose more than one department as their roles may change or be added on."
+
+     Reads `departments` (an array) and falls back to the older single `department` string, which
+     is what the first version of this wrote. Both shapes are live in Firestore: nothing was
+     migrated, because the fallback costs one line and a migration would have had to run through
+     every teammate's own signed-in session anyway (there is no admin credential here -- see the
+     checklist-threading backfill's note on the same gap). Writes always use `departments`; the
+     old field is left untouched and simply stops being consulted once the array exists. */
+  function personDepartments(name) {
     var person = teamPeople.find(function (pp) { return pp.name === name; });
-    var key = person && person.department;
-    return DEPARTMENTS.some(function (d) { return d.key === key; }) ? key : null;
+    if (!person) return [];
+    var list = Array.isArray(person.departments)
+      ? person.departments
+      : (person.department ? [person.department] : []);
+    // Canonical order regardless of the order they were ticked, so two people in the same two
+    // teams always render identically. Unknown keys are dropped rather than shown.
+    return DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) {
+      return list.indexOf(k) !== -1;
+    });
   }
 
-  function setPersonDepartment(name, key) {
+  function personInTeamspace(name) {
+    return personDepartments(name).indexOf(currentTeamspace) !== -1;
+  }
+
+  function setPersonDepartments(name, keys) {
     var person = teamPeople.find(function (pp) { return pp.name === name; });
     if (!person) { showToast('No roster entry for ' + name + ' yet -- they need to sign in once.', 'error'); return; }
+    keys = DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return keys.indexOf(k) !== -1; });
     // departmentChosen records that they were ASKED and answered -- including answering "no
     // department". Without it, an explicit "none" is indistinguishable from never having been
     // prompted, and the first-login modal would reappear on every visit.
-    updateDoc(doc(peopleCol, person.id), { department: key || null, departmentChosen: true }).then(function () {
-      logActivity('project_departments', key
-        ? name + ' joined ' + departmentLabel(key)
-        : name + ' left their department');
+    updateDoc(doc(peopleCol, person.id), { departments: keys, departmentChosen: true }).then(function () {
+      logActivity('project_departments', keys.length
+        ? name + ' is in ' + keys.map(departmentLabel).join(' + ')
+        : name + ' left every department');
       // Nothing to file any more: a project's departments are derived from its assignees, so
       // setting someone's department re-sorts their work automatically. The auto-parking this
       // used to do (parkMyProjectsInDepartment) was deleted with the project-level filing it fed.
@@ -2315,14 +2343,16 @@
     var modal = document.getElementById('department-modal');
     var opts = document.getElementById('department-modal-options');
     if (!modal || !opts) return;
-    // No per-option count any more: choosing a department no longer files projects, it just
-    // decides which teamspace your own tasks land in -- and that number is the same whichever
-    // department you pick, so showing it beside each option said nothing.
+    // Multi-select, not one-tap-and-close: people hold more than one role, and roles get added
+    // over time. Tapping a row toggles it; Continue commits the set. No per-option project count
+    // -- choosing a department no longer files anything, it only decides which teamspace your own
+    // tasks land in, and that number would be identical beside every option.
     opts.innerHTML = DEPARTMENTS.map(function (d) {
-      return '<button type="button" data-choose-dept="' + escapeHtml(d.key) + '" ' +
-        'class="w-full flex items-center px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">' +
+      return '<label data-dept-option="' + escapeHtml(d.key) + '" ' +
+        'class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 cursor-pointer">' +
+        '<input type="checkbox" class="department-modal-check brand-checkbox w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40" value="' + escapeHtml(d.key) + '">' +
         escapeHtml(d.label) +
-      '</button>';
+      '</label>';
     }).join('');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -2345,7 +2375,10 @@
     if (!myName) return;                       // roster can arrive before auth settles
     var me = teamPeople.find(function (pp) { return pp.name === myName; });
     if (!me) return;                           // our own registerPresence write hasn't landed yet
-    if (me.departmentChosen || me.department) { departmentPromptShown = true; return; }
+    if (me.departmentChosen || me.department || (Array.isArray(me.departments) && me.departments.length)) {
+      departmentPromptShown = true;
+      return;
+    }
     // Never interrupt something already on screen -- same courtesy checkProjectDeadlinePopups
     // extends. It'll be offered again on the next snapshot, of which there are plenty.
     if (anyModalOpen()) return;
@@ -2354,24 +2387,29 @@
   }
 
   document.addEventListener('click', function (e) {
-    var choice = e.target.closest('[data-choose-dept]');
-    if (choice) {
+    if (e.target.closest('#department-modal-save')) {
       var u = auth.currentUser;
       var myName = u ? (u.displayName || u.email) : null;
+      var picked = Array.prototype.map.call(
+        document.querySelectorAll('.department-modal-check:checked'),
+        function (b) { return b.value; }
+      );
       closeDepartmentModal();
-      if (myName) {
-        setPersonDepartment(myName, choice.getAttribute('data-choose-dept'));
-        setTeamspace(choice.getAttribute('data-choose-dept'));
-      }
+      if (!myName) return;
+      setPersonDepartments(myName, picked);
+      // Land them somewhere useful: their department if they picked exactly one, otherwise All,
+      // for the same reason applyDefaultTeamspaceOnce does -- with several picked, choosing one
+      // of them would be arbitrary and would hide the rest of their work on arrival.
+      setTeamspace(picked.length === 1 ? picked[0] : 'all');
       return;
     }
     if (e.target.closest('#department-modal-skip')) {
       var u2 = auth.currentUser;
       var myName2 = u2 ? (u2.displayName || u2.email) : null;
       closeDepartmentModal();
-      // "Not now" records that they were asked, so it isn't a nag -- they can still set one any
-      // time from their own People card.
-      if (myName2) setPersonDepartment(myName2, '');
+      // "Not now" still records that they were asked, so this is a one-time question rather than
+      // a nag -- the People card is always there for later.
+      if (myName2) setPersonDepartments(myName2, []);
     }
   });
 
@@ -2384,10 +2422,13 @@
     var u = auth.currentUser;
     var myName = u ? (u.displayName || u.email) : null;
     if (!myName) return;                       // roster may arrive before auth settles
-    var dept = personDepartment(myName);
-    if (!dept) return;                         // no department set: stay in All, keep waiting
+    var deps = personDepartments(myName);
+    if (!deps.length) return;                  // none set: stay in All, keep waiting
     teamspaceDefaultApplied = true;
-    setTeamspace(dept);
+    // Exactly one department -> land in it. Several -> All, because the array is in DEPARTMENTS
+    // order rather than preference order, so picking one of them would be arbitrary and would
+    // hide the rest of their work on arrival.
+    setTeamspace(deps.length === 1 ? deps[0] : 'all');
   }
 
   function renderTeamspaceSwitcher() {
@@ -2418,9 +2459,15 @@
   }
 
   document.addEventListener('change', function (e) {
-    var sel = e.target.closest('.person-dept-select');
-    if (!sel) return;
-    setPersonDepartment(sel.getAttribute('data-person'), sel.value);
+    var box = e.target.closest('.person-dept-check');
+    if (!box) return;
+    var name = box.getAttribute('data-person');
+    var key = box.getAttribute('data-dept');
+    var next = personDepartments(name).slice();
+    var at = next.indexOf(key);
+    if (box.checked && at === -1) next.push(key);
+    if (!box.checked && at !== -1) next.splice(at, 1);
+    setPersonDepartments(name, next);
   });
 
   function setTeamspace(key) {
@@ -8371,22 +8418,28 @@
   // it writes to the same people/{uid} doc, which firestore.rules already scopes that way, so
   // this needed no rules change of its own.
   function personDepartmentSectionHtml(name) {
-    var current = personDepartment(name);
+    var current = personDepartments(name);
     var editable = canEditLeaveFor(name);
     var hasRosterDoc = !!teamPeople.find(function (pp) { return pp.name === name; });
-    if (!editable) return '';   // the chip in the card header already states it for everyone else
+    if (!editable) return '';   // the chips in the card header already state it for everyone else
 
+    // Checkboxes rather than a <select multiple>, which is genuinely hard to use (ctrl-click to
+    // add, and clicking a second option silently replaces the first). Ticking writes straight
+    // away -- there is no Save here, same as every other control on this card.
     return '<div class="px-4 py-2.5 border-t border-zinc-100 dark:border-zinc-700">' +
-      '<div class="flex items-center justify-between gap-2">' +
-        '<p class="text-xs font-semibold text-zinc-400 dark:text-zinc-500">Department</p>' +
-        '<select class="person-dept-select text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50 disabled:cursor-not-allowed" ' +
-          'data-person="' + escapeHtml(name) + '"' + (hasRosterDoc ? '' : ' disabled title="' + escapeHtml(name + ' has not signed in yet, so there is no roster entry to attach a department to.') + '"') + '>' +
-          '<option value=""' + (current ? '' : ' selected') + '>No department</option>' +
-          DEPARTMENTS.map(function (d) {
-            return '<option value="' + escapeHtml(d.key) + '"' + (current === d.key ? ' selected' : '') + '>' + escapeHtml(d.label) + '</option>';
-          }).join('') +
-        '</select>' +
+      '<p class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 mb-1.5">Departments</p>' +
+      '<div class="flex flex-wrap items-center gap-2">' +
+        DEPARTMENTS.map(function (d) {
+          var on = current.indexOf(d.key) !== -1;
+          return '<label class="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 ' + (hasRosterDoc ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed') + '">' +
+            '<input type="checkbox" class="person-dept-check brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40" ' +
+              'data-person="' + escapeHtml(name) + '" data-dept="' + escapeHtml(d.key) + '"' + (on ? ' checked' : '') +
+              (hasRosterDoc ? '' : ' disabled title="' + escapeHtml(name + ' has not signed in yet, so there is no roster entry to attach a department to.') + '"') + '>' +
+            escapeHtml(d.label) +
+          '</label>';
+        }).join('') +
       '</div>' +
+      (current.length ? '' : '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-1.5">No department yet — this person\'s tasks sit in Unassigned.</p>') +
     '</div>';
   }
 
@@ -8505,7 +8558,7 @@
     var belongsHere = narrowing ? [] : teamRoster().filter(function (name) {
       if (filters.assignees.length && filters.assignees.indexOf(name) === -1) return false;
       if (currentTeamspace === 'all') return true;
-      return personDepartment(name) === currentTeamspace;
+      return personInTeamspace(name);
     });
     var seenPerson = {};
     var people = withWork.concat(belongsHere).filter(function (name) {
@@ -8537,8 +8590,9 @@
       var chips = '';
       // Department reads before workload: "3 overdue" means something different depending on
       // which team's queue you are looking at.
-      var myDept = personDepartment(p.name);
-      if (myDept) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[myDept] + '">' + escapeHtml(departmentLabel(myDept)) + '</span>';
+      personDepartments(p.name).forEach(function (k) {
+        chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+      });
       // Admin reads first -- it's a standing fact about the person, not a transient status like
       // the ones after it. Read-only: see isAdminName's own comment on why this can't be clicked
       // to change.
@@ -10434,7 +10488,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T03:16:15Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T03:33:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -2501,12 +2501,30 @@ rule, and it is the *second* rule this feature had.
   department now re-sorts that person's work on its own — there is nothing left to file. Net
   result is **less** UI and state than the first version: one field per person, nothing per
   project.
-- **`people/{uid}.department`** is the one input: a single department per person, set from the
-  People card (self-or-admin, via the existing `canEditLeaveFor` gate) or from the first-login
-  modal. Single rather than several — a person has one home team, and it keeps the landing
-  teamspace unambiguous; anyone working across teams switches with one click.
+- **`people/{uid}.departments`** is the one input: an **array**, set from the People card
+  (self-or-admin, via the existing `canEditLeaveFor` gate) or from the first-login modal.
+  - **It started as a single `department` string and was widened on request** — "can we allow
+    people to choose more than one department as their roles may change or be added on." The
+    original single-value argument (one home team, an unambiguous landing teamspace) did not
+    survive contact with people who genuinely hold two roles.
+  - **`personDepartments()` reads BOTH shapes**: the array, falling back to the old single
+    string. Nothing was migrated — the fallback is one line, and a real migration would have to
+    run through each teammate's own signed-in session anyway, since this app has no admin
+    credential (same gap the checklist-threading backfill documents). Writes always use the
+    array; the old field is left in place and simply stops being consulted.
+  - **Checkboxes, not `<select multiple>`** — the native control is genuinely hard to use
+    (ctrl-click to add, and clicking a second option silently replaces the first).
+  - **Landing teamspace: exactly one department → that one; several → All.** The array is in
+    `DEPARTMENTS` order rather than preference order, so picking one of several would be
+    arbitrary *and* would hide the rest of their own work on arrival. Same rule in both
+    `applyDefaultTeamspaceOnce()` and the first-login modal.
+- **Unassigned is a catch-all, not a department.** It holds work whose assignee has no
+  department — hasn't picked, answered "Not now", or is a hand-typed assignee name with no roster
+  row at all. It is meant to drain as people pick, and a non-empty Unassigned is the signal that
+  somebody still needs to choose.
 - **First-login prompt** (`#department-modal`): its own modal rather than an `openConfirm`, which
-  only holds two choices. **`departmentChosen` is a separate flag from `department`** — gating on
+  only holds two choices. **Multi-select with a Continue button**, not one-tap-and-close, since
+  people hold more than one role and roles get added over time. **`departmentChosen` is a separate flag from `department`** — gating on
   `department` being empty would re-ask, every visit, anyone who deliberately answered "no
   department". "Not now" sets it too, so this is a one-time question rather than a nag.
   `maybePromptDepartment()` defers while any modal is open, the same courtesy
