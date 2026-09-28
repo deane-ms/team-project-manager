@@ -2484,9 +2484,17 @@ something above it. Reported directly, from a screenshot of the profile menu.
 - **Deliberately scoped to those two panels.** Everything else (notification, digest, filter and
   chat menus) opens over `<main>`, which is already a different colour, so widening this would be
   a restyle nobody asked for.
-- The menu's own dividers and hover states moved a step with the surface
-  (`dark:border-zinc-600`, `dark:hover:bg-zinc-600`) — they were tuned against `zinc-800` and
-  disappear against `zinc-700`.
+- **Everything inside these two panels had to move a step with the surface** — dividers
+  (`dark:border-zinc-600`) and hover states (`dark:hover:bg-zinc-600`). They were tuned against
+  `zinc-800` and are invisible against `zinc-700`.
+  - **The teamspace options were missed on the first pass and shipped broken** — "why doesn't it
+    highlight when I hover". Their hover was `dark:hover:bg-zinc-700/60`, i.e. the panel's own
+    new colour tinted over itself. The markup hovers in the profile menu were updated at the
+    time; these were missed **because they are built in JS**, so a grep over the markup did not
+    surface them.
+  - **Rule for anything added to `#teamspace-menu` or `#user-menu-panel`: its hover/border must
+    clear `zinc-700`, not sit on it.** Verified by reading rendered values rather than trusting
+    class names — hover `rgb(82,82,91)` against panel `rgb(63,63,70)`.
 - Verified by reading the rendered values rather than eyeballing: panel `rgb(63,63,70)` vs rail
   `rgb(39,39,42)` in dark with a real box-shadow, plus a screenshot of each theme.
 

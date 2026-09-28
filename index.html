@@ -2559,10 +2559,16 @@
       // A divider above Unassigned: it is a holding area, not a department, and reads as one of
       // the three if it sits flush against them.
       var divider = o.key === 'unassigned'
-        ? '<div class="my-1 border-t border-zinc-100 dark:border-zinc-700"></div>' : '';
+        ? '<div class="my-1 border-t border-zinc-100 dark:border-zinc-600"></div>' : '';
       return divider +
         '<button type="button" role="option" aria-selected="' + (active ? 'true' : 'false') + '" data-teamspace="' + escapeHtml(o.key) + '" ' +
-        'class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/60 ' +
+        // dark:hover:bg-zinc-600, NOT zinc-700/60. This panel's own surface is zinc-700 (see
+        // .panel-raised), so a zinc-700 tint at 60% over it is very nearly the same colour and
+        // hovering did visibly nothing -- reported directly ("why doesn't it highlight when I
+        // hover"). Collateral from lifting the panel a step: the markup hovers in the profile
+        // menu were updated with it, this one was missed because it is built in JS.
+        // Any hover INSIDE #teamspace-menu or #user-menu-panel has to clear zinc-700.
+        'class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-zinc-100 dark:hover:bg-zinc-600 ' +
         (active ? 'font-bold text-brand-700 dark:text-brand-400' : 'text-zinc-700 dark:text-zinc-200') + '">' +
           '<span class="flex-1 truncate">' + escapeHtml(teamspaceLabel(o.key)) + '</span>' +
           '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + (counts[o.key] || 0) + '</span>' +
@@ -10563,7 +10569,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T04:07:23Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T04:10:57Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
