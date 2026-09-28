@@ -8668,32 +8668,49 @@
         ? p.active.map(personTaskRowHtml).join('')
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">All caught up — no active tasks.</p>';
 
-      var chips = '';
-      // Department reads before workload: "3 overdue" means something different depending on
-      // which team's queue you are looking at.
+      /* TWO groups on two lines -- identity beside the name, workload underneath.
+         They used to share one row: "2 active | Production | Admin | 1 high", interleaving two
+         different kinds of fact at equal weight. Reported as messy, and it was:
+         - neither group could be scanned, because each was split by the other;
+         - department chips vary in width, so the workload numbers began at a different x on
+           every card -- on a view whose whole job is comparing workload across people, the one
+           thing that should line up did not;
+         - the departments were also the most colourful thing in the row, so identity pulled the
+           eye first on a card that is about capacity.
+         Same problem and same fix as the Board card's metadata row, which was reported as
+         cluttered and split into explicit rows for exactly this reason: the grouping becomes
+         structural instead of depending on how wide the content happens to be. */
+      var identityChips = '';
+      var workloadChips = '';
       personDepartments(p.name).forEach(function (k) {
-        chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+        identityChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
       });
-      // Admin reads first -- it's a standing fact about the person, not a transient status like
-      // the ones after it. Read-only: see isAdminName's own comment on why this can't be clicked
-      // to change.
-      if (isAdminName(p.name)) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300" title="Admin rights are set in firestore.rules, not from this app.">Admin</span>';
+      // Admin belongs with identity, not workload -- a standing fact about the person.
+      // Read-only: see isAdminName's own comment on why this can't be clicked to change.
+      if (isAdminName(p.name)) identityChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300" title="Admin rights are set in firestore.rules, not from this app.">Admin rights</span>';
       // Away reads before overdue: "3 overdue" means something quite different once you know the
       // person is not at their desk, so the qualifier has to arrive first.
       var awayNow = leavePeriodOn(p.name, toDateInputValue(todayMidnight()));
-      if (awayNow) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" title="' + escapeHtml('Away until ' + formatShortDate(awayNow.end) + (awayNow.note ? ' · ' + awayNow.note : '')) + '">Away until ' + escapeHtml(formatShortDate(awayNow.end)) + '</span>';
-      if (p.overdue > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
-      if (p.high > 0) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">' + p.high + ' high</span>';
+      if (awayNow) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" title="' + escapeHtml('Away until ' + formatShortDate(awayNow.end) + (awayNow.note ? ' · ' + awayNow.note : '')) + '">Away until ' + escapeHtml(formatShortDate(awayNow.end)) + '</span>';
+      if (p.overdue > 0) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
+      if (p.high > 0) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">' + p.high + ' high</span>';
 
       return (
         '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
           '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
             avatarHtml(p.name, 'w-8 h-8 shrink-0', 'text-sm') +
             '<div class="min-w-0 flex-1">' +
-              '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
-              '<div class="flex items-center gap-1.5 mt-0.5">' +
+              // Name + identity share a line. truncate + min-w-0 on the name alone, so a long
+              // name gives way to the chips rather than pushing them off the card.
+              '<div class="flex flex-wrap items-center gap-1.5 min-w-0">' +
+                '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate min-w-0">' + escapeHtml(p.name) + '</p>' +
+                identityChips +
+              '</div>' +
+              // Workload on its own line, so the counts start at the same x on every card and
+              // can actually be compared down the column.
+              '<div class="flex flex-wrap items-center gap-1.5 mt-1">' +
                 '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.active.length + ' active</span>' +
-                chips +
+                workloadChips +
               '</div>' +
             '</div>' +
             '<span class="text-xl font-bold text-zinc-200 dark:text-zinc-600 shrink-0">' + p.active.length + '</span>' +
@@ -10569,7 +10586,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T04:10:57Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T04:19:03Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

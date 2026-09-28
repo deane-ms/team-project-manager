@@ -2498,6 +2498,34 @@ something above it. Reported directly, from a screenshot of the profile menu.
 - Verified by reading the rendered values rather than eyeballing: panel `rgb(63,63,70)` vs rail
   `rgb(39,39,42)` in dark with a real box-shadow, plus a screenshot of each theme.
 
+### People card header: identity vs workload
+
+The header is **two lines**: name + identity chips (departments, "Admin rights") on the first,
+workload on the second ("N active", Away, overdue, high).
+
+They used to share one row — `2 active | Production | Admin | 1 high` — and it was reported as
+messy. It was, for a reason worth keeping written down:
+
+- **Two different kinds of fact at equal weight, interleaved.** Departments say *who someone is*;
+  the counts say *how loaded they are*. Split by each other, neither could be scanned.
+- **Department chips vary in width**, so the workload numbers started at a different x on every
+  card. On a view whose entire job is comparing workload across people, the one thing that should
+  line up didn't.
+- **The departments were the most colourful thing in the row**, so identity pulled the eye first
+  on a card that is about capacity.
+
+**Same problem and same fix as the Board card's metadata row** (reported as cluttered, split into
+explicit rows): the grouping becomes structural instead of depending on how wide the content
+happens to be.
+
+- **The identity row wraps (`flex-wrap`) rather than truncating the name.** A render with three
+  chips cut "Deane Cheng" down to "Deane Ch…" — the name is the card's primary identifier, so
+  chips drop to a second line instead.
+- **The admin ROLE chip reads "Admin rights", not "Admin".** Once Admin existed as a *department*
+  too, a person who was both got two chips saying the same word in different colours. The role is
+  about `firestore.rules`, the department is about which team they work on; the label now says
+  which one it is.
+
 ### Teamspaces (departments)
 
 Notion-style teamspaces — Suits, Production, Marketing, Admin. Pick one in the sidebar switcher
