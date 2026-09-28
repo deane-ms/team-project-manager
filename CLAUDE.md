@@ -364,12 +364,26 @@ to bottom:
    `renderCalendar`, `renderPeople`, `renderProjects`, `renderActivityFeed`, `renderArchived`,
    `renderFocus` ("Focus of the Day"), `renderSuggestions`. `setView`/`renderCurrentSecondaryView`
    switch between them; `renderAll` re-runs the relevant renderer(s) after any data change.
+   - **The Timeline has two frozen columns, not one: `Task` (track 1) and `Progress`
+     (track 2, `GANTT_PCT_WIDTH`).** Day columns therefore start at grid track **3**, and the
+     bar rows span `3 / -1` — the single easiest thing to break when touching this grid, since
+     the month header (`colCursor`), the day header (`i + 3`), the bar rows and the today line
+     (`GANTT_LABEL_WIDTH + GANTT_PCT_WIDTH + ...`) all have to agree. The Progress column is a
+     fixed width and not resizable: it holds one short number, so a drag has nothing to reveal.
+     Both its cells carry `.gantt-pct`, because a sticky `left` offset does NOT move when the
+     grid track does — the Task-column resize drag has to rewrite it explicitly, the same way
+     it already rewrites the today line.
+   - **The percentage is derived, never stored.** It reads the same source as the bar fill, so
+     the number and the bar cannot disagree, and it follows the Progress toggle between
+     checklist completion and status stage. One deliberate difference from `fillPct`: Pipeline
+     shows **0%**, not the `6` the bar uses. That 6 exists only so a not-started bar draws a
+     visible sliver; printing it as a percentage would assert a precision that is not there.
    - **`renderGantt` stacking tiers** (all below 30, so a sticky Gantt cell can never cover the
      app header at `z-40` or its notification/user-menu panels at `z-30` — `z-40` vs `z-40` did
      exactly that once, with the corner cell covering the mobile nav menu):
      `28` the toolbar's own dropdown menus · `26` corner · `25` month + day header (the frozen
-     top row) · `20` task label column (the frozen left column) · `15` today line · `0` leave
-     bands then bars.
+     top row) · `20` task label + Progress cells (the two frozen columns) · `15` today line
+     · `0` leave bands then bars.
      - **The toolbar dropdowns are in this list because they collide with the chart, even though
        they are not part of it.** `#filter-people-menu` and every `enhanceSelect()` menu
        (Priority, Project, Sort) were `z-20`, and the toolbar sits *above* the Gantt in the DOM —

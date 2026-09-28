@@ -4524,6 +4524,10 @@
   var GANTT_LABEL_WIDTH_MIN = 180;
   var GANTT_LABEL_WIDTH_MAX = 600;
   var GANTT_LABEL_WIDTH_DEFAULT = 300;
+  // Width of the Progress column, the frozen column between the Task labels and the day grid.
+  // Fixed, not resizable: it holds one short right-aligned number, so there is nothing for a
+  // drag to reveal -- unlike the Task column, whose contents are as long as a project name.
+  var GANTT_PCT_WIDTH = 88;
   function loadGanttLabelWidth() {
     try {
       var v = parseInt(localStorage.getItem(GANTT_LABEL_WIDTH_KEY), 10);
@@ -4581,13 +4585,16 @@
       if (!grid) return;
       var dayWidth = parseInt(grid.getAttribute('data-day-width'), 10);
       var totalDays = parseInt(grid.getAttribute('data-total-days'), 10);
-      grid.style.gridTemplateColumns = GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px)';
+      grid.style.gridTemplateColumns = GANTT_LABEL_WIDTH + 'px ' + GANTT_PCT_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px)';
+      // The Progress column is frozen at the Task column's right edge, so its `left` has to
+      // travel with the drag -- the grid track moves on its own, but a sticky offset does not.
+      grid.querySelectorAll('.gantt-pct').forEach(function (el) { el.style.left = GANTT_LABEL_WIDTH + 'px'; });
       var handle = document.getElementById('gantt-resize-handle');
       if (handle) handle.style.left = (GANTT_LABEL_WIDTH - 3) + 'px';
       var todayLine = document.getElementById('gantt-today-line');
       if (todayLine) {
         var todayIndex = parseInt(todayLine.getAttribute('data-today-index'), 10);
-        todayLine.style.left = (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px';
+        todayLine.style.left = (GANTT_LABEL_WIDTH + GANTT_PCT_WIDTH + todayIndex * dayWidth) + 'px';
       }
     });
     document.addEventListener('mouseup', function () {
@@ -8083,7 +8090,7 @@
     // column to fill the whole card, so a 1-day task's bar could balloon out to hundreds of
     // pixels wide and look like an oversized solid block rather than a normal task bar.
     var GANTT_MAX_DAY_WIDTH = 120;
-    var availableWidth = wrap.clientWidth - GANTT_LABEL_WIDTH;
+    var availableWidth = wrap.clientWidth - GANTT_LABEL_WIDTH - GANTT_PCT_WIDTH;
     var dayWidth = Math.min(GANTT_MAX_DAY_WIDTH, Math.max(GANTT_DAY_WIDTH, Math.floor(availableWidth / totalDays)));
 
     // DO NOT give these sticky header cells a top offset to clear the app's own sticky header.
@@ -8106,7 +8113,7 @@
     // isolated fixture: scrolled 1400px right, the label sat 869px LEFT of the pane's edge; with
     // max-content it sits exactly ON it. min-width:100% stays for the opposite case, a short
     // date range whose columns do not fill the pane.
-    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;width:max-content;">';
+    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px ' + GANTT_PCT_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;width:max-content;">';
 
     // corner cells
     //
@@ -8118,7 +8125,7 @@
     //   27  label column resize handle  has to out-grab the corner cell it overlaps
     //   26  corner cell ...... frozen both ways, so it must out-rank both frozen edges
     //   25  month + day header  the frozen top row
-    //   20  task label column   the frozen left column
+    //   20  task label + Progress cells   the two frozen left columns
     //   15  "today" line
     //    0  leave bands, then task bars (unpositioned; DOM order decides between them)
     //
@@ -8133,6 +8140,12 @@
     // column"), matching the same size bump the project title badge already got below it.
     html += '<div class="sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-sm font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
 
+    // The Progress column's own corner cell. Same z-[26] tier as the Task corner -- it is
+    // frozen against both edges too, so it has to out-rank both frozen rows. Its `left` is the
+    // Task column's width, which is what parks it immediately right of that column at every
+    // scroll position; the drag handler below rewrites this alongside the grid tracks.
+    html += '<div class="gantt-pct tooltip-top sticky top-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center justify-end px-3" data-tooltip="Percent complete: checklist items ticked where a task has a checklist, otherwise its status stage" style="left:' + GANTT_LABEL_WIDTH + 'px;grid-column:2;grid-row:1 / span 2;"><span class="text-sm font-bold text-zinc-500 dark:text-zinc-400">Progress</span></div>';
+
     // Label column resize handle -- a thin strip pinned to the column-1/column-2 boundary,
     // sticky the same way the label column itself is (position:sticky;left) so it stays grabbable
     // at that boundary regardless of horizontal scroll. Spans every row via grid-row so it can be
@@ -8144,7 +8157,7 @@
     '</div>';
 
     // month header row
-    var colCursor = 2;
+    var colCursor = 3;   // 1 = Task, 2 = Progress, so the first day is track 3
     monthSpans.forEach(function (m) {
       // Opaque background, not dark:bg-zinc-700/80. Raising the z-index alone was not enough:
       // at 80% the bars scrolling underneath still showed through the header as ghost blocks,
@@ -8178,7 +8191,7 @@
       // The three still read as three distinct days, just without the see-through.
       html += '<div class="sticky top-8 z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
         (isToday ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400')) +
-        '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
+        '" style="grid-column:' + (i + 3) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
     });
@@ -8248,7 +8261,30 @@
         ? ' · Deadline lands while ' + t.assignee + ' is away'
         : '';
 
-      html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" data-gantt-row="' + r + '" style="grid-column:2 / -1;grid-row:' + rowIdx + ';">';
+      // Percent complete, frozen beside the Task column.
+      //
+      // Derived, never stored -- there is no "% done" field to fill in and nothing that can
+      // drift out of step with the task. It reads the SAME source the bar fill does, so the
+      // number and the bar can never disagree, including when the Progress toggle switches
+      // the fill between checklist completion and status stage.
+      //
+      // The one place it deliberately differs from fillPct: Pipeline. fillPct uses 6 so that a
+      // not-started bar still draws a visible sliver instead of nothing -- that 6 is a drawing
+      // constant, not a measurement, and printing "6%" next to it would assert a precision
+      // that does not exist. Nothing has been done on a Pipeline task, so the column says 0%.
+      var STATUS_PCT = { Pipeline: 0, 'In Progress': 50, Review: 80, Done: 100 };
+      var displayPct = showChecklistProgress ? checklistPct : STATUS_PCT[t.status];
+      if (displayPct == null) displayPct = 0;
+      var pctTitle = showChecklistProgress
+        ? checklistDoneCount + ' of ' + t.checklist.length + ' checklist items done'
+        : t.status + ' — no checklist on this task, so this is its status stage';
+      // tabular-nums + text-right so the figures line up on their last digit down the column
+      // and can be compared by eye -- the same reason the People cards align their counts.
+      html += '<div class="gantt-pct sticky z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center justify-end px-3" data-gantt-row="' + r + '" title="' + escapeHtml(pctTitle) + '" style="left:' + GANTT_LABEL_WIDTH + 'px;grid-column:2;grid-row:' + rowIdx + ';">' +
+        '<span class="text-sm font-semibold tabular-nums ' + (displayPct === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-300') + '">' + displayPct + '%</span>' +
+      '</div>';
+
+      html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" data-gantt-row="' + r + '" style="grid-column:3 / -1;grid-row:' + rowIdx + ';">';
       // Emitted before the bar so the bar paints over it -- neither sets a z-index, so DOM order
       // decides, the same way the day-grid content already sits under the bars.
       rowLeaveBands.forEach(function (seg) {
@@ -8281,7 +8317,7 @@
     });
 
     // today vertical line
-    html += '<div class="absolute bg-rose-400/70 pointer-events-none" id="gantt-today-line" data-today-index="' + todayIndex + '" style="left:' + (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
+    html += '<div class="absolute bg-rose-400/70 pointer-events-none" id="gantt-today-line" data-today-index="' + todayIndex + '" style="left:' + (GANTT_LABEL_WIDTH + GANTT_PCT_WIDTH + todayIndex * dayWidth) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
 
     html += '</div>';
 
@@ -10549,10 +10585,11 @@
     if (e.target.closest('[data-tooltip]')) hideTooltip();
   });
 
-  // Gantt row hover: the label cell (grid-column:1) and the day-grid cell (grid-column:2/-1)
-  // are separate sibling divs sharing a grid row, not one element -- a plain CSS :hover on
-  // either only ever lights up that one half. Both carry data-gantt-row="<r>" (see renderGantt),
-  // so this delegation toggles .gantt-row-hover on every element sharing that value together.
+  // Gantt row hover: the label cell (grid-column:1), the Progress cell (grid-column:2) and the
+  // day-grid cell (grid-column:3/-1) are separate sibling divs sharing a grid row, not one
+  // element -- a plain CSS :hover on any of them only ever lights up that one part. All three
+  // carry data-gantt-row="<r>" (see renderGantt), so this delegation toggles .gantt-row-hover
+  // on every element sharing that value together.
   document.addEventListener('mouseover', function (e) {
     var target = e.target.closest('[data-gantt-row]');
     if (!target) return;
@@ -11047,7 +11084,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T08:21:24Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T08:31:21Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
