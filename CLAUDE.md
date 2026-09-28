@@ -2469,121 +2469,77 @@ permissions" even though the code and the deployed page are otherwise correct.
 
 ### Teamspaces (departments)
 
-Notion-style teamspaces — Suits, Production, Admin — asked for directly ("create teamspaces for
-different departments that work similarly to NOTION"). Pick one in the sidebar switcher and the
-whole app scopes to it.
+Notion-style teamspaces — Suits, Production, Marketing, Admin. Pick one in the sidebar switcher
+and the whole app scopes to it.
 
-**Three decisions were put to the user before any code was written**, because each is expensive
-to reverse. All three landed on the recommended option:
+**A task belongs to the teamspace of whoever it is assigned to.** That is the entire scoping
+rule, and it is the *second* rule this feature had.
 
-1. **It is an organising view, NOT an access boundary.** Nothing here touches `firestore.rules`.
-   Everyone can still reach everything; "All teamspaces" shows the board exactly as it was.
-   Chosen over real per-department privacy because mis-filed work then merely sits in the wrong
-   list instead of becoming invisible, and the whole feature is revertible in one commit. If it
-   ever does need to be a real boundary, `departments` is already the right shape to enforce.
-2. **A project can belong to SEVERAL departments** (an array, not a single parent). Notion's own
-   teamspaces are single-parent, but agency work isn't: a client pitch is Suits *and* Production,
-   and forcing one owner would make it look missing from the other team's board.
-3. **Existing projects start Unassigned.** Nothing moved or hid on day one. Unassigned is a real
-   teamspace you can switch into, not an error state, and it empties as people file things.
-
-- **The department lives on the PROJECT doc (`projects.departments`), never on the task.** Tasks
-  already carry a `project` name and inherit from it, so filing is one action per project instead
-  of one per task — and **no task needed migrating**. The cost: a project must have a `projects`
-  doc to be filed at all, and those are created lazily (only when someone sets a deadline or
-  starts a chat), which is what **`ensureProjectDoc(name)`** exists for — same find-or-create
-  shape as `setProjectDeadline`.
-- **`projectInTeamspace` / `taskInTeamspace` are the whole scoping mechanism.** The check went
-  into **`applyFilters`**, which is why Board, Gantt, Calendar and People all scoped for free.
-  `renderFocus`, `renderProjects` and `renderChatProjectList` each needed their own call, since
-  none of them routes through `applyFilters`.
-- **Deliberately not part of `filters`.** A teamspace is *where you are*, not another chip
-  narrowing what you see in it: it has its own switcher, its own `localStorage` key
-  (`flowboard_teamspace`), and **"Clear filters" does not reset it**.
-- **Focus of the Day IS teamspace-scoped**, even though it still ignores the toolbar filters —
-  the strip has to live in the workspace you're standing in, while the filters narrow a view it
-  has always deliberately ignored. **Activity and Suggestions are not scoped**: an activity row
-  isn't reliably attributable to a project, and suggestions are about the tool, not the work.
-- **Three ways of being unfiled all behave identically** — `departments: []`, a doc with no
-  `departments` field, and no `projects` doc at all. Verified explicitly, because they arrive by
-  quite different routes.
-- **An unknown department key is ignored rather than treated as a teamspace**, so a hand-edited
-  or future-dated value can't create a phantom department nobody can switch into.
-- **The card being filed stays on screen while you edit it**, even once the ticked boxes no
-  longer match the teamspace you're standing in — otherwise un-ticking the department you're
-  viewing makes the card vanish out from under the cursor.
-- **`DEPARTMENT_BADGE` is a fixed three-colour map, not a hash.** Deliberately not reusing
-  `PROJECT_BADGE_PALETTE` (which hashes a project *name*) or `PRIORITY_META`'s hues — a
-  department is a third kind of thing, and borrowing either would make a teamspace chip read as a
-  priority or as a project identity.
-- **No `firestore.rules` change and no deploy.** `projects` already allows `create`, and its
-  `update` rule only guards `chat` (`!changedKeys().hasAny(['chat'])` passes when only
-  `departments` changes) — the same reason `pinned` needed no rule when it was added.
-- **Per-person department** (`people/{uid}.department`) — asked for right after the teamspaces
-  themselves ("can I have each member be assigned to a department from the get go?"). Set from a
-  small select on the People card, self-or-admin via the existing `canEditLeaveFor` gate; it
-  writes to the same `people/{uid}` doc as leave, which `firestore.rules` already scopes that
-  way, so this needed **no rules change either**.
-  - **SINGLE department per person, unlike a project's several.** A project genuinely spans
-    teams (a pitch is Suits *and* Production); a person has one home team, the request was
-    phrased in the singular, and it keeps the landing-teamspace rule unambiguous. Someone who
-    works across teams switches with one click — that is what the switcher is for.
-  - **It is NOT a second scoping axis for tasks.** Which teamspace a piece of *work* belongs to
-    stays entirely decided by the project's `departments`. If a person's department also filtered
-    tasks, the app would hold two answers to "is this task in this teamspace" and they would
-    disagree the moment somebody helps another team out. A person's department does exactly two
-    things: label them on their People card, and pick the teamspace they land in.
-  - **`applyDefaultTeamspaceOnce()` is the "from the get go" half** — someone who has never
-    picked a teamspace starts in their own department instead of All. It runs from the `people`
-    snapshot handler, not `loadTeamspace()`, because the answer lives in `teamPeople`, which is
-    empty at module load. Self-limiting: the moment anyone picks a teamspace themselves —
-    *including* picking All — that choice is persisted and this stops applying.
-  - **`renderPeople` now unions two lists: people with work here, and people who belong here.**
-    It was task-derived only, so a teammate with no current tasks never appeared — including a
-    new joiner, who is precisely the person you want to hand a department to. The roster half is
-    teamspace-aware (a department shows its members plus whoever is working on its projects; All
-    shows the whole roster) and is **skipped entirely while search/priority/project is
-    narrowing**, or a roster member with no matching tasks would show up anyway and read as the
-    search being broken. A zero-task card renders fine on the existing "All caught up" state.
-  - Verified with an isolated Node port: a no-task joiner is listed, an unknown department key
-    places nobody, an active search is not undermined by the roster half, and the landing rule
-    honours an explicit choice (including "All") over the department default.
-- **First-login prompt + auto-parking** — "when the person logs in for the first time, they
-  should be able to choose their department. Once chosen, their projects should automatically be
-  parked under each teamspace."
-  - **`#department-modal`** is its own modal rather than an `openConfirm`, which only has room
-    for two choices — this needs every department plus a way out. Same `modal-backdrop` /
-    `modal-pop-in` shell as every other modal, so it inherits the open animation and the shared
-    Escape/backdrop handling for free. Each option shows how many projects it would file.
-  - **`departmentChosen` is a separate flag from `department`, and that distinction matters.**
-    Gating the prompt on `department` being empty would re-ask, on every single visit, anyone who
-    deliberately answered "no department" — an explicit "none" and never-having-been-asked are
-    indistinguishable otherwise. "Not now" also sets it, so the prompt is a one-time question
-    rather than a nag; the People card is always there for a later change of mind.
-  - **`maybePromptDepartment()` defers while any modal is open**, the same courtesy
-    `checkProjectDeadlinePopups` extends — there is always another snapshot to offer it on.
-  - **`parkMyProjectsInDepartment()` is STRICTLY ADDITIVE, and that is the whole design.** It
-    unions the department in and never replaces. That is what makes it safe to run per person in
-    turn: when two people from different teams share a project, the first to choose files it
-    under theirs and the second *adds* theirs, leaving it correctly in both. Replacing would mean
-    whoever chose last silently evicted the other team from their own project. Projects already
-    carrying the department are skipped, so re-running is free and produces no duplicate writes.
-  - Counts **archived work too** — a project whose tasks are finished still belongs to the team
-    that did it — and ignores tasks with no project.
-  - The same parking runs when a department is set from the People card, not just from the modal,
-    so there is one code path and one behaviour; the toast names how many projects moved.
-  - Verified with an isolated Node port covering the property that actually matters: a shared
-    project ends up holding *both* departments rather than the last writer winning, archived work
-    is included, projectless tasks are ignored, re-running is a no-op, and chips come out in
-    `DEPARTMENTS` order regardless of who chose first.
-- **Adding a department is one array entry plus one badge colour.** `DEPARTMENTS` and
-  `DEPARTMENT_BADGE` are the only two places: the switcher, its counts, the People-card select,
-  the first-login modal and the Projects-card checkboxes all derive from them. **Marketing was
-  added exactly that way**, on request, with no other change.
-- Verified with an isolated Node port of the scoping rules (cross-department project visible in
-  both, unknown keys ignored, all three unfiled routes equivalent, counts adding up) plus a
-  real-browser DOM check that the switcher renders in the sidebar above the nav and opens with
-  exactly `all|suits|production|admin|unassigned`.
+- **It first scoped by the PROJECT's own hand-filed departments, and that was abandoned within a
+  day.** The user named the flaw exactly: *"but every project will involve Suits & Production.
+  How do I solve this?"* Project-level teamspaces only work when a project belongs to one team —
+  Notion's do, because a teamspace there holds documents one team owns. These projects are client
+  engagements every department touches, so every project ended up filed under every department,
+  every teamspace showed everything, and the only thing the feature reliably produced was filing
+  work. **Don't reintroduce per-project filing.**
+- **What actually divides the work is the task.** Inside one Lark project the video edit is
+  Production's, the client deck is Suits', the socials are Marketing's, the invoice is Admin's.
+  Scoping by the assignee's department splits it along exactly that line: **one project appears
+  in several teamspaces while showing different tasks in each**, which is what was wanted.
+- **This is why a person's department is no longer "a second axis".** The original objection to
+  using it was that two sources of truth would disagree; there is now only one, because the
+  project has no opinion at all.
+- **`projectDepartments(name)` is DERIVED, never stored** — computed from the project's
+  assignees, for the Projects/Chat lists and the read-only chips on a project card. Nothing to
+  maintain, and it cannot drift the way a manual field does the moment someone is reassigned.
+  Old `projects` docs may still carry a `departments` array from the filed-by-hand version; it is
+  **deliberately ignored rather than migrated**, since reading it would restore the second,
+  conflicting source of truth this change removed. Harmless to leave in Firestore.
+- **Removed with the old design**: the `+ Teamspace` button and its checkboxes,
+  `setProjectDepartments`, `ensureProjectDoc`, `parkMyProjectsInDepartment` (the auto-filing that
+  ran when someone picked a department), `projectsForPerson`, and `projectDeptEditing`. Setting a
+  department now re-sorts that person's work on its own — there is nothing left to file. Net
+  result is **less** UI and state than the first version: one field per person, nothing per
+  project.
+- **`people/{uid}.department`** is the one input: a single department per person, set from the
+  People card (self-or-admin, via the existing `canEditLeaveFor` gate) or from the first-login
+  modal. Single rather than several — a person has one home team, and it keeps the landing
+  teamspace unambiguous; anyone working across teams switches with one click.
+- **First-login prompt** (`#department-modal`): its own modal rather than an `openConfirm`, which
+  only holds two choices. **`departmentChosen` is a separate flag from `department`** — gating on
+  `department` being empty would re-ask, every visit, anyone who deliberately answered "no
+  department". "Not now" sets it too, so this is a one-time question rather than a nag.
+  `maybePromptDepartment()` defers while any modal is open, the same courtesy
+  `checkProjectDeadlinePopups` extends.
+- **`applyDefaultTeamspaceOnce()`** lands someone in their own department the first time, unless
+  they have already chosen a teamspace themselves (*including* choosing All). Runs from the
+  `people` snapshot handler, not `loadTeamspace()`, because the answer lives in `teamPeople`,
+  which is empty at module load.
+- **Not part of `filters`.** A teamspace is *where you are*, not a chip narrowing what you see in
+  it: own switcher, own `localStorage` key (`flowboard_teamspace`), and **"Clear filters" does
+  not reset it**.
+- **Focus of the Day IS teamspace-scoped** while still ignoring the toolbar filters — the strip
+  has to live in the workspace you are standing in. **Activity and Suggestions are not scoped**:
+  an activity row is not reliably attributable to an assignee, and suggestions are about the tool
+  rather than the work.
+- **`renderPeople` unions "people with work here" with "people who belong here"** — it was
+  task-derived only, so a teammate with no current tasks never appeared, including a new joiner,
+  who is exactly the person you want to hand a department to. The roster half is skipped while
+  search/priority/project is narrowing, or a roster member with no matching tasks would show up
+  anyway and read as the search being broken.
+- **Adding a department is one `DEPARTMENTS` entry plus one `DEPARTMENT_BADGE` colour** — the
+  switcher, its counts, the People select, the first-login modal and the project chips all derive
+  from those two places. Marketing was added exactly that way, with no other change.
+- **No `firestore.rules` change at any point.** `department`/`departmentChosen` are fields on the
+  person's own `people/{uid}` doc, which is already scoped to self-or-admin.
+- **Known trade, accepted**: a task assigned to someone with no department falls into Unassigned,
+  so the departments only become useful once people have picked — which is the first-login
+  prompt's job. And a Production person picking up an admin task counts as Production; the person
+  is the unit, not the work type.
+- Verified with an isolated Node port of the scoping rules: one shared project yields four
+  different task lists across four teamspaces, archived work counts toward a project's derived
+  chips, unknown department keys contribute nothing, and a no-department assignee lands in
+  Unassigned.
 
 ### Personal leave (time off)
 

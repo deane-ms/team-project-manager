@@ -1274,7 +1274,7 @@
         <svg class="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
       </div>
       <h3 id="department-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Which team are you on?</h3>
-      <p id="department-modal-body" class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Flowboard will open on your team's work, and the projects you're already on will be filed there.</p>
+      <p id="department-modal-body" class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Flowboard will open on your team's work. You can switch to any other teamspace whenever you like.</p>
       <div id="department-modal-options" class="flex flex-col gap-2 mt-4"></div>
       <button type="button" id="department-modal-skip" class="w-full mt-2 text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 py-2">Not now</button>
     </div>
@@ -2142,11 +2142,12 @@
         hides on day one; the Unassigned teamspace is a real destination that empties as people
         file things, not an error state.
 
-     The department lives on the PROJECT doc, not on the task. Tasks already carry a `project`
-     name and inherit from it, so filing is one action per project instead of one per task --
-     and no task needs migrating. The cost is that a project must have a `projects` doc to be
-     filed at all (they are otherwise created lazily, only when someone sets a deadline or starts
-     a chat), which is what ensureProjectDoc below is for.
+     WHERE THE DEPARTMENT LIVES CHANGED ONCE, and the history is worth keeping. It first lived
+     on the PROJECT doc as a hand-filed list. That was abandoned within the day: see the comment
+     on taskInTeamspace for why project-level filing cannot work when every project involves
+     every department. It now lives on the PERSON (people/{uid}.department) and a task is scoped
+     by its assignee -- one field, set once per teammate, with nothing to file per project and
+     nothing to keep up to date.
   ========================================================= */
   // Adding a department is this array plus a DEPARTMENT_BADGE colour -- the switcher, its
   // counts, the People-card select, the first-login modal and the Projects-card checkboxes all
@@ -2183,49 +2184,55 @@
     return departmentLabel(key);
   }
 
-  // The departments a project is filed under. Unknown project, no doc, or no field all mean
-  // "unassigned" -- deliberately the same answer, so a project that has never had a `projects`
-  // doc behaves identically to one that has a doc but hasn't been filed yet.
-  function projectDepartments(name) {
-    var pdoc = projectDeadlineDoc(name);
-    var list = pdoc && pdoc.departments;
-    return Array.isArray(list) ? list.filter(function (k) {
-      return DEPARTMENTS.some(function (d) { return d.key === k; });
-    }) : [];
+  /* A TASK belongs to the teamspace of whoever it is assigned to. This is the whole scoping
+     rule, and it replaced an earlier one that scoped by the PROJECT's own filed departments.
+
+     That first version was wrong about this agency, and the user named the flaw exactly: "but
+     every project will involve Suits & Production. How do I solve this?" Project-level
+     teamspaces only work when a project belongs to one team -- Notion's do, because a teamspace
+     there holds documents a single team owns. These projects are client engagements every
+     department touches, so every project ended up filed under every department, every teamspace
+     showed everything, and the only thing the feature reliably produced was filing work.
+
+     What genuinely divides the work is the task. Inside one Lark project the video edit is
+     Production's, the client deck is Suits', the invoice is Admin's. Scoping by the assignee's
+     department splits it exactly along that line: one project now appears in several teamspaces
+     while showing DIFFERENT TASKS in each, which is the thing that was actually wanted.
+
+     It is also why this is not "two competing answers" any more, which was the original
+     objection to using a person's department for scoping: there is now only one answer, and the
+     project no longer has an opinion at all. */
+  function taskInTeamspace(t) {
+    if (currentTeamspace === 'all') return true;
+    var dept = personDepartment(t && t.assignee);
+    if (currentTeamspace === 'unassigned') return !dept;
+    return dept === currentTeamspace;
   }
 
+  // DERIVED, never stored: which departments actually have work on this project, computed from
+  // its assignees. Replaces the hand-filed list -- nothing to maintain, and it cannot drift out
+  // of date the way a manual field does the moment someone is reassigned.
+  //
+  // Old `projects` docs may still carry a `departments` array from the filed-by-hand version.
+  // It is deliberately ignored rather than migrated: reading it would reintroduce exactly the
+  // second, conflicting source of truth this change removed. Harmless to leave in Firestore.
+  function projectDepartments(name) {
+    var seen = {};
+    tasks.concat(archivedTasks).forEach(function (t) {
+      if (t.project !== name) return;
+      var d = personDepartment(t.assignee);
+      if (d) seen[d] = true;
+    });
+    return DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return seen[k]; });
+  }
+
+  // For the lists that are project-shaped rather than task-shaped (Projects tab, Chat): a
+  // project belongs wherever any of its work does.
   function projectInTeamspace(name) {
     if (currentTeamspace === 'all') return true;
     var deps = projectDepartments(name);
     if (currentTeamspace === 'unassigned') return deps.length === 0;
     return deps.indexOf(currentTeamspace) !== -1;
-  }
-
-  // A task inherits its project's teamspace. A task with no project at all is treated as
-  // unassigned, matching how projectDepartments answers for an unknown name.
-  function taskInTeamspace(t) {
-    return projectInTeamspace(t && t.project);
-  }
-
-  // Projects are created lazily elsewhere (a deadline, or starting a chat), so filing one into a
-  // department may be the first thing that needs a doc to exist. Same find-or-create shape as
-  // setProjectDeadline, returning a promise either way so callers can chain uniformly.
-  function ensureProjectDoc(name) {
-    var existing = projectDeadlineDoc(name);
-    if (existing) return Promise.resolve(existing.id);
-    return addDoc(projectsCol, { name: name, deadline: null }).then(function (ref) { return ref.id; });
-  }
-
-  function setProjectDepartments(name, keys) {
-    return ensureProjectDoc(name).then(function (id) {
-      return updateDoc(doc(projectsCol, id), { departments: keys });
-    }).then(function () {
-      logActivity('project_departments', keys.length
-        ? 'Filed "' + name + '" under ' + keys.map(departmentLabel).join(', ')
-        : 'Removed "' + name + '" from every teamspace');
-    }).catch(function (err) {
-      showToast('Could not save the teamspace: ' + err.message, 'error');
-    });
   }
 
   // How many projects sit in each teamspace -- shown in the switcher so an empty department is
@@ -2241,10 +2248,6 @@
     });
     return counts;
   }
-
-  // Which project's teamspace checkboxes are currently revealed (one at a time, same as
-  // projectDeadlineEditing right beside it).
-  var projectDeptEditing = null;
 
   // Deliberately NOT reusing PROJECT_BADGE_PALETTE (which hashes a project NAME to a colour) or
   // PRIORITY_META's hues -- a department is a third kind of thing, and borrowing either palette
@@ -2279,46 +2282,6 @@
     return DEPARTMENTS.some(function (d) { return d.key === key; }) ? key : null;
   }
 
-  // Every project this person has tasks in -- active and archived both, since a project whose
-  // work is finished still belongs to the team that did it.
-  function projectsForPerson(name) {
-    var found = {};
-    tasks.concat(archivedTasks).forEach(function (t) {
-      if (t.assignee === name && t.project) found[t.project] = true;
-    });
-    return Object.keys(found);
-  }
-
-  /* Files every project someone is on into their department. Asked for directly: "once chosen,
-     their projects should automatically be parked under each teamspace."
-
-     STRICTLY ADDITIVE -- it unions the department in, never replaces what is already there.
-     That is what makes it safe to run for each person in turn: when Aqila (Suits) and Deane
-     (Production) both work on the Bosch pitch, the first to choose files it under Suits and the
-     second adds Production, leaving it correctly in both. Replacing would mean whoever picked
-     last silently evicted the other team from their own project.
-
-     Projects already carrying the department are skipped entirely, so re-running this is free
-     and changing your mind later never produces duplicate writes. */
-  function parkMyProjectsInDepartment(name, key) {
-    var mine = projectsForPerson(name).filter(function (pname) {
-      return projectDepartments(pname).indexOf(key) === -1;
-    });
-    if (!mine.length) return Promise.resolve(0);
-    return Promise.all(mine.map(function (pname) {
-      var next = projectDepartments(pname).concat([key]);
-      // Canonical order, so two projects filed under the same pair render identically.
-      next = DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return next.indexOf(k) !== -1; });
-      return ensureProjectDoc(pname).then(function (id) {
-        return updateDoc(doc(projectsCol, id), { departments: next });
-      });
-    })).then(function () {
-      logActivity('project_departments', 'Filed ' + mine.length + ' of ' + name + "'s project" +
-        (mine.length === 1 ? '' : 's') + ' under ' + departmentLabel(key));
-      return mine.length;
-    });
-  }
-
   function setPersonDepartment(name, key) {
     var person = teamPeople.find(function (pp) { return pp.name === name; });
     if (!person) { showToast('No roster entry for ' + name + ' yet -- they need to sign in once.', 'error'); return; }
@@ -2329,12 +2292,11 @@
       logActivity('project_departments', key
         ? name + ' joined ' + departmentLabel(key)
         : name + ' left their department');
-      if (!key) { renderAll(); return; }
-      return parkMyProjectsInDepartment(name, key).then(function (n) {
-        if (n) showToast('Filed ' + n + ' project' + (n === 1 ? '' : 's') + ' under ' + departmentLabel(key), 'success');
-        renderTeamspaceSwitcher();
-        renderAll();
-      });
+      // Nothing to file any more: a project's departments are derived from its assignees, so
+      // setting someone's department re-sorts their work automatically. The auto-parking this
+      // used to do (parkMyProjectsInDepartment) was deleted with the project-level filing it fed.
+      renderTeamspaceSwitcher();
+      renderAll();
     }).catch(function (err) {
       showToast(err && err.code === 'permission-denied'
         ? 'Only ' + name + ' or an admin can change their department.'
@@ -2353,12 +2315,13 @@
     var modal = document.getElementById('department-modal');
     var opts = document.getElementById('department-modal-options');
     if (!modal || !opts) return;
+    // No per-option count any more: choosing a department no longer files projects, it just
+    // decides which teamspace your own tasks land in -- and that number is the same whichever
+    // department you pick, so showing it beside each option said nothing.
     opts.innerHTML = DEPARTMENTS.map(function (d) {
-      var n = projectsForPerson(name).length;
       return '<button type="button" data-choose-dept="' + escapeHtml(d.key) + '" ' +
-        'class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">' +
-        '<span>' + escapeHtml(d.label) + '</span>' +
-        '<span class="text-xs font-medium text-zinc-400 dark:text-zinc-500">' + n + ' project' + (n === 1 ? '' : 's') + '</span>' +
+        'class="w-full flex items-center px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">' +
+        escapeHtml(d.label) +
       '</button>';
     }).join('');
     modal.classList.remove('hidden');
@@ -2453,36 +2416,6 @@
         '</button>';
     }).join('');
   }
-
-  // Delegated on #projects-grid for the same reason the deadline handlers there are:
-  // renderProjects replaces that container's innerHTML on every snapshot.
-  document.addEventListener('click', function (e) {
-    var toggle = e.target.closest('.project-dept-toggle');
-    if (!toggle) return;
-    var name = toggle.getAttribute('data-project');
-    projectDeptEditing = (projectDeptEditing === name) ? null : name;
-    renderProjects();
-  });
-
-  document.addEventListener('change', function (e) {
-    var box = e.target.closest('.project-dept-check');
-    if (!box) return;
-    var name = box.getAttribute('data-project');
-    var key = box.getAttribute('data-dept');
-    var next = projectDepartments(name).slice();
-    var at = next.indexOf(key);
-    if (box.checked && at === -1) next.push(key);
-    if (!box.checked && at !== -1) next.splice(at, 1);
-    // Keep DEPARTMENTS' own order rather than click order, so two projects filed under the same
-    // pair always render their chips identically.
-    next = DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return next.indexOf(k) !== -1; });
-    setProjectDepartments(name, next).then(function () {
-      // The projects snapshot re-renders on its own, but only once the write round-trips --
-      // repainting now keeps the checkbox and its chips in step with the click immediately.
-      renderTeamspaceSwitcher();
-      renderProjects();
-    });
-  });
 
   document.addEventListener('change', function (e) {
     var sel = e.target.closest('.person-dept-select');
@@ -8728,36 +8661,16 @@
     if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
     if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
-    // Teamspace chips + the filing control. Progressive disclosure, same pattern and same
-    // reasoning as the project deadline directly below: a permanently-open row of three
-    // checkboxes on every card reads as a form you must complete, for a value plenty of
-    // projects will never need. An unfiled project shows a quiet "Unassigned" instead of
-    // nothing, so it is visibly a state rather than an oversight.
+    // Read-only now: which teams have work on this project, DERIVED from its assignees. There
+    // is nothing to file and no control to offer -- the chips move on their own as people are
+    // assigned, and a project with no departmented assignee reads "Unassigned", which is a fact
+    // about its people rather than an unfinished form.
     var deps = projectDepartments(p.name);
-    var editingDeps = projectDeptEditing === p.name;
-    var depChips = deps.length
+    badges += (deps.length
       ? deps.map(function (k) {
-          return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+          return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '" title="Has work assigned to ' + escapeHtml(departmentLabel(k)) + '">' + escapeHtml(departmentLabel(k)) + '</span>';
         }).join('')
-      : '<span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">Unassigned</span>';
-    badges += depChips +
-      '<button type="button" class="project-dept-toggle text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400" ' +
-        'data-project="' + escapeHtml(p.name) + '" title="Which teamspaces this project appears in">' +
-        (editingDeps ? 'Done' : (deps.length ? 'Edit' : '+ Teamspace')) +
-      '</button>';
-
-    var depEditor = editingDeps
-      ? '<div class="flex flex-wrap items-center gap-2 mt-2">' +
-          DEPARTMENTS.map(function (d) {
-            var on = deps.indexOf(d.key) !== -1;
-            return '<label class="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 cursor-pointer">' +
-              '<input type="checkbox" class="project-dept-check brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer" ' +
-                'data-project="' + escapeHtml(p.name) + '" data-dept="' + escapeHtml(d.key) + '"' + (on ? ' checked' : '') + '>' +
-              escapeHtml(d.label) +
-            '</label>';
-          }).join('') +
-        '</div>'
-      : '';
+      : '<span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400" title="Nobody assigned here has a department set yet">Unassigned</span>');
 
     // This is the one and only place a project deadline is set. Deliberately not also in the
     // task modal: the same value editable from two places, where changing it inside one task
@@ -8769,7 +8682,6 @@
     // visible cost stayed and the payoff shrank. So: undated projects show a quiet "+ Deadline"
     // affordance, and the real <input type="date"> is swapped in only once clicked (or once a
     // deadline exists). projectDeadlineEditing holds the project name currently being edited.
-    // depEditor is emitted by the card body below, straight after the badge row.
     var pDeadline = projectDeadlineFor(p.name);
     var pDays = pDeadline ? daysUntil(pDeadline) : null;
     var pLate = pDays !== null && pDays < 0 && p.activeCount > 0;
@@ -8830,7 +8742,6 @@
               taskCountLabel +
               badges +
             '</div>' +
-            depEditor +
             deadlineRow +
             chatRow +
             (readyToArchive
@@ -8852,11 +8763,8 @@
     var allTasks = tasks.concat(archivedTasks);
     var projectNames = {};
     allTasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
-    // The project currently being filed always stays on screen, even once the ticked boxes no
-    // longer match the teamspace you are standing in -- otherwise un-ticking the department you
-    // are viewing makes the card disappear out from under the cursor mid-edit.
     var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); })
-      .filter(function (name) { return projectInTeamspace(name) || projectDeptEditing === name; });
+      .filter(projectInTeamspace);
 
     if (!names.length) {
       container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 col-span-full text-center py-10">No projects yet.</p>';
@@ -10526,7 +10434,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T03:07:33Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T03:16:15Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
