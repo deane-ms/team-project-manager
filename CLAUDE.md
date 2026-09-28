@@ -2594,9 +2594,20 @@ rule, and it is the *second* rule this feature had.
   who is exactly the person you want to hand a department to. The roster half is skipped while
   search/priority/project is narrowing, or a roster member with no matching tasks would show up
   anyway and read as the search being broken.
-- **Adding a department is one `DEPARTMENTS` entry plus one `DEPARTMENT_BADGE` colour** — the
-  switcher, its counts, the People select, the first-login modal and the project chips all derive
-  from those two places. Marketing was added exactly that way, with no other change.
+- **Adding *or removing* a department is one `DEPARTMENTS` entry plus one `DEPARTMENT_BADGE`
+  colour** — the switcher, its counts, the profile menu, the first-login modal and the derived
+  project chips all read from those two places. Marketing was added exactly that way, and removed
+  again the same way a few minutes later.
+  - **Removing needs no data migration.** `personDepartments()` filters stored values against the
+    live list, so a key that is no longer there is ignored wherever it is read — the same
+    unknown-key handling that was already tested. Verified against stored values on removal:
+    `["production","marketing"]` reads as `["production"]`, and `["marketing"]` reads as `[]`.
+  - **The one visible consequence**: anyone whose *only* department was the removed one now
+    counts as having none, so their tasks move to Unassigned until they pick again from the
+    profile menu. Worth saying out loud when a department is retired.
+  - **Stale values are deliberately left in Firestore.** A person's row is writable only by
+    themselves or an admin, so there is no safe way to rewrite everyone's — and since reading
+    already ignores them, cleaning up would buy nothing.
 - **No `firestore.rules` change at any point.** `department`/`departmentChosen` are fields on the
   person's own `people/{uid}` doc, which is already scoped to self-or-admin.
 - **Known trade, accepted**: a task assigned to someone with no department falls into Unassigned,

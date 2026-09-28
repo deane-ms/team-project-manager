@@ -2183,13 +2183,20 @@
      by its assignee -- one field, set once per teammate, with nothing to file per project and
      nothing to keep up to date.
   ========================================================= */
-  // Adding a department is this array plus a DEPARTMENT_BADGE colour -- the switcher, its
-  // counts, the People-card select, the first-login modal and the Projects-card checkboxes all
-  // derive from here, so nothing else needs touching. Marketing was added exactly that way.
+  // Adding or removing a department is this array plus a DEPARTMENT_BADGE colour -- the
+  // switcher, its counts, the profile menu, the first-login modal and the derived project chips
+  // all read from here, so nothing else needs touching. Marketing was added, then removed again,
+  // exactly that way.
+  //
+  // REMOVING one needs no data migration: personDepartments() filters stored values against this
+  // list, so a key that is no longer here is simply ignored wherever it is read. The only visible
+  // consequence is that anyone whose ONLY department was the removed one now counts as having
+  // none, which puts their tasks in Unassigned until they pick again. Stale values are left in
+  // Firestore rather than cleaned up -- a person's row is writable only by themselves or an
+  // admin, so there is no safe way to rewrite everyone's, and reading already ignores them.
   var DEPARTMENTS = [
     { key: 'suits', label: 'Suits' },
     { key: 'production', label: 'Production' },
-    { key: 'marketing', label: 'Marketing' },
     { key: 'admin', label: 'Admin' }
   ];
   // 'all' and 'unassigned' are teamspaces you can be IN, but never values stored on a project:
@@ -2292,7 +2299,6 @@
   var DEPARTMENT_BADGE = {
     suits: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
     production: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
-    marketing: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
     admin: 'bg-stone-200 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300'
   };
 
@@ -10557,7 +10563,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T03:49:24Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T04:07:23Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
