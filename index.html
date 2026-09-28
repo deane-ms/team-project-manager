@@ -481,6 +481,23 @@
 
       <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
 
+      <!-- EVENTS -- the one group in this rail with a written label rather than just a divider.
+           The others are loose groupings of views ("things you look at"); this one is a named
+           category holding recurring meetings, and it is meant to grow a second and third entry,
+           so the header earns its row. Styled as the same 11px uppercase caption the digest
+           panel's own section headers use rather than a new treatment, and it carries
+           .sidebar-label so it disappears with the dividers when the rail collapses to icons
+           (that rule positions it absolute, so it costs no height and no flex gap either). -->
+      <p class="sidebar-label px-2.5 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Events</p>
+      <!-- A presentation screen on a stand: deliberately not `users` (People has it), not
+           `calendar` (Calendar has it) and not `message` (Suggestions has it). -->
+      <button data-view-btn="wip" data-tooltip="WIP" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"></rect><line x1="12" y1="15" x2="12" y2="19"></line><line x1="8" y1="19" x2="16" y2="19"></line></svg>
+        <span class="sidebar-label truncate">WIP</span>
+      </button>
+
+      <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
+
       <button data-view-btn="activity" data-tooltip="Activity" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
         <span class="sidebar-label truncate">Activity</span>
@@ -1033,6 +1050,37 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ============ EVENTS: WIP ============ -->
+    <section id="view-wip" data-view class="flex-1">
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+        <div class="min-w-0">
+          <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">WIP</h2>
+          <!-- Today's date, the teamspace in force, and the window length -- read out loud at the
+               top of the meeting, and the reason nobody has to wonder whether a quiet section
+               means "nothing scheduled" or "scoped away". -->
+          <p id="wip-context" class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5"></p>
+        </div>
+        <!-- Same segmented control as the Calendar's Mine/Everyone scope, same .calendar-scope-btn
+             styling. One control, at view level -- a weekly WIP wants a week, a monthly planning
+             pass wants four, and the choice sticks (WIP_RANGE_KEY) so whoever runs the meeting
+             sets it once. -->
+        <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold shrink-0">
+          <button type="button" data-wip-range="7" class="calendar-scope-btn px-2.5 py-1 rounded-md">1 week</button>
+          <button type="button" data-wip-range="14" class="calendar-scope-btn px-2.5 py-1 rounded-md">2 weeks</button>
+          <button type="button" data-wip-range="28" class="calendar-scope-btn px-2.5 py-1 rounded-md">4 weeks</button>
+        </div>
+      </div>
+      <div id="wip-alerts" class="mb-4"></div>
+      <!-- min-w-0 on both columns: a grid track defaults to min-width:auto, so without it a long
+           project name ("Bosch Building Technologies -- AIDC Infrastructure & Security" is a real
+           one) sets the column's min-content width and widens the whole grid past its container
+           instead of truncating inside it. -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div id="wip-ahead" class="lg:col-span-2 min-w-0"></div>
+        <div id="wip-away" class="min-w-0"></div>
       </div>
     </section>
 
@@ -2340,8 +2388,21 @@
     });
   }
 
+  // The teamspace rule stated against a PERSON rather than a task -- which is what it always
+  // really was, since a task belongs to the teamspace of whoever holds it (see taskInTeamspace).
+  //
+  // Now answers 'all' and 'unassigned' too. It previously answered neither: renderPeople, its
+  // only caller, checked 'all' itself before calling, and nothing had yet asked it about
+  // 'unassigned' -- which it would have got wrong, because 'unassigned' is not a department key,
+  // so `indexOf` found it in nobody's list and the Unassigned teamspace showed no roster members
+  // at all. That is the one teamspace where people with no department are the entire point.
+  // Stated in full here so this and taskInTeamspace cannot disagree, and so the WIP view can
+  // scope leave periods (which hang off a person, not a task) by exactly the same test.
   function personInTeamspace(name) {
-    return personDepartments(name).indexOf(currentTeamspace) !== -1;
+    if (currentTeamspace === 'all') return true;
+    var deps = personDepartments(name);
+    if (currentTeamspace === 'unassigned') return deps.length === 0;
+    return deps.indexOf(currentTeamspace) !== -1;
   }
 
   /* MY OWN roster row, found by UID -- the document's actual id -- not by display name.
@@ -9522,9 +9583,384 @@
   }
 
   /* =========================================================
+     EVENTS -> WIP -- the standing company-wide sync.
+
+     One screen, read top to bottom by the whole company in one sitting, so it is built as a
+     meeting AGENDA rather than another dashboard: what has to be decided today, then what is
+     coming, then who will not be here for it. Nothing in it is new data -- every number comes
+     from the same helpers the Board, Timeline and notification automations already use
+     (dueUrgency, isOnLeave, projectDeadlineFor, REVIEW_STALE_DAYS). That is deliberate: a
+     summary that computes "overdue" its own way eventually disagrees with the board it is
+     summarising, in front of everyone.
+
+     TWO scoping decisions, and they pull in opposite directions on purpose:
+
+     - It DOES respect the teamspace switcher. That is a workspace-level scope with its current
+       value permanently visible in the sidebar, and running a Production-only WIP is a real use.
+     - It IGNORES the search/priority/project/assignee filter bar, and the toolbar is hidden on
+       this view entirely (see TOOLBAR_FULLY_HIDDEN_VIEWS). Those filters persist across sessions
+       by design, so a narrowing somebody set last Tuesday would silently delete items from a
+       meeting agenda with no visible sign it had happened. A hidden filter is survivable on a
+       board you are scanning; it is not survivable on the list you are using to decide what the
+       company works on next.
+
+     Deliberately NOT a stored "event" record with a create/edit/delete UI. WIP is a standing
+     meeting whose content is entirely derived from tasks, projects and leave -- there is nothing
+     to save, and nothing to keep up to date. A second event becomes one more nav item under the
+     same Events header.
+  ========================================================= */
+  var WIP_RANGE_KEY = 'flowboard_wip_range';
+  var WIP_RANGES = [7, 14, 28];
+  var wipRangeDays = (function () {
+    try {
+      var v = parseInt(localStorage.getItem(WIP_RANGE_KEY), 10);
+      return WIP_RANGES.indexOf(v) !== -1 ? v : 14;
+    } catch (e) { return 14; }
+  })();
+
+  function setWipRange(days) {
+    wipRangeDays = days;
+    try { localStorage.setItem(WIP_RANGE_KEY, String(days)); } catch (e) { /* private browsing -- just won't persist */ }
+    renderWipView();
+  }
+
+  // Every date in here is the same `YYYY-MM-DD` string an <input type="date"> produces, compared
+  // with plain string comparison -- that format sorts lexicographically and every date this view
+  // touches (deadlines, leave start/end) is already stored in it. Same reasoning as isOnLeave.
+  function wipShiftDate(iso, n) {
+    var d = parseDate(iso);
+    return d ? toDateInputValue(addDays(d, n)) : iso;
+  }
+
+  function wipDayLabel(iso) {
+    var d = parseDate(iso);
+    return d ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
+  }
+
+  // "Today" / "Tomorrow" / "in 9 days" -- the relative read is what people actually respond to in
+  // a meeting; the absolute date above it is for writing down.
+  function wipRelativeLabel(days) {
+    return days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'in ' + days + ' days';
+  }
+
+  var WIP_TONES = {
+    rose:   'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
+    amber:  'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+    violet: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+    purple: 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
+  };
+
+  // Shared shell so the three sections are visibly one family. The count sits in the header
+  // rather than in a separate stats strip along the top -- the digest panel already established
+  // that, and a strip of headline numbers would be restating totals the sections below print
+  // anyway.
+  function wipSectionHtml(title, count, body) {
+    return '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
+      '<div class="px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-700 flex items-center gap-2">' +
+        '<p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + escapeHtml(title) + '</p>' +
+        (count ? '<span class="text-[11px] font-bold text-zinc-400 dark:text-zinc-500">' + count + '</span>' : '') +
+      '</div>' +
+      body +
+    '</div>';
+  }
+
+  function wipEmptyHtml(text) {
+    return '<p class="px-4 py-5 text-sm text-zinc-400 dark:text-zinc-500">' + escapeHtml(text) + '</p>';
+  }
+
+  /* ---------------------------------------------------------
+     The five things worth interrupting the agenda for. All five are ALREADY notification
+     automations or already-rendered board signals -- this is the same set of risks, gathered
+     into one list that the whole room can see at once instead of arriving one person at a time
+     in their own notification bell.
+
+     One flat list rather than five labelled sub-lists: they are all "somebody has to say
+     something about this", the chip carries the kind, and five headers around lists that are
+     usually one row long is most of a screen spent on scaffolding.
+  --------------------------------------------------------- */
+  function wipAlerts(open, today, horizon, scopedProjects) {
+    var out = [];
+
+    // OVERDUE -- grouped per person, not one row per task. A team with fifteen late tasks would
+    // otherwise push everything else below the fold, and the meeting question is "where are you
+    // at?" asked of a person, not read out task by task.
+    var byPerson = {};
+    open.filter(function (t) { return dueUrgency(t).overdue; }).forEach(function (t) {
+      var who = t.assignee || 'Unassigned';
+      (byPerson[who] = byPerson[who] || []).push(t);
+    });
+    Object.keys(byPerson).sort(function (a, b) { return byPerson[b].length - byPerson[a].length; }).forEach(function (who) {
+      var list = byPerson[who].sort(function (a, b) { return daysUntil(a.deadline) - daysUntil(b.deadline); });
+      var worst = Math.abs(daysUntil(list[0].deadline));
+      out.push({
+        overdue: true, date: list[0].deadline, kind: 'Overdue', tone: 'rose',
+        title: list.length === 1 ? list[0].name : who + ' — ' + list.length + ' tasks overdue',
+        detail: list.length === 1
+          ? who + ' · ' + list[0].project + ' · ' + worst + 'd past ' + formatShortDate(list[0].deadline)
+          : 'Oldest ' + worst + 'd past ' + formatShortDate(list[0].deadline) + ' · ' + list[0].name,
+        // Only linkable when it stands for exactly one task; a per-person roll-up has nothing
+        // single to open. Rides the document-level [data-open-task] delegation for free.
+        taskId: list.length === 1 ? list[0].id : null
+      });
+    });
+
+    // CRUNCH -- the exact rule checkWorkloadSpikes notifies on (2+ open High-priority tasks on
+    // one person for one day), reused rather than re-derived so the meeting and the bell cannot
+    // disagree about what counts as a spike.
+    var spikes = {};
+    open.forEach(function (t) {
+      if (t.priority !== 'High' || !t.assignee || !t.deadline) return;
+      if (t.deadline < today || t.deadline > horizon) return;
+      (spikes[t.assignee + '|' + t.deadline] = spikes[t.assignee + '|' + t.deadline] || []).push(t);
+    });
+    Object.keys(spikes).forEach(function (key) {
+      var group = spikes[key];
+      if (group.length < 2) return;
+      var who = key.split('|')[0], when = key.split('|')[1];
+      out.push({
+        overdue: false, date: when, kind: 'Crunch', tone: 'amber',
+        title: who + ' — ' + group.length + ' high-priority tasks due the same day',
+        detail: wipDayLabel(when) + ' · ' + group.map(function (t) { return t.name; }).join(', '),
+        taskId: null
+      });
+    });
+
+    // DEADLINE LANDING ON A DAY SOMEBODY IS AWAY -- isOnLeave unchanged, same signal the Gantt
+    // shades and the leave-clash notification fires on. The one clash that cannot resolve itself.
+    open.forEach(function (t) {
+      if (!t.assignee || !t.deadline) return;
+      if (t.deadline < today || t.deadline > horizon) return;
+      if (!isOnLeave(t.assignee, t.deadline)) return;
+      var period = leavePeriodOn(t.assignee, t.deadline);
+      out.push({
+        overdue: false, date: t.deadline, kind: 'On leave', tone: 'violet',
+        title: t.name + ' is due while ' + t.assignee + ' is away',
+        detail: 'Due ' + wipDayLabel(t.deadline) + ' · away ' + formatShortDate(period.start) + ' – ' + formatShortDate(period.end) + (period.note ? ' · ' + period.note : ''),
+        taskId: t.id
+      });
+    });
+
+    // A PROJECT DEADLINE ITS OWN TASKS SAY IT WILL MISS. The project-level date is the one nobody
+    // is individually notified about -- it hangs off the project doc, not off anyone's task -- so
+    // a whole-company meeting is exactly where it belongs.
+    //
+    // "Has open tasks" is NOT the test, though that is the obvious one to reach for. Every live
+    // project has open tasks; alerting on that fires for all of them, every week, which is the
+    // same as alerting on none of them. The test is whether the project's own task dates already
+    // contradict its deadline -- a task that is late, one dated past the project date, or one
+    // with no date at all to schedule against. A project whose remaining work is all dated
+    // before it lands is on track and says nothing here; its date still shows in the spine
+    // below, which is where a date nobody needs to argue about belongs.
+    projectDocs.forEach(function (pd) {
+      if (!pd.deadline || pd.deadline < today || pd.deadline > horizon) return;
+      if (scopedProjects.indexOf(pd.name) === -1) return;
+      var slipping = open.filter(function (t) {
+        return t.project === pd.name && (dueUrgency(t).overdue || !t.deadline || t.deadline > pd.deadline);
+      });
+      if (!slipping.length) return;
+      out.push({
+        overdue: false, date: pd.deadline, kind: 'Project', tone: 'rose',
+        title: pd.name + ' lands ' + wipRelativeLabel(daysUntil(pd.deadline)) + ' — ' + slipping.length + ' task' + (slipping.length === 1 ? '' : 's') + ' dated to miss it',
+        detail: 'Project deadline ' + wipDayLabel(pd.deadline) + ' · ' + uniqueNames(slipping).join(', '),
+        taskId: slipping.length === 1 ? slipping[0].id : null
+      });
+    });
+
+    // SITTING IN REVIEW -- REVIEW_STALE_DAYS, same as checkStaleReviews. Worth raising here
+    // precisely because dueUrgency deliberately does NOT call these overdue: the clock running is
+    // somebody else's, which makes it the kind of thing that only moves when a meeting chases it.
+    open.forEach(function (t) {
+      if (t.status !== 'Review' || !t.updatedAt) return;
+      var waiting = daysBetween(parseDate(localDateOf(t.updatedAt)), todayMidnight());
+      if (waiting < REVIEW_STALE_DAYS) return;
+      out.push({
+        overdue: false, date: today, kind: 'In review', tone: 'purple',
+        title: t.name + ' has been in review ' + waiting + ' days',
+        detail: (t.reviewAudience === 'client' ? 'Client review' : t.reviewAudience === 'internal' ? 'Internal review' : 'Review type not set') + ' · ' + t.project + ' · ' + t.assignee,
+        taskId: t.id
+      });
+    });
+
+    // Late first, then strictly chronological across every other kind -- which is the order the
+    // room will want to walk them in.
+    return out.sort(function (a, b) {
+      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+    });
+  }
+
+  function uniqueNames(list) {
+    var seen = {};
+    list.forEach(function (t) { if (t.assignee) seen[t.assignee] = true; });
+    return Object.keys(seen).sort();
+  }
+
+  function wipAlertRowHtml(a) {
+    var body =
+      '<div class="flex items-start gap-2.5 px-4 py-2.5">' +
+        '<span class="shrink-0 mt-0.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES[a.tone] + '">' + escapeHtml(a.kind) + '</span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(a.title) + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(a.detail) + '</p>' +
+        '</div>' +
+      '</div>';
+    return a.taskId
+      ? '<button type="button" data-open-task="' + a.taskId + '" class="block w-full text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40">' + body + '</button>'
+      : '<div>' + body + '</div>';
+  }
+
+  /* ---------------------------------------------------------
+     The chronological spine: one row per day that has anything on it, empty days skipped
+     entirely. Project deadlines and task deadlines share a day's row because in the meeting they
+     are the same question ("what has to be finished by then").
+
+     Leave is NOT drawn here, even though it is a date. A two-week absence would otherwise stamp
+     the same name onto fourteen consecutive rows and drown out the deadlines they exist to show;
+     it gets listed once, as a period, in its own panel. The only place leave appears against a
+     specific day is when it collides with a deadline, and that is an alert, not a calendar entry.
+  --------------------------------------------------------- */
+  function wipAheadHtml(open, today, horizon, scopedProjects) {
+    var byDay = {};
+    function bucket(d) { return (byDay[d] = byDay[d] || { tasks: [], projects: [] }); }
+
+    open.forEach(function (t) {
+      if (!t.deadline || t.deadline < today || t.deadline > horizon) return;
+      bucket(t.deadline).tasks.push(t);
+    });
+    projectDocs.forEach(function (pd) {
+      if (!pd.deadline || pd.deadline < today || pd.deadline > horizon) return;
+      if (scopedProjects.indexOf(pd.name) === -1) return;
+      bucket(pd.deadline).projects.push(pd.name);
+    });
+
+    var days = Object.keys(byDay).sort();
+    if (!days.length) {
+      return wipSectionHtml('The next ' + wipRangeDays + ' days', 0,
+        wipEmptyHtml('Nothing is due in this window.'));
+    }
+
+    var rows = days.map(function (d) {
+      var day = byDay[d];
+      var until = daysUntil(d);
+      var isToday = until === 0;
+
+      var projectsHtml = day.projects.sort().map(function (name) {
+        // The one deliberately loud element on the page. A project deadline is the only date
+        // here that belongs to the whole company rather than to one person, and it is the thing
+        // a WIP meeting exists to protect.
+        return '<div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-brand-50 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/25">' +
+          '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Project due</span>' +
+          '<span class="min-w-0 text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(name) + '</span>' +
+        '</div>';
+      }).join('');
+
+      var tasksHtml = day.tasks.sort(function (a, b) {
+        var w = (PRIORITY_WEIGHT[b.priority] || 1) - (PRIORITY_WEIGHT[a.priority] || 1);
+        return w !== 0 ? w : a.name.localeCompare(b.name);
+      }).map(function (t) {
+        var meta = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
+        return '<button type="button" data-open-task="' + t.id + '" class="group flex items-center gap-2 w-full text-left">' +
+          '<span class="w-2 h-2 rounded-full shrink-0 ' + meta.dot + '" title="' + escapeHtml(t.priority) + ' priority"></span>' +
+          '<span class="min-w-0 truncate text-sm text-zinc-700 dark:text-zinc-200 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
+          '<span class="shrink-0 hidden sm:inline text-xs text-zinc-400 dark:text-zinc-500 truncate max-w-[10rem]">' + escapeHtml(t.project) + '</span>' +
+          '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(t.assignee || 'Unassigned') + '</span>' +
+        '</button>';
+      }).join('');
+
+      return '<div class="flex gap-3 px-4 py-3' + (isToday ? ' bg-brand-50/50 dark:bg-brand-500/[0.07]' : '') + '">' +
+        '<div class="w-[5.5rem] shrink-0">' +
+          '<p class="text-xs font-bold ' + (isToday ? 'text-brand-700 dark:text-brand-300' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(wipDayLabel(d)) + '</p>' +
+          '<p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">' + escapeHtml(wipRelativeLabel(until)) + '</p>' +
+        '</div>' +
+        '<div class="min-w-0 flex-1 flex flex-col gap-1.5">' + projectsHtml + tasksHtml + '</div>' +
+      '</div>';
+    }).join('');
+
+    return wipSectionHtml('The next ' + wipRangeDays + ' days', days.length,
+      '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + rows + '</div>');
+  }
+
+  /* ---------------------------------------------------------
+     Who will not be here. One row per leave PERIOD overlapping the window -- including periods
+     that started before today and run into it, which is the case someone joining the meeting
+     late most needs to be told about.
+  --------------------------------------------------------- */
+  function wipAwayHtml(today, horizon) {
+    var rows = [];
+    teamPeople.forEach(function (person) {
+      if (!person.name || !personInTeamspace(person.name)) return;
+      (person.leave || []).forEach(function (l) {
+        if (!l || !l.start || !l.end) return;
+        if (l.end < today || l.start > horizon) return;
+        rows.push({ name: person.name, start: l.start, end: l.end, note: l.note || '' });
+      });
+    });
+    rows.sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : a.name.localeCompare(b.name); });
+
+    if (!rows.length) {
+      return wipSectionHtml('Away', 0, wipEmptyHtml('Everyone is in for this window.'));
+    }
+
+    var html = rows.map(function (r) {
+      var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
+      var awayNow = r.start <= today && r.end >= today;
+      return '<div class="flex items-center gap-2.5 px-4 py-2.5">' +
+        avatarHtml(r.name, 'w-7 h-7 shrink-0', 'text-[10px]') +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(r.name) + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">' + escapeHtml(formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '')) + '</p>' +
+        '</div>' +
+        (awayNow ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES.amber + '">Away now</span>' : '') +
+      '</div>';
+    }).join('');
+
+    return wipSectionHtml('Away', rows.length,
+      '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + html + '</div>');
+  }
+
+  function renderWipView() {
+    document.querySelectorAll('[data-wip-range]').forEach(function (btn) {
+      btn.classList.toggle('active', parseInt(btn.getAttribute('data-wip-range'), 10) === wipRangeDays);
+    });
+
+    var today = toDateInputValue(todayMidnight());
+    // Inclusive on both ends: a 7-day window is today plus the next six, not today plus seven.
+    var horizon = wipShiftDate(today, wipRangeDays - 1);
+
+    // applyFilters is deliberately NOT used here -- see this section's header comment.
+    var scoped = activeTasks().filter(taskInTeamspace);
+    var open = scoped.filter(function (t) { return t.status !== 'Done'; });
+    var scopedProjects = Object.keys(scoped.reduce(function (acc, t) {
+      if (t.project) acc[t.project] = true;
+      return acc;
+    }, {}));
+
+    document.getElementById('wip-context').textContent =
+      todayMidnight().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' }) +
+      ' · ' + teamspaceLabel(currentTeamspace) +
+      ' · next ' + wipRangeDays + ' days';
+
+    var alerts = wipAlerts(open, today, horizon, scopedProjects);
+    document.getElementById('wip-alerts').innerHTML = alerts.length
+      ? wipSectionHtml('Needs a decision', alerts.length,
+          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>')
+      // Rendered rather than hidden when empty: "nothing is at risk" is itself a result the
+      // meeting wants stated, and a section that silently vanishes reads as a loading bug.
+      : wipSectionHtml('Needs a decision', 0,
+          wipEmptyHtml('Nothing overdue, clashing with leave, or stuck in review.'));
+
+    document.getElementById('wip-ahead').innerHTML = wipAheadHtml(open, today, horizon, scopedProjects);
+    document.getElementById('wip-away').innerHTML = wipAwayHtml(today, horizon);
+  }
+
+  document.querySelectorAll('[data-wip-range]').forEach(function (btn) {
+    btn.addEventListener('click', function () { setWipRange(parseInt(btn.getAttribute('data-wip-range'), 10)); });
+  });
+
+  /* =========================================================
      VIEW SWITCH
   ========================================================= */
-  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived' };
+  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived' };
 
   function setView(view) {
     currentView = view;
@@ -9598,7 +10034,7 @@
   // always sorts newest-first and has no filters.sortBy branch at all, so the Sort control sat
   // there fully clickable and doing nothing -- the identical "control present, wired to
   // nothing" gap this codebase already hit and fixed twice before.
-  var SORT_DISABLED_VIEWS = ['projects', 'activity', 'suggestions'];
+  var SORT_DISABLED_VIEWS = ['projects', 'activity', 'suggestions', 'wip'];
 
   function syncSortAvailability() {
     var select = document.getElementById('sort-by');
@@ -9634,7 +10070,10 @@
   // rather than adding Search's wrapper and #btn-clear-filters to the per-id hidden list (Clear
   // filters resets search text too, which stops meaning anything once the box itself is gone),
   // the entire #toolbar-row is hidden outright for these views.
-  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions'];
+  // WIP hides the whole toolbar rather than just disabling it. The filters persist across
+  // sessions, so one left set last week would quietly drop items from a meeting agenda with
+  // nothing on screen to say so -- see the EVENTS -> WIP section header.
+  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions', 'wip'];
 
   function syncToolbarLayout() {
     var row = document.getElementById('toolbar-row');
@@ -9791,6 +10230,7 @@
     // renderChatProjectList) has real data to check -- archivedTasks otherwise only loads once
     // someone's actually visited Projects or Archived this session.
     if (currentView === 'chat') { ensureArchivedTasksListener(); renderChatView(); }
+    if (currentView === 'wip') renderWipView();
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
     if (currentView === 'archived') { ensureArchivedTasksListener(); renderArchived(); }
