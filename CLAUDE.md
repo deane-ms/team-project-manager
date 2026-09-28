@@ -2467,6 +2467,66 @@ site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes
 change, or every read/write against the new collection fails with "Missing or insufficient
 permissions" even though the code and the deployed page are otherwise correct.
 
+### Teamspaces (departments)
+
+Notion-style teamspaces — Suits, Production, Admin — asked for directly ("create teamspaces for
+different departments that work similarly to NOTION"). Pick one in the sidebar switcher and the
+whole app scopes to it.
+
+**Three decisions were put to the user before any code was written**, because each is expensive
+to reverse. All three landed on the recommended option:
+
+1. **It is an organising view, NOT an access boundary.** Nothing here touches `firestore.rules`.
+   Everyone can still reach everything; "All teamspaces" shows the board exactly as it was.
+   Chosen over real per-department privacy because mis-filed work then merely sits in the wrong
+   list instead of becoming invisible, and the whole feature is revertible in one commit. If it
+   ever does need to be a real boundary, `departments` is already the right shape to enforce.
+2. **A project can belong to SEVERAL departments** (an array, not a single parent). Notion's own
+   teamspaces are single-parent, but agency work isn't: a client pitch is Suits *and* Production,
+   and forcing one owner would make it look missing from the other team's board.
+3. **Existing projects start Unassigned.** Nothing moved or hid on day one. Unassigned is a real
+   teamspace you can switch into, not an error state, and it empties as people file things.
+
+- **The department lives on the PROJECT doc (`projects.departments`), never on the task.** Tasks
+  already carry a `project` name and inherit from it, so filing is one action per project instead
+  of one per task — and **no task needed migrating**. The cost: a project must have a `projects`
+  doc to be filed at all, and those are created lazily (only when someone sets a deadline or
+  starts a chat), which is what **`ensureProjectDoc(name)`** exists for — same find-or-create
+  shape as `setProjectDeadline`.
+- **`projectInTeamspace` / `taskInTeamspace` are the whole scoping mechanism.** The check went
+  into **`applyFilters`**, which is why Board, Gantt, Calendar and People all scoped for free.
+  `renderFocus`, `renderProjects` and `renderChatProjectList` each needed their own call, since
+  none of them routes through `applyFilters`.
+- **Deliberately not part of `filters`.** A teamspace is *where you are*, not another chip
+  narrowing what you see in it: it has its own switcher, its own `localStorage` key
+  (`flowboard_teamspace`), and **"Clear filters" does not reset it**.
+- **Focus of the Day IS teamspace-scoped**, even though it still ignores the toolbar filters —
+  the strip has to live in the workspace you're standing in, while the filters narrow a view it
+  has always deliberately ignored. **Activity and Suggestions are not scoped**: an activity row
+  isn't reliably attributable to a project, and suggestions are about the tool, not the work.
+- **Three ways of being unfiled all behave identically** — `departments: []`, a doc with no
+  `departments` field, and no `projects` doc at all. Verified explicitly, because they arrive by
+  quite different routes.
+- **An unknown department key is ignored rather than treated as a teamspace**, so a hand-edited
+  or future-dated value can't create a phantom department nobody can switch into.
+- **The card being filed stays on screen while you edit it**, even once the ticked boxes no
+  longer match the teamspace you're standing in — otherwise un-ticking the department you're
+  viewing makes the card vanish out from under the cursor.
+- **`DEPARTMENT_BADGE` is a fixed three-colour map, not a hash.** Deliberately not reusing
+  `PROJECT_BADGE_PALETTE` (which hashes a project *name*) or `PRIORITY_META`'s hues — a
+  department is a third kind of thing, and borrowing either would make a teamspace chip read as a
+  priority or as a project identity.
+- **No `firestore.rules` change and no deploy.** `projects` already allows `create`, and its
+  `update` rule only guards `chat` (`!changedKeys().hasAny(['chat'])` passes when only
+  `departments` changes) — the same reason `pinned` needed no rule when it was added.
+- **Not built, and not asked for: per-person department membership.** Departments own projects,
+  not people; the People filter already answers "whose work is this". Worth revisiting only if
+  someone actually wants their sidebar to default to their own department.
+- Verified with an isolated Node port of the scoping rules (cross-department project visible in
+  both, unknown keys ignored, all three unfiled routes equivalent, counts adding up) plus a
+  real-browser DOM check that the switcher renders in the sidebar above the nav and opens with
+  exactly `all|suits|production|admin|unassigned`.
+
 ### Personal leave (time off)
 
 Leave is stored **on the person's roster doc** — `people/{uid}.leave`, an array of
@@ -2673,6 +2733,18 @@ dropping it there would silently demote a re-imported task into the legacy bucke
 - **Admins are a hardcoded email list in the rules, not a `role` field** — a role in a document
   is only as safe as the rule guarding that document. Keep `admins()` identical to the sibling
   Content Hub's copy.
+  - **"Allow me to assign admin rights to selected users" was asked for directly, and declined
+    in that form** — turning it into a role field the app can write would recreate exactly the
+    self-promotion risk this design avoids: a bug in whichever rule guards that field lets
+    someone flip their own flag. What shipped instead, after that trade-off was raised and the
+    read-only option chosen: an **"Admin" badge on the People tab** (`isAdminName(name)`,
+    matched by email against the existing `ADMIN_EMAILS` via the `teamPeople` roster — same
+    name-keyed lookup pattern as `personPhotoUrl`/`leaveFor`) so the team can see who's admin at
+    a glance, with a hover title explaining that admin status is set in `firestore.rules`, not
+    from this app. Adding or removing an admin still means editing `ADMIN_EMAILS` *and*
+    `admins()` in `firestore.rules` and redeploying rules (see "Firestore/Storage rules and index
+    deploys are separate from shipping the site" in the parent `Claude Projects/CLAUDE.md`) —
+    unchanged, no new write path was added anywhere.
 - `suggestions` delete is author-or-admin (update stays open — replies are an embedded array,
   so replying *is* an update to someone else's doc). It was open to everyone only because
   `write` covers delete.

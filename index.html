@@ -408,6 +408,22 @@
       <h1 class="sidebar-label text-sm font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none truncate">MS Project Manager</h1>
     </div>
 
+    <!-- Teamspace switcher. Sits between the brand row and the nav, where Notion puts its own
+         workspace switcher -- above the views, because it scopes all of them rather than being
+         one more thing to pick among them. Collapsed to just the icon on the icon-only rail,
+         same .sidebar-label mechanism every nav item uses. -->
+    <div class="px-2 pt-2 shrink-0 relative">
+      <button type="button" id="teamspace-trigger" data-tooltip="Teamspace" aria-haspopup="listbox" aria-expanded="false"
+              class="tooltip-right w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
+        <svg class="w-4 h-4 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+        <span id="teamspace-current" class="sidebar-label flex-1 text-left truncate">All teamspaces</span>
+        <svg class="sidebar-label w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <!-- z-[28] for the same reason the toolbar dropdowns use it: clear of the Gantt's frozen
+           header/corner cells (25/26), below the app header's own panels (30). -->
+      <div id="teamspace-menu" role="listbox" class="hidden absolute left-2 right-2 mt-1 z-[28] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+    </div>
+
     <nav class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
       <button data-view-btn="board" data-tooltip="Board" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
@@ -2084,6 +2100,239 @@
   // All project names on the board, from the task list (not projectDocs -- a project with
   // neither a deadline nor a chat yet has no projectDocs entry at all). Shared by the list below
   // and the "New chat" picker, which need the complementary halves of the same set.
+  /* =========================================================
+     TEAMSPACES -- one per department, Notion-style: pick a teamspace and the whole app scopes
+     to it. Asked for directly ("create teamspaces for different departments that work similarly
+     to NOTION. The departments would be for Suits, Production, Admin").
+
+     Three decisions were put to the user before building, because each is expensive to reverse:
+
+     1. **It is an organising view, NOT an access boundary.** Nothing here touches
+        firestore.rules -- everyone can still reach everything, and switching to "All" shows the
+        whole board exactly as before. Chosen over real per-department privacy because mis-filed
+        work then merely sits in the wrong list instead of becoming invisible, and the whole
+        feature stays revertible in one commit. If it ever does need to become a real boundary,
+        the field this is built on (`departments` on the project doc) is already the right shape
+        to enforce in rules.
+
+     2. **A project can belong to SEVERAL departments**, stored as an array. Notion teamspaces
+        are single-parent, but agency work is not: a client pitch is Suits *and* Production, and
+        forcing one owner would make it look missing from the other team's board.
+
+     3. **Existing projects start Unassigned** rather than being bulk-filed. Nothing moves or
+        hides on day one; the Unassigned teamspace is a real destination that empties as people
+        file things, not an error state.
+
+     The department lives on the PROJECT doc, not on the task. Tasks already carry a `project`
+     name and inherit from it, so filing is one action per project instead of one per task --
+     and no task needs migrating. The cost is that a project must have a `projects` doc to be
+     filed at all (they are otherwise created lazily, only when someone sets a deadline or starts
+     a chat), which is what ensureProjectDoc below is for.
+  ========================================================= */
+  var DEPARTMENTS = [
+    { key: 'suits', label: 'Suits' },
+    { key: 'production', label: 'Production' },
+    { key: 'admin', label: 'Admin' }
+  ];
+  // 'all' and 'unassigned' are teamspaces you can be IN, but never values stored on a project:
+  // 'all' means no scoping, 'unassigned' means the project's `departments` is empty or absent.
+  var TEAMSPACE_KEY = 'flowboard_teamspace';
+  var currentTeamspace = 'all';
+
+  function loadTeamspace() {
+    try {
+      var v = localStorage.getItem(TEAMSPACE_KEY);
+      if (v === 'all' || v === 'unassigned') return v;
+      if (DEPARTMENTS.some(function (d) { return d.key === v; })) return v;
+    } catch (e) { /* ignore */ }
+    return 'all';
+  }
+  currentTeamspace = loadTeamspace();
+
+  function departmentLabel(key) {
+    var d = DEPARTMENTS.find(function (x) { return x.key === key; });
+    return d ? d.label : key;
+  }
+
+  function teamspaceLabel(key) {
+    if (key === 'all') return 'All teamspaces';
+    if (key === 'unassigned') return 'Unassigned';
+    return departmentLabel(key);
+  }
+
+  // The departments a project is filed under. Unknown project, no doc, or no field all mean
+  // "unassigned" -- deliberately the same answer, so a project that has never had a `projects`
+  // doc behaves identically to one that has a doc but hasn't been filed yet.
+  function projectDepartments(name) {
+    var pdoc = projectDeadlineDoc(name);
+    var list = pdoc && pdoc.departments;
+    return Array.isArray(list) ? list.filter(function (k) {
+      return DEPARTMENTS.some(function (d) { return d.key === k; });
+    }) : [];
+  }
+
+  function projectInTeamspace(name) {
+    if (currentTeamspace === 'all') return true;
+    var deps = projectDepartments(name);
+    if (currentTeamspace === 'unassigned') return deps.length === 0;
+    return deps.indexOf(currentTeamspace) !== -1;
+  }
+
+  // A task inherits its project's teamspace. A task with no project at all is treated as
+  // unassigned, matching how projectDepartments answers for an unknown name.
+  function taskInTeamspace(t) {
+    return projectInTeamspace(t && t.project);
+  }
+
+  // Projects are created lazily elsewhere (a deadline, or starting a chat), so filing one into a
+  // department may be the first thing that needs a doc to exist. Same find-or-create shape as
+  // setProjectDeadline, returning a promise either way so callers can chain uniformly.
+  function ensureProjectDoc(name) {
+    var existing = projectDeadlineDoc(name);
+    if (existing) return Promise.resolve(existing.id);
+    return addDoc(projectsCol, { name: name, deadline: null }).then(function (ref) { return ref.id; });
+  }
+
+  function setProjectDepartments(name, keys) {
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { departments: keys });
+    }).then(function () {
+      logActivity('project_departments', keys.length
+        ? 'Filed "' + name + '" under ' + keys.map(departmentLabel).join(', ')
+        : 'Removed "' + name + '" from every teamspace');
+    }).catch(function (err) {
+      showToast('Could not save the teamspace: ' + err.message, 'error');
+    });
+  }
+
+  // How many projects sit in each teamspace -- shown in the switcher so an empty department is
+  // obvious before you switch into it and find nothing.
+  function teamspaceCounts() {
+    var counts = { all: 0, unassigned: 0 };
+    DEPARTMENTS.forEach(function (d) { counts[d.key] = 0; });
+    allProjectNames().forEach(function (name) {
+      counts.all++;
+      var deps = projectDepartments(name);
+      if (!deps.length) counts.unassigned++;
+      deps.forEach(function (k) { if (counts[k] !== undefined) counts[k]++; });
+    });
+    return counts;
+  }
+
+  // Which project's teamspace checkboxes are currently revealed (one at a time, same as
+  // projectDeadlineEditing right beside it).
+  var projectDeptEditing = null;
+
+  // Deliberately NOT reusing PROJECT_BADGE_PALETTE (which hashes a project NAME to a colour) or
+  // PRIORITY_META's hues -- a department is a third kind of thing, and borrowing either palette
+  // would make a teamspace chip read as a priority or as a project identity. Fixed, not hashed:
+  // there are exactly three, and they should look the same on every card.
+  var DEPARTMENT_BADGE = {
+    suits: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+    production: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+    admin: 'bg-stone-200 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300'
+  };
+
+  function renderTeamspaceSwitcher() {
+    var label = document.getElementById('teamspace-current');
+    var menu = document.getElementById('teamspace-menu');
+    if (!label || !menu) return;
+    label.textContent = teamspaceLabel(currentTeamspace);
+
+    var counts = teamspaceCounts();
+    var options = [{ key: 'all' }].concat(DEPARTMENTS.map(function (d) { return { key: d.key }; }))
+      .concat([{ key: 'unassigned' }]);
+
+    menu.innerHTML = options.map(function (o, i) {
+      var active = o.key === currentTeamspace;
+      // A divider above Unassigned: it is a holding area, not a department, and reads as one of
+      // the three if it sits flush against them.
+      var divider = o.key === 'unassigned'
+        ? '<div class="my-1 border-t border-zinc-100 dark:border-zinc-700"></div>' : '';
+      return divider +
+        '<button type="button" role="option" aria-selected="' + (active ? 'true' : 'false') + '" data-teamspace="' + escapeHtml(o.key) + '" ' +
+        'class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/60 ' +
+        (active ? 'font-bold text-brand-700 dark:text-brand-400' : 'text-zinc-700 dark:text-zinc-200') + '">' +
+          '<span class="flex-1 truncate">' + escapeHtml(teamspaceLabel(o.key)) + '</span>' +
+          '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + (counts[o.key] || 0) + '</span>' +
+          (active ? svgIcon('check', 'w-3.5 h-3.5 shrink-0') : '') +
+        '</button>';
+    }).join('');
+  }
+
+  // Delegated on #projects-grid for the same reason the deadline handlers there are:
+  // renderProjects replaces that container's innerHTML on every snapshot.
+  document.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.project-dept-toggle');
+    if (!toggle) return;
+    var name = toggle.getAttribute('data-project');
+    projectDeptEditing = (projectDeptEditing === name) ? null : name;
+    renderProjects();
+  });
+
+  document.addEventListener('change', function (e) {
+    var box = e.target.closest('.project-dept-check');
+    if (!box) return;
+    var name = box.getAttribute('data-project');
+    var key = box.getAttribute('data-dept');
+    var next = projectDepartments(name).slice();
+    var at = next.indexOf(key);
+    if (box.checked && at === -1) next.push(key);
+    if (!box.checked && at !== -1) next.splice(at, 1);
+    // Keep DEPARTMENTS' own order rather than click order, so two projects filed under the same
+    // pair always render their chips identically.
+    next = DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return next.indexOf(k) !== -1; });
+    setProjectDepartments(name, next).then(function () {
+      // The projects snapshot re-renders on its own, but only once the write round-trips --
+      // repainting now keeps the checkbox and its chips in step with the click immediately.
+      renderTeamspaceSwitcher();
+      renderProjects();
+    });
+  });
+
+  function setTeamspace(key) {
+    currentTeamspace = key;
+    try { localStorage.setItem(TEAMSPACE_KEY, key); } catch (e) { /* ignore */ }
+    renderTeamspaceSwitcher();
+    // Full re-render: a teamspace change moves the floor under every view at once, not just the
+    // current one -- and renderAll is what the snapshot handlers already use for exactly that.
+    renderAll();
+  }
+
+  function closeTeamspaceMenu() {
+    var menu = document.getElementById('teamspace-menu');
+    var trigger = document.getElementById('teamspace-trigger');
+    if (menu) menu.classList.add('hidden');
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+  }
+
+  document.addEventListener('click', function (e) {
+    var trigger = e.target.closest('#teamspace-trigger');
+    var menu = document.getElementById('teamspace-menu');
+    if (trigger) {
+      e.stopPropagation();
+      var opening = menu.classList.contains('hidden');
+      closeOtherHeaderPanels(null);
+      menu.classList.toggle('hidden', !opening);
+      trigger.setAttribute('aria-expanded', opening ? 'true' : 'false');
+      if (opening) renderTeamspaceSwitcher();
+      return;
+    }
+    var opt = e.target.closest('[data-teamspace]');
+    if (opt) {
+      setTeamspace(opt.getAttribute('data-teamspace'));
+      closeTeamspaceMenu();
+      return;
+    }
+    if (menu && !menu.classList.contains('hidden') && !e.target.closest('#teamspace-menu')) {
+      closeTeamspaceMenu();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeTeamspaceMenu();
+  });
+
   function allProjectNames() {
     var names = {};
     tasks.concat(archivedTasks).forEach(function (t) { if (t.project) names[t.project] = true; });
@@ -2316,7 +2565,7 @@
     var listEl = document.getElementById('chat-project-list');
     var myName = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
     var search = (filters.search || '').trim().toLowerCase();
-    var everyChat = allProjectNames().filter(function (name) {
+    var everyChat = allProjectNames().filter(projectInTeamspace).filter(function (name) {
       var pdoc = projectDeadlineDoc(name);
       return !!(pdoc && Array.isArray(pdoc.chat));
     });
@@ -4625,6 +4874,11 @@
   function applyFilters(list) {
     var q = filters.search.trim().toLowerCase();
     return list.filter(function (t) {
+      // Teamspace first, and deliberately not part of `filters`: it is a workspace-level scope,
+      // not another filter chip. It has its own switcher, its own persistence, and is not
+      // cleared by "Clear filters" -- switching teamspace is changing where you are, not
+      // narrowing what you see within it.
+      if (!taskInTeamspace(t)) return false;
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.project && t.project !== filters.project) return false;
       if (filters.assignees.length && filters.assignees.indexOf(t.assignee) === -1) return false;
@@ -4715,6 +4969,18 @@
   function isAdminUser() {
     var u = auth.currentUser;
     return !!(u && u.email && ADMIN_EMAILS.indexOf(u.email.toLowerCase()) !== -1);
+  }
+
+  // Read-only "who's admin" lookup for the People tab badge below -- asked for directly
+  // ("allow me to assign admin rights to selected users"), but admin status stays hardcoded in
+  // ADMIN_EMAILS/firestore.rules on purpose (see that constant's own comment): a role a UI could
+  // write is only as safe as the rule guarding it, and a bug there lets someone promote
+  // themselves. This just answers "is this person already on that list," matched by email via
+  // the roster the same way every other name-keyed lookup in this file works -- it grants
+  // nothing and has no write path of its own.
+  function isAdminName(name) {
+    var person = teamPeople.find(function (p) { return p.name === name; });
+    return !!(person && person.email && ADMIN_EMAILS.indexOf(person.email.toLowerCase()) !== -1);
   }
 
   /* ---------------------------------------------------------
@@ -7013,7 +7279,10 @@
 
   function renderFocus() {
     var container = document.getElementById('focus-list');
-    var candidates = activeTasks().filter(function (t) { return t.status !== 'Done'; });
+    // Scoped by teamspace but NOT by the toolbar filters -- a teamspace is which workspace you
+    // are in, so the strip has to live in it; the filters narrow a view, which this strip has
+    // always deliberately ignored.
+    var candidates = activeTasks().filter(function (t) { return t.status !== 'Done' && taskInTeamspace(t); });
 
     // Review tasks lost their urgency-score boost (dueUrgency's Review exemption, above) so
     // they don't get pushed to the top just for looking overdue -- but that also let them get
@@ -8080,6 +8349,10 @@
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">All caught up — no active tasks.</p>';
 
       var chips = '';
+      // Admin reads first -- it's a standing fact about the person, not a transient status like
+      // the ones after it. Read-only: see isAdminName's own comment on why this can't be clicked
+      // to change.
+      if (isAdminName(p.name)) chips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300" title="Admin rights are set in firestore.rules, not from this app.">Admin</span>';
       // Away reads before overdue: "3 overdue" means something quite different once you know the
       // person is not at their desk, so the qualifier has to arrive first.
       var awayNow = leavePeriodOn(p.name, toDateInputValue(todayMidnight()));
@@ -8197,6 +8470,37 @@
     if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
     if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
+    // Teamspace chips + the filing control. Progressive disclosure, same pattern and same
+    // reasoning as the project deadline directly below: a permanently-open row of three
+    // checkboxes on every card reads as a form you must complete, for a value plenty of
+    // projects will never need. An unfiled project shows a quiet "Unassigned" instead of
+    // nothing, so it is visibly a state rather than an oversight.
+    var deps = projectDepartments(p.name);
+    var editingDeps = projectDeptEditing === p.name;
+    var depChips = deps.length
+      ? deps.map(function (k) {
+          return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+        }).join('')
+      : '<span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">Unassigned</span>';
+    badges += depChips +
+      '<button type="button" class="project-dept-toggle text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400" ' +
+        'data-project="' + escapeHtml(p.name) + '" title="Which teamspaces this project appears in">' +
+        (editingDeps ? 'Done' : (deps.length ? 'Edit' : '+ Teamspace')) +
+      '</button>';
+
+    var depEditor = editingDeps
+      ? '<div class="flex flex-wrap items-center gap-2 mt-2">' +
+          DEPARTMENTS.map(function (d) {
+            var on = deps.indexOf(d.key) !== -1;
+            return '<label class="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 cursor-pointer">' +
+              '<input type="checkbox" class="project-dept-check brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer" ' +
+                'data-project="' + escapeHtml(p.name) + '" data-dept="' + escapeHtml(d.key) + '"' + (on ? ' checked' : '') + '>' +
+              escapeHtml(d.label) +
+            '</label>';
+          }).join('') +
+        '</div>'
+      : '';
+
     // This is the one and only place a project deadline is set. Deliberately not also in the
     // task modal: the same value editable from two places, where changing it inside one task
     // silently moves it for every other task in the project, reads as a bug even when it isn't.
@@ -8207,6 +8511,7 @@
     // visible cost stayed and the payoff shrank. So: undated projects show a quiet "+ Deadline"
     // affordance, and the real <input type="date"> is swapped in only once clicked (or once a
     // deadline exists). projectDeadlineEditing holds the project name currently being edited.
+    // depEditor is emitted by the card body below, straight after the badge row.
     var pDeadline = projectDeadlineFor(p.name);
     var pDays = pDeadline ? daysUntil(pDeadline) : null;
     var pLate = pDays !== null && pDays < 0 && p.activeCount > 0;
@@ -8263,10 +8568,11 @@
         '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
           '<div class="min-w-0 flex-1">' +
             '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
-            '<div class="flex items-center gap-1.5 mt-0.5">' +
+            '<div class="flex flex-wrap items-center gap-1.5 mt-0.5">' +
               taskCountLabel +
               badges +
             '</div>' +
+            depEditor +
             deadlineRow +
             chatRow +
             (readyToArchive
@@ -8288,7 +8594,11 @@
     var allTasks = tasks.concat(archivedTasks);
     var projectNames = {};
     allTasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
-    var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); });
+    // The project currently being filed always stays on screen, even once the ticked boxes no
+    // longer match the teamspace you are standing in -- otherwise un-ticking the department you
+    // are viewing makes the card disappear out from under the cursor mid-edit.
+    var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); })
+      .filter(function (name) { return projectInTeamspace(name) || projectDeptEditing === name; });
 
     if (!names.length) {
       container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 col-span-full text-center py-10">No projects yet.</p>';
@@ -8390,7 +8700,7 @@
     task_moved: 'arrowRight', task_comment: 'message',
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
-    leave_changed: 'calendar'
+    leave_changed: 'calendar', project_departments: 'dashboard'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -9954,7 +10264,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-21T09:39:22Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T02:26:42Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -10018,6 +10328,7 @@
   });
 
   function init() {
+    renderTeamspaceSwitcher();
     restoreFilterControls();
     syncThemeToggleIcon();
     syncDesktopNotifToggleIcon();
