@@ -2554,6 +2554,23 @@ rule, and it is the *second* rule this feature had.
   department — hasn't picked, answered "Not now", or is a hand-typed assignee name with no roster
   row at all. It is meant to drain as people pick, and a non-empty Unassigned is the signal that
   somebody still needs to choose.
+- **The self path is keyed by UID, never by display name.** Departments are only ever edited for
+  yourself, so the name lookup the first version used was an indirection on the one path where
+  the document id is already known — and it is the only plausible way a saved choice fails to
+  stick (a display name that no longer matches the stored `name`, or two roster rows sharing one
+  name, so the write lands on a different row than the check reads). `myDepartments()` /
+  `setMyDepartments()` both go through `myPersonDoc()`, which **already existed** for the chat
+  favourites and is reused rather than duplicated. (It *was* duplicated on the first attempt;
+  `scripts/check-syntax` caught the redeclaration before it shipped — exactly what that check is
+  for.) `setDoc(…, {merge:true})` rather than `updateDoc`, so a roster row that somehow doesn't
+  exist yet is created instead of the write failing.
+- **A `localStorage` mirror (`flowboard_dept_prompted`) stops the modal reappearing after a
+  deploy.** Reported directly: "have the tool remember the choices here so that it does not
+  repeat after each update." The Firestore flag is still the real record — it follows you to
+  another machine — but it is read from a snapshot that may not have arrived yet, and the
+  auto-reload after a deploy lands in exactly that window. The local flag is checked **first**,
+  without touching the roster at all, and is also set when the Firestore flag is seen, so a
+  device that learns the answer from the server stops asking too.
 - **First-login prompt** (`#department-modal`): its own modal rather than an `openConfirm`, which
   only holds two choices. **Multi-select with a Continue button**, not one-tap-and-close, since
   people hold more than one role and roles get added over time. **`departmentChosen` is a separate flag from `department`** — gating on

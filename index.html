@@ -2338,26 +2338,59 @@
     return personDepartments(name).indexOf(currentTeamspace) !== -1;
   }
 
-  function setPersonDepartments(name, keys) {
-    var person = teamPeople.find(function (pp) { return pp.name === name; });
-    if (!person) { showToast('No roster entry for ' + name + ' yet -- they need to sign in once.', 'error'); return; }
+  /* MY OWN roster row, found by UID -- the document's actual id -- not by display name.
+     Departments are only ever edited for yourself (the profile menu and the first-login modal),
+     so the name lookup this used to do was an indirection on the one path where the id is
+     already known. It is also the only plausible reason a saved choice would fail to stick, and
+     the reason the first-login modal kept reappearing after every deploy ("have the tool
+     remember the choices here so that it does not repeat after each update"): a display name
+     that no longer matches the stored `name`, or two roster rows sharing one name, and the
+     write lands on a different row than the check reads. By uid there is exactly one row and no
+     way for the two to disagree.
+
+     myPersonDoc() already existed for the chat favourites/read-state, doing exactly this uid
+     lookup -- reused rather than duplicated. (It was duplicated at first; scripts/check-syntax
+     caught the redeclaration before it could ship, which is the whole reason that check exists.)
+  */
+  function myDepartments() {
+    var me = myPersonDoc();
+    if (!me) return [];
+    var list = Array.isArray(me.departments) ? me.departments : (me.department ? [me.department] : []);
+    return DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return list.indexOf(k) !== -1; });
+  }
+
+  // Local mirror of "I have been asked". Belt and braces for the actual complaint: even if the
+  // Firestore write is slow, denied, or the roster row has not arrived yet, the prompt must not
+  // reappear on the next reload. The Firestore flag stays the real record (it follows you to
+  // another machine); this one just stops the nagging on THIS one.
+  var DEPT_PROMPTED_KEY = 'flowboard_dept_prompted';
+  function markDepartmentPrompted() {
+    try { localStorage.setItem(DEPT_PROMPTED_KEY, '1'); } catch (e) { /* ignore */ }
+  }
+  function wasDepartmentPrompted() {
+    try { return localStorage.getItem(DEPT_PROMPTED_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function setMyDepartments(keys) {
+    var u = auth.currentUser;
+    if (!u) return;
     keys = DEPARTMENTS.map(function (d) { return d.key; }).filter(function (k) { return keys.indexOf(k) !== -1; });
+    var myName = u.displayName || u.email;
     // departmentChosen records that they were ASKED and answered -- including answering "no
     // department". Without it, an explicit "none" is indistinguishable from never having been
-    // prompted, and the first-login modal would reappear on every visit.
-    updateDoc(doc(peopleCol, person.id), { departments: keys, departmentChosen: true }).then(function () {
+    // prompted. setDoc+merge rather than updateDoc so a roster row that somehow does not exist
+    // yet is created instead of the write failing outright.
+    markDepartmentPrompted();
+    setDoc(doc(peopleCol, u.uid), { departments: keys, departmentChosen: true }, { merge: true }).then(function () {
       logActivity('project_departments', keys.length
-        ? name + ' is in ' + keys.map(departmentLabel).join(' + ')
-        : name + ' left every department');
-      // Nothing to file any more: a project's departments are derived from its assignees, so
-      // setting someone's department re-sorts their work automatically. The auto-parking this
-      // used to do (parkMyProjectsInDepartment) was deleted with the project-level filing it fed.
+        ? myName + ' is in ' + keys.map(departmentLabel).join(' + ')
+        : myName + ' left every department');
+      // Nothing to file: a project's departments are derived from its assignees, so setting your
+      // own departments re-sorts your work automatically.
       renderTeamspaceSwitcher();
       renderAll();
     }).catch(function (err) {
-      showToast(err && err.code === 'permission-denied'
-        ? 'Only ' + name + ' or an admin can change their department.'
-        : 'Could not save the department: ' + err.message, 'error');
+      showToast('Could not save your departments: ' + err.message, 'error');
     });
   }
 
@@ -2399,13 +2432,18 @@
   // department" is not asked again every visit.
   function maybePromptDepartment() {
     if (departmentPromptShown) return;
+    // The local flag is checked FIRST and without touching the roster at all, so an answered
+    // prompt cannot come back while a snapshot is still in flight -- which is exactly the window
+    // an auto-reload after a deploy lands in.
+    if (wasDepartmentPrompted()) { departmentPromptShown = true; return; }
     var u = auth.currentUser;
     var myName = u ? (u.displayName || u.email) : null;
     if (!myName) return;                       // roster can arrive before auth settles
-    var me = teamPeople.find(function (pp) { return pp.name === myName; });
+    var me = myPersonDoc();
     if (!me) return;                           // our own registerPresence write hasn't landed yet
     if (me.departmentChosen || me.department || (Array.isArray(me.departments) && me.departments.length)) {
       departmentPromptShown = true;
+      markDepartmentPrompted();                // seen once on this device, never ask again here
       return;
     }
     // Never interrupt something already on screen -- same courtesy checkProjectDeadlinePopups
@@ -2425,7 +2463,7 @@
       );
       closeDepartmentModal();
       if (!myName) return;
-      setPersonDepartments(myName, picked);
+      setMyDepartments(picked);
       // Land them somewhere useful: their department if they picked exactly one, otherwise All,
       // for the same reason applyDefaultTeamspaceOnce does -- with several picked, choosing one
       // of them would be arbitrary and would hide the rest of their work on arrival.
@@ -2437,8 +2475,8 @@
       var myName2 = u2 ? (u2.displayName || u2.email) : null;
       closeDepartmentModal();
       // "Not now" still records that they were asked, so this is a one-time question rather than
-      // a nag -- the People card is always there for later.
-      if (myName2) setPersonDepartments(myName2, []);
+      // a nag -- the profile menu is always there for later.
+      if (myName2) setMyDepartments([]);
     }
   });
 
@@ -2474,7 +2512,7 @@
     var u = auth.currentUser;
     var myName = u ? (u.displayName || u.email) : null;
     if (!myName) { wrap.innerHTML = ''; return; }
-    var mine = personDepartments(myName);
+    var mine = myDepartments();
     wrap.innerHTML = DEPARTMENTS.map(function (d) {
       var on = mine.indexOf(d.key) !== -1;
       return '<label class="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 cursor-pointer">' +
@@ -2492,12 +2530,12 @@
     var u = auth.currentUser;
     var myName = u ? (u.displayName || u.email) : null;
     if (!myName) return;
-    var next = personDepartments(myName).slice();
+    var next = myDepartments().slice();
     var key = box.getAttribute('data-dept');
     var at = next.indexOf(key);
     if (box.checked && at === -1) next.push(key);
     if (!box.checked && at !== -1) next.splice(at, 1);
-    setPersonDepartments(myName, next);
+    setMyDepartments(next);
   });
 
   function renderTeamspaceSwitcher() {
@@ -10519,7 +10557,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T03:44:39Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T03:49:24Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
