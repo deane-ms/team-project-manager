@@ -2514,6 +2514,15 @@ rule, and it is the *second* rule this feature had.
     array; the old field is left in place and simply stops being consulted.
   - **Checkboxes, not `<select multiple>`** — the native control is genuinely hard to use
     (ctrl-click to add, and clicking a second option silently replaces the first).
+  - **Edited in the user/profile menu (`#profile-dept-options`), NOT on the People card.** The
+    card version put a permanently-open row of checkboxes on every single person and was reported
+    as clutter — correctly: it is a set-once preference about yourself, which is what that menu
+    is for. **The read-only chips stay on the card**, so who is on which team is still visible at
+    a glance; only the editing moved.
+  - **Consequence, accepted**: an admin can no longer set *somebody else's* departments. The old
+    People-card control allowed it, but nobody asked for it and it was only reachable through the
+    clutter that got removed. If it is ever wanted, the honest place is an admin-only control,
+    not a row on every card.
   - **Landing teamspace: exactly one department → that one; several → All.** The array is in
     `DEPARTMENTS` order rather than preference order, so picking one of several would be
     arbitrary *and* would hide the rest of their own work on arrival. Same rule in both

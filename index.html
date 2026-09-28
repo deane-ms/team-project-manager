@@ -519,6 +519,16 @@
         </button>
       </div>
       <div id="user-menu-panel" class="hidden absolute left-2 bottom-full mb-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm panel-pop-in">
+        <!-- Your own departments live here, in the profile menu, rather than on your People
+             card. The card version was a permanently-open row of checkboxes on EVERY person --
+             reported as clutter, and rightly: it is a set-once preference about yourself, which
+             is what this menu is for. The read-only chips stay on the card, so who is on which
+             team is still visible at a glance; only the editing moved. -->
+        <div class="px-3.5 pt-2 pb-1.5">
+          <p class="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 mb-1.5">My departments</p>
+          <div id="profile-dept-options" class="flex flex-col gap-1"></div>
+        </div>
+        <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
         <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
           <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
           <span id="theme-toggle-label">Switch to dark mode</span>
@@ -2431,6 +2441,46 @@
     setTeamspace(deps.length === 1 ? deps[0] : 'all');
   }
 
+  // Self only -- this is the profile menu, so there is no `data-person` to carry around and no
+  // permission question to answer: you are always allowed to edit your own row (people/{uid} is
+  // scoped to self-or-admin in firestore.rules).
+  //
+  // Consequence worth knowing: an admin can no longer set SOMEBODY ELSE's departments, which the
+  // old People-card control allowed. Nobody asked for that capability and it was only reachable
+  // through the clutter that got removed; if it is ever wanted back, the honest place for it is
+  // an admin-only control, not a row on every card.
+  function renderProfileDepartments() {
+    var wrap = document.getElementById('profile-dept-options');
+    if (!wrap) return;
+    var u = auth.currentUser;
+    var myName = u ? (u.displayName || u.email) : null;
+    if (!myName) { wrap.innerHTML = ''; return; }
+    var mine = personDepartments(myName);
+    wrap.innerHTML = DEPARTMENTS.map(function (d) {
+      var on = mine.indexOf(d.key) !== -1;
+      return '<label class="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 cursor-pointer">' +
+        '<input type="checkbox" class="profile-dept-check brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40" ' +
+          'data-dept="' + escapeHtml(d.key) + '"' + (on ? ' checked' : '') + '>' +
+        escapeHtml(d.label) +
+      '</label>';
+    }).join('') +
+    (mine.length ? '' : '<p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">None yet — your tasks sit in Unassigned.</p>');
+  }
+
+  document.addEventListener('change', function (e) {
+    var box = e.target.closest('.profile-dept-check');
+    if (!box) return;
+    var u = auth.currentUser;
+    var myName = u ? (u.displayName || u.email) : null;
+    if (!myName) return;
+    var next = personDepartments(myName).slice();
+    var key = box.getAttribute('data-dept');
+    var at = next.indexOf(key);
+    if (box.checked && at === -1) next.push(key);
+    if (!box.checked && at !== -1) next.splice(at, 1);
+    setPersonDepartments(myName, next);
+  });
+
   function renderTeamspaceSwitcher() {
     var label = document.getElementById('teamspace-current');
     var menu = document.getElementById('teamspace-menu');
@@ -2457,18 +2507,6 @@
         '</button>';
     }).join('');
   }
-
-  document.addEventListener('change', function (e) {
-    var box = e.target.closest('.person-dept-check');
-    if (!box) return;
-    var name = box.getAttribute('data-person');
-    var key = box.getAttribute('data-dept');
-    var next = personDepartments(name).slice();
-    var at = next.indexOf(key);
-    if (box.checked && at === -1) next.push(key);
-    if (!box.checked && at !== -1) next.splice(at, 1);
-    setPersonDepartments(name, next);
-  });
 
   function setTeamspace(key) {
     currentTeamspace = key;
@@ -8417,32 +8455,6 @@
   // Rendered above the Time off section on a People card. Self-or-admin, exactly like leave --
   // it writes to the same people/{uid} doc, which firestore.rules already scopes that way, so
   // this needed no rules change of its own.
-  function personDepartmentSectionHtml(name) {
-    var current = personDepartments(name);
-    var editable = canEditLeaveFor(name);
-    var hasRosterDoc = !!teamPeople.find(function (pp) { return pp.name === name; });
-    if (!editable) return '';   // the chips in the card header already state it for everyone else
-
-    // Checkboxes rather than a <select multiple>, which is genuinely hard to use (ctrl-click to
-    // add, and clicking a second option silently replaces the first). Ticking writes straight
-    // away -- there is no Save here, same as every other control on this card.
-    return '<div class="px-4 py-2.5 border-t border-zinc-100 dark:border-zinc-700">' +
-      '<p class="text-xs font-semibold text-zinc-400 dark:text-zinc-500 mb-1.5">Departments</p>' +
-      '<div class="flex flex-wrap items-center gap-2">' +
-        DEPARTMENTS.map(function (d) {
-          var on = current.indexOf(d.key) !== -1;
-          return '<label class="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 ' + (hasRosterDoc ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed') + '">' +
-            '<input type="checkbox" class="person-dept-check brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40" ' +
-              'data-person="' + escapeHtml(name) + '" data-dept="' + escapeHtml(d.key) + '"' + (on ? ' checked' : '') +
-              (hasRosterDoc ? '' : ' disabled title="' + escapeHtml(name + ' has not signed in yet, so there is no roster entry to attach a department to.') + '"') + '>' +
-            escapeHtml(d.label) +
-          '</label>';
-        }).join('') +
-      '</div>' +
-      (current.length ? '' : '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-1.5">No department yet — this person\'s tasks sit in Unassigned.</p>') +
-    '</div>';
-  }
-
   function personLeaveSectionHtml(name) {
     var periods = leaveFor(name).slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     var editable = canEditLeaveFor(name);
@@ -8618,7 +8630,6 @@
             '<span class="text-xl font-bold text-zinc-200 dark:text-zinc-600 shrink-0">' + p.active.length + '</span>' +
           '</div>' +
           '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
-          personDepartmentSectionHtml(p.name) +
           personLeaveSectionHtml(p.name) +
         '</div>'
       );
@@ -10026,6 +10037,7 @@
      MASTER RENDER
   ========================================================= */
   function renderAll() {
+    renderProfileDepartments();
     renderStats();
     renderFocus();
     renderBoard();
@@ -10488,7 +10500,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T03:33:34Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T03:38:06Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
