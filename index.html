@@ -183,6 +183,25 @@
   @keyframes panel-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
   .panel-pop-in { animation: panel-pop-in 0.14s ease-out; }
 
+  /* For popups that open ON TOP OF the sidebar -- the user/profile menu and the teamspace
+     switcher. Every panel in this app is bg-white / dark:bg-zinc-800, which is fine over <main>
+     but is the SIDEBAR'S OWN colour: over the rail they shared its surface exactly, so with only
+     a soft shadow they read as part of the rail rather than as something floating above it
+     (reported directly, from a screenshot of the profile menu).
+     Two cues, because one alone is not enough here: a deeper shadow than shadow-pop, and in dark
+     mode a surface one step LIGHTER than the rail -- lighter-means-higher is the usual dark-UI
+     elevation convention, and going darker instead would read as a hole cut into the sidebar.
+     Light mode keeps white (the panel is already lighter than nothing) and leans on the shadow
+     plus a firmer border. Deliberately scoped to these two panels: every other panel in the app
+     opens over <main>, which is already a different colour, so widening this would be a restyle
+     nobody asked for. */
+  .panel-raised {
+    box-shadow: 0 16px 40px -8px rgba(24, 24, 27, 0.30), 0 4px 12px -4px rgba(24, 24, 27, 0.18);
+  }
+  .dark .panel-raised {
+    box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.60), 0 4px 12px -4px rgba(0, 0, 0, 0.45);
+  }
+
   /* Personal-leave band on a Gantt row. Deliberately a diagonal hatch rather than a flat tint:
      the day columns already use flat tints for weekend and for today, so a third flat colour
      would read as a fourth kind of DAY rather than as "this one person is away". The hatch sits
@@ -425,7 +444,7 @@
       </button>
       <!-- z-[28] for the same reason the toolbar dropdowns use it: clear of the Gantt's frozen
            header/corner cells (25/26), below the app header's own panels (30). -->
-      <div id="teamspace-menu" role="listbox" class="hidden absolute left-2 right-2 mt-1 z-[28] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+      <div id="teamspace-menu" role="listbox" class="hidden absolute left-2 right-2 mt-1 z-[28] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-lg panel-raised py-1 panel-pop-in"></div>
     </div>
 
     <nav class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
@@ -518,7 +537,7 @@
           <svg class="sidebar-label w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
       </div>
-      <div id="user-menu-panel" class="hidden absolute left-2 bottom-full mb-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop py-1 text-sm panel-pop-in">
+      <div id="user-menu-panel" class="hidden absolute left-2 bottom-full mb-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl panel-raised py-1 text-sm panel-pop-in">
         <!-- Your own departments live here, in the profile menu, rather than on your People
              card. The card version was a permanently-open row of checkboxes on EVERY person --
              reported as clutter, and rightly: it is a set-once preference about yourself, which
@@ -528,16 +547,16 @@
           <p class="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 mb-1.5">My departments</p>
           <div id="profile-dept-options" class="flex flex-col gap-1"></div>
         </div>
-        <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
-        <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+        <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
+        <button type="button" id="btn-theme-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
           <span id="theme-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
           <span id="theme-toggle-label">Switch to dark mode</span>
         </button>
-        <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+        <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
           <span id="desktop-notif-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
           <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
         </button>
-        <div class="border-t border-zinc-100 dark:border-zinc-700 my-1"></div>
+        <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
         <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           <span>Sign out</span>
@@ -10500,7 +10519,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-28T03:38:06Z";
+  var CURRENT_BUILD_VERSION = "2026-09-28T03:44:39Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -2467,6 +2467,29 @@ site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes
 change, or every read/write against the new collection fails with "Missing or insufficient
 permissions" even though the code and the deployed page are otherwise correct.
 
+### Popups that open over the sidebar (`.panel-raised`)
+
+Every floating panel in this app is `bg-white dark:bg-zinc-800`. That is fine over `<main>`, but
+it is **the sidebar's own colour** — so the two panels that open over the rail (the user/profile
+menu and the teamspace switcher) shared its surface exactly and read as part of it rather than as
+something above it. Reported directly, from a screenshot of the profile menu.
+
+- **Two cues, because one is not enough here.** A shadow deeper than `shadow-pop`, plus — in dark
+  mode only — a surface one step **lighter** than the rail (`dark:bg-zinc-700` against the
+  sidebar's `zinc-800`). Lighter-means-higher is the usual dark-UI elevation convention; going
+  *darker* instead reads as a hole cut into the sidebar rather than a panel on top of it.
+- **Light mode keeps white** and leans on the shadow plus a firmer border (`zinc-300`, not
+  `zinc-200`). Panel and rail are both `rgb(255,255,255)` there and that is fine — white-on-white
+  separated by a shadow and a hairline is the standard popover treatment.
+- **Deliberately scoped to those two panels.** Everything else (notification, digest, filter and
+  chat menus) opens over `<main>`, which is already a different colour, so widening this would be
+  a restyle nobody asked for.
+- The menu's own dividers and hover states moved a step with the surface
+  (`dark:border-zinc-600`, `dark:hover:bg-zinc-600`) — they were tuned against `zinc-800` and
+  disappear against `zinc-700`.
+- Verified by reading the rendered values rather than eyeballing: panel `rgb(63,63,70)` vs rail
+  `rgb(39,39,42)` in dark with a real box-shadow, plus a screenshot of each theme.
+
 ### Teamspaces (departments)
 
 Notion-style teamspaces — Suits, Production, Marketing, Admin. Pick one in the sidebar switcher
