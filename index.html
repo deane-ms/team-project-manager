@@ -5230,6 +5230,17 @@
   /* =========================================================
      FILTERING / SORTING / SCORING
   ========================================================= */
+  // One definition of "what a search matches on a task", shared by applyFilters and the Archived
+  // list so the two can never disagree about it. Also searches checklist item text and comment
+  // text, not just name/project/assignee -- "what was that task with the CTA feedback" shouldn't
+  // require remembering its title.
+  function taskMatchesSearch(t, q) {
+    var checklistText = (t.checklist || []).map(function (i) { return i.text; }).join(' ');
+    var commentText = (t.comments || []).map(function (c) { return c.text; }).join(' ');
+    var hay = (t.name + ' ' + t.project + ' ' + t.assignee + ' ' + checklistText + ' ' + commentText).toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
   function applyFilters(list) {
     var q = filters.search.trim().toLowerCase();
     return list.filter(function (t) {
@@ -5241,14 +5252,7 @@
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.project && t.project !== filters.project) return false;
       if (filters.assignees.length && filters.assignees.indexOf(t.assignee) === -1) return false;
-      if (q) {
-        // Also searches checklist item text and comment text, not just name/project/assignee --
-        // "what was that task with the CTA feedback" shouldn't require remembering its title.
-        var checklistText = (t.checklist || []).map(function (i) { return i.text; }).join(' ');
-        var commentText = (t.comments || []).map(function (c) { return c.text; }).join(' ');
-        var hay = (t.name + ' ' + t.project + ' ' + t.assignee + ' ' + checklistText + ' ' + commentText).toLowerCase();
-        if (hay.indexOf(q) === -1) return false;
-      }
+      if (q && !taskMatchesSearch(t, q)) return false;
       return true;
     });
   }
@@ -9572,10 +9576,17 @@
   ========================================================= */
   function renderArchived() {
     var container = document.getElementById('archived-list');
+    // Search only -- NOT applyFilters. The priority/project/people dropdowns and teamspace were
+    // never applied to this list, and a search is the one narrowing here that is obvious on
+    // screen (the box holds the text), so it cannot silently hide a task the way a stale saved
+    // dropdown could.
+    var q = filters.search.trim().toLowerCase();
     var archived = archivedTasks.slice()
+      .filter(function (t) { return !q || taskMatchesSearch(t, q); })
       .sort(function (a, b) { return new Date(b.archivedAt) - new Date(a.archivedAt); });
     if (!archived.length) {
-      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No archived tasks.</p>';
+      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
+        (q ? 'No archived tasks match "' + escapeHtml(filters.search.trim()) + '".' : 'No archived tasks.') + '</p>';
       return;
     }
     var html = '';
@@ -10188,7 +10199,8 @@
   // Chat joined this list on request ("the search bar should work on the chat page") --
   // like Activity, it doesn't route through applyFilters() (renderChatProjectList does its own
   // match against project names, not tasks), but it's still a real, working search.
-  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'activity', 'chat'];
+  // Archived joined on request -- it does its own match via taskMatchesSearch (see renderArchived).
+  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'activity', 'chat', 'archived'];
 
   function syncSearchAvailability() {
     var input = document.getElementById('filter-search');
@@ -11209,7 +11221,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-29T06:10:51Z";
+  var CURRENT_BUILD_VERSION = "2026-09-29T07:25:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

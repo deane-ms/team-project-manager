@@ -890,8 +890,11 @@ to bottom:
          `push()`/`splice()` corrupt the default for every other caller in the same page load.
    - `filters.search` (the search box, `#filter-search`) matches name/project/assignee plus
      checklist-item text and comment text (`applyFilters`) — wired into **Board, Gantt, Calendar and
-     People**, the four views listed in `SEARCHABLE_VIEWS`. Projects/Activity/Archived/Suggestions
-     don't route through it. (An earlier version of this note also excluded Calendar; that stopped
+     People**, the four views listed in `SEARCHABLE_VIEWS`. Projects/Suggestions
+     don't route through it. **Archived is searchable too, on request**: `renderArchived` calls the
+     shared `taskMatchesSearch(t, q)` (the same matcher `applyFilters` uses, so the two cannot
+     disagree) and deliberately applies *only* the search, not teamspace or the dropdowns, which
+     never applied to that list. (An earlier version of this note also excluded Calendar; that stopped
      being true once `renderCalendar` started calling `applyFilters` and the note wasn't updated —
      if you change which views filter, change `SEARCHABLE_VIEWS` and this line together.)
      - **Activity is searchable too, and it is the one entry in `SEARCHABLE_VIEWS` that does not
