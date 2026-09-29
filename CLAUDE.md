@@ -2862,7 +2862,12 @@ the full range with a frozen label column and sideways scroll. This one is a sin
 grid (`minmax(0,1fr)` columns) that fits the card at 7/14/28 days, so it never scrolls. It reuses
 the Gantt's bar colours, status-stage fill, overdue dot, `.gantt-leave` bands and `data-open-task`,
 so the two views cannot disagree about how a task looks. Open tasks with no start date or deadline
-are counted in a footnote rather than silently missing. Deliberately omitted: the frozen Progress
+are counted in a footnote rather than silently missing. The header carries a legend (same
+swatches as the Timeline tab) that lists **only what is drawn** — priorities present, Ready for
+review, Overdue dot, Away hatch — so a quiet week doesn't print keys for things that aren't there.
+A month row sits above the day numbers (one cell per month in the window, full name when it spans
+6+ columns, short otherwise) — a 4-week window always crosses a month boundary and bare day
+numbers stop being unambiguous. Deliberately omitted: the frozen Progress
 column, resize handle, stacked-deadline badge and today line (today is the left edge by definition).
 
 **Not a stored event record.** There is no `events` collection, no create/edit/delete UI, and
