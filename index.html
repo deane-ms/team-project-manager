@@ -1085,6 +1085,7 @@
         <div id="wip-ahead" class="lg:col-span-2 min-w-0"></div>
         <div id="wip-away" class="min-w-0"></div>
       </div>
+      <div id="wip-timeline" class="mt-4"></div>
     </section>
 
     <!-- ============ ACTIVITY VIEW ============ -->
@@ -9975,6 +9976,85 @@
       '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + html + '</div>');
   }
 
+  /* ---------------------------------------------------------
+     Timeline: the Gantt, cropped to the meeting window.
+
+     Deliberately NOT renderGantt(): that reads applyFilters (a stale saved filter would silently
+     drop bars from the agenda -- see the EVENTS -> WIP header) and is built for the full date
+     range with a frozen label column and horizontal scroll. This draws from the WIP-scoped `open`
+     list, one fixed-width grid that fits the card at 7/14/28 days, so it never scrolls sideways.
+     Bar colours, fill stages, overdue dot and leave bands reuse the Gantt's own metadata, so the
+     two cannot disagree about what a task looks like.
+  --------------------------------------------------------- */
+  function wipTimelineHtml(scoped, open, today, horizon) {
+    var withDates = open.filter(function (t) { return t.startDate && t.deadline; });
+    var undated = open.length - withDates.length;
+    // Overlap, not containment: a task that started last week and runs past the window belongs.
+    var list = withDates.filter(function (t) { return t.startDate <= horizon && t.deadline >= today; })
+      .sort(function (a, b) { return a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : (a.deadline < b.deadline ? -1 : 1); });
+
+    var note = undated > 0
+      ? '<p class="px-4 py-2 text-xs text-zinc-400 dark:text-zinc-500 border-t border-zinc-100 dark:border-zinc-700">' +
+          undated + ' open task' + (undated === 1 ? '' : 's') + ' not shown (no start date/deadline)</p>'
+      : '';
+    if (!list.length) {
+      return wipSectionHtml('Timeline', 0, wipEmptyHtml('No dated tasks fall inside this window.') + note);
+    }
+
+    var n = wipRangeDays;
+    var rangeStart = parseDate(today);
+    var cols = 'repeat(' + n + ',minmax(0,1fr))';
+    var LABEL_W = 220;
+
+    var head = '<div class="flex border-b border-zinc-100 dark:border-zinc-700">' +
+      '<div class="shrink-0" style="width:' + LABEL_W + 'px;"></div>' +
+      '<div class="flex-1 min-w-0 grid" style="grid-template-columns:' + cols + ';">';
+    for (var i = 0; i < n; i++) {
+      var d = addDays(rangeStart, i);
+      var weekend = d.getDay() === 0 || d.getDay() === 6;
+      head += '<div class="flex flex-col items-center py-1 text-[10px] leading-tight ' +
+        (i === 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : (weekend ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-400 dark:text-zinc-500')) + '">' +
+        // 28 columns cannot fit a weekday letter AND a number each; the number alone is enough there.
+        (n <= 14 ? '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span>' : '') +
+        '<span class="font-semibold">' + d.getDate() + '</span></div>';
+    }
+    head += '</div></div>';
+
+    var rows = list.map(function (t) {
+      var pm = isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
+      var from = t.startDate < today ? 0 : daysBetween(rangeStart, parseDate(t.startDate));
+      var to = t.deadline > horizon ? n - 1 : daysBetween(rangeStart, parseDate(t.deadline));
+      var left = from / n * 100;
+      var width = (to - from + 1) / n * 100;
+      var fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80 }[t.status] || 0;
+      var overdue = dueUrgency(t).overdue;
+
+      var bands = leaveFor(t.assignee).map(function (l) {
+        var a = l.start < today ? 0 : daysBetween(rangeStart, parseDate(l.start));
+        var b = l.end > horizon ? n - 1 : daysBetween(rangeStart, parseDate(l.end));
+        if (a > n - 1 || b < 0 || b < a) return '';
+        return '<div class="gantt-leave absolute inset-y-0" title="' + escapeHtml(t.assignee + ' away ' + formatShortDate(l.start) + ' – ' + formatShortDate(l.end)) + '" style="left:' + (a / n * 100) + '%;width:' + ((b - a + 1) / n * 100) + '%;"></div>';
+      }).join('');
+
+      return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 last:border-b-0">' +
+        '<div class="shrink-0 px-4 py-1.5 min-w-0" style="width:' + LABEL_W + 'px;">' +
+          '<p class="min-w-0 mb-0.5"><span class="inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-xs font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
+        '</div>' +
+        '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
+          '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
+            'class="gantt-bar absolute top-2 bottom-2 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
+            'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;">' +
+            '<div class="' + pm.bar + ' h-full" style="width:' + fillPct + '%;"></div>' +
+            (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto">' + head + rows + '</div>' + note);
+  }
+
   function renderWipView() {
     document.querySelectorAll('[data-wip-range]').forEach(function (btn) {
       btn.classList.toggle('active', parseInt(btn.getAttribute('data-wip-range'), 10) === wipRangeDays);
@@ -10008,6 +10088,7 @@
 
     document.getElementById('wip-ahead').innerHTML = wipAheadHtml(open, today, horizon, scopedProjects);
     document.getElementById('wip-away').innerHTML = wipAwayHtml(today, horizon);
+    document.getElementById('wip-timeline').innerHTML = wipTimelineHtml(scoped, open, today, horizon);
   }
 
   document.querySelectorAll('[data-wip-range]').forEach(function (btn) {

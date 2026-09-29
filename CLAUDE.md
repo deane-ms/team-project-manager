@@ -2853,6 +2853,18 @@ Three things it deliberately does NOT do, each of which is the obvious version o
 The window is 1 / 2 / 4 weeks, persisted to `flowboard_wip_range`, inclusive at both ends (a
 7-day window is today plus the next six). Overdue is **never** windowed — late is late.
 
+**Timeline (a fourth, full-width section under the three above).** The Gantt cropped to the
+meeting window, requested so the room can see task spans and not only deadline days.
+`wipTimelineHtml` draws one bar per open task that *overlaps* the window (not only those inside
+it), clamped to the edges, sorted by start date. It is **not `renderGantt()` and must not be
+routed through it**: that reads `applyFilters` (same stale-filter hazard as above) and is built for
+the full range with a frozen label column and sideways scroll. This one is a single percentage-width
+grid (`minmax(0,1fr)` columns) that fits the card at 7/14/28 days, so it never scrolls. It reuses
+the Gantt's bar colours, status-stage fill, overdue dot, `.gantt-leave` bands and `data-open-task`,
+so the two views cannot disagree about how a task looks. Open tasks with no start date or deadline
+are counted in a footnote rather than silently missing. Deliberately omitted: the frozen Progress
+column, resize handle, stacked-deadline badge and today line (today is the left edge by definition).
+
 **Not a stored event record.** There is no `events` collection, no create/edit/delete UI, and
 nothing in Firestore for this feature at all — WIP is a standing meeting whose content is
 entirely derived from tasks, projects and leave, so there is nothing to save and nothing to keep
