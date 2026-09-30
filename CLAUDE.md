@@ -483,8 +483,8 @@ to bottom:
        the page is the scroll container and `scrollWrap.scrollLeft` in the "keep today in view"
        block is a no-op — not to offset the sticky cells.
    - **Checklist items can carry an optional `due` date, drawn as diamonds on the task's Timeline
-     bar.** Set from a calendar icon on each checklist row (hidden until clicked, like the link
-     editor). Green = done, rose = overdue and open, grey = upcoming; hover names the item, click
+     bar.** Set from the row's single pencil, which opens one inline editor (text, link, date / TBD, Done) -- it replaced
+     separate link and calendar icon buttons per row, which were clutter once the add-item row carried those fields. Green = done, rose = overdue and open, grey = upcoming; hover names the item, click
      opens the task. No extra rows (so the single scroll pane is untouched), skipped if outside
      the visible range, and a Done task never shows overdue items. A date after the task's own
      deadline is flagged amber in the editor and tooltip rather than blocked. Deliberately NOT fed
