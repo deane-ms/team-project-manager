@@ -1234,6 +1234,17 @@
                the same field. -->
           <input id="task-assignee-other" type="text" maxlength="60" placeholder="Type their name exactly as it appears in Google…" class="hidden w-full mt-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+          <!-- "Also involved": people who work on this task but are not accountable for it. The
+               assignee stays the single owner (workload, deadline alerts and leave checks all key
+               off it); these people just get comment notifications and show as small avatars on
+               the Board card. Progressive disclosure: only a quiet button until someone needs it.
+               `flex` is kept off the static class lists of the hidden elements so [hidden] wins. -->
+          <button type="button" id="task-involved-add-btn" class="mt-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">+ Also involved</button>
+          <div id="task-involved-panel" class="hidden mt-1.5">
+            <p class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Also involved <span class="font-normal">(notified on comments, not counted in workload)</span></p>
+            <div id="task-involved-chips" class="flex flex-wrap gap-1 mb-1.5"></div>
+            <select id="task-involved-select" aria-label="Add someone who is also involved" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></select>
+          </div>
         </div>
       </div>
 
@@ -1685,6 +1696,7 @@
       : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
       : notif.type === 'chat_reaction' ? (notif.author + ' reacted to your message')
       : notif.type === 'assigned' ? (notif.author + ' assigned you a task')
+      : notif.type === 'involved' ? (notif.author + ' added you to a task')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
     // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
@@ -4360,6 +4372,8 @@
     parseMentions(text).forEach(function (name) { mentioned[name] = true; });
     var recipients = Object.assign({}, mentioned);
     if (task && task.assignee) recipients[task.assignee] = true;
+    // "Also involved" people hear about comments like watchers do; nothing else notifies them.
+    if (task && Array.isArray(task.involved)) task.involved.forEach(function (n) { recipients[n] = true; });
     delete recipients[myName];
     Object.keys(recipients).forEach(function (name) {
       setDoc(doc(notificationsCol), {
@@ -4424,13 +4438,13 @@
 
   // Notifies a task's new assignee on creation or reassignment -- separate from
   // notifyOnComment since assigning a task doesn't necessarily come with a comment.
-  function notifyAssignment(task, assigneeName) {
+  function notifyAssignment(task, assigneeName, asInvolved) {
     var user = auth.currentUser;
     var myName = user ? (user.displayName || user.email) : null;
     if (!assigneeName || assigneeName === myName) return;
     setDoc(doc(notificationsCol), {
       recipient: assigneeName,
-      type: 'assigned',
+      type: asInvolved ? 'involved' : 'assigned',
       taskId: task.id,
       taskName: task.name,
       author: myName || 'unknown',
@@ -4984,6 +4998,7 @@
     if (oldTask.status !== data.status) changes.push('status ' + (STATUS_LABELS[oldTask.status] || oldTask.status) + ' → ' + (STATUS_LABELS[data.status] || data.status));
     if (oldTask.assignee !== data.assignee) changes.push('reassigned ' + oldTask.assignee + ' → ' + data.assignee);
     if (oldTask.project !== data.project) changes.push('project ' + oldTask.project + ' → ' + data.project);
+    if ((oldTask.involved || []).join('|') !== (data.involved || []).join('|')) changes.push('also involved: ' + ((data.involved || []).join(', ') || 'nobody'));
     if (oldTask.deadline !== data.deadline) changes.push('deadline ' + formatShortDate(oldTask.deadline) + ' → ' + formatShortDate(data.deadline));
     if (oldTask.startDate !== data.startDate) changes.push('start date ' + formatShortDate(oldTask.startDate) + ' → ' + formatShortDate(data.startDate));
     if ((oldTask.driveLink || '') !== (data.driveLink || '')) changes.push(data.driveLink ? 'Drive link updated' : 'Drive link removed');
@@ -5526,6 +5541,8 @@
   // Dependencies UI is removed. This isn't editable state any more -- it just round-trips a
   // task's existing `dependsOn` from load to save so a routine edit doesn't wipe it.
   var currentDependsOn = [];
+  // "Also involved" names (display names, like `assignee`). Never contains the assignee.
+  var currentInvolved = [];
   var timeEntryEditIndex = null;
   // Set from openTaskModal() (carrying over an existing task's value) and updated live if the
   // status dropdown gets flipped to Review while the modal is open (see the #task-status change
@@ -5541,6 +5558,7 @@
       name: document.getElementById('task-name').value,
       project: document.getElementById('task-project').value,
       assignee: currentAssigneeValue(),
+      involved: currentInvolved,
       priority: document.getElementById('task-priority').value,
       status: document.getElementById('task-status').value,
       startDate: document.getElementById('task-start').value,
@@ -5685,6 +5703,9 @@
     // silently wiped by a routine edit -- same "removed from the UI, kept in the data" approach
     // as the Tasks checklist in the sibling Content Hub. Not editable; there's no editor left.
     currentDependsOn = task && task.dependsOn ? task.dependsOn.slice() : [];
+    currentInvolved = task && Array.isArray(task.involved) ? task.involved.slice() : [];
+    involvedPanelOpen = false;
+    renderInvolved();
 
     populateDatalists();
     taskModal.classList.remove('hidden');
@@ -6547,8 +6568,49 @@
     return sel.value.trim();
   }
 
+  // "Also involved" editor. The assignee is always excluded from the options (and stripped at
+  // save), so one person can't be both owner and watcher. A name already on the task stays
+  // visible as a chip even if the roster no longer lists them, so an edit can't silently drop it.
+  var involvedPanelOpen = false;
+
+  function renderInvolved() {
+    var assignee = currentAssigneeValue();
+    currentInvolved = currentInvolved.filter(function (n) { return n !== assignee; });
+    var hasAny = currentInvolved.length > 0;
+    var showPanel = hasAny || involvedPanelOpen;
+    document.getElementById('task-involved-panel').classList.toggle('hidden', !showPanel);
+    document.getElementById('task-involved-add-btn').classList.toggle('hidden', showPanel);
+    document.getElementById('task-involved-chips').innerHTML = currentInvolved.map(function (n, i) {
+      return '<span class="inline-flex items-center gap-1 text-xs rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 pl-1 pr-1.5 py-0.5">' +
+        avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[9px]') + escapeHtml(n) +
+        '<button type="button" data-involved-remove="' + i + '" aria-label="Remove ' + escapeHtml(n) + '" class="text-zinc-400 hover:text-rose-500">&times;</button></span>';
+    }).join('');
+    var options = teamRoster().filter(function (n) { return n !== assignee && currentInvolved.indexOf(n) === -1; });
+    document.getElementById('task-involved-select').innerHTML =
+      '<option value="">Add a person…</option>' +
+      options.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
+  }
+
+  document.getElementById('task-involved-add-btn').addEventListener('click', function () {
+    involvedPanelOpen = true;
+    renderInvolved();
+    document.getElementById('task-involved-select').focus();
+  });
+  document.getElementById('task-involved-select').addEventListener('change', function (e) {
+    var name = e.target.value;
+    if (name && currentInvolved.indexOf(name) === -1) currentInvolved.push(name);
+    renderInvolved();
+  });
+  document.getElementById('task-involved-chips').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-involved-remove]');
+    if (!btn) return;
+    currentInvolved.splice(parseInt(btn.getAttribute('data-involved-remove'), 10), 1);
+    renderInvolved();
+  });
+
   document.getElementById('task-assignee').addEventListener('change', function () {
     syncAssigneeOther();
+    renderInvolved();
     if (document.getElementById('task-assignee').value === ASSIGNEE_OTHER) {
       document.getElementById('task-assignee-other').focus();
     }
@@ -6736,7 +6798,9 @@
     // saved with status Done straight away counts as "entering Done" too (oldStatus is null).
     var statusEffect = statusTransitionEffects(id, project, oldTask ? oldTask.status : null, status);
     var taskData = Object.assign({
-      name: name, project: project, assignee: assignee, priority: priority,
+      name: name, project: project, assignee: assignee,
+      involved: currentInvolved.filter(function (n) { return n !== assignee; }),
+      priority: priority,
       status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
       checklist: currentChecklist,
       timeEntries: currentTimeEntries,
@@ -6778,9 +6842,14 @@
         var changeSummary = changes.slice(0, 3).join(', ') + (changes.length > 3 ? ' (+' + (changes.length - 3) + ' more)' : '');
         logActivity('task_updated', changes.length ? 'Updated "' + name + '": ' + changeSummary : 'Updated task "' + name + '"');
         if (oldTask.assignee !== assignee) notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
+        var oldInvolved = oldTask.involved || [];
+        taskData.involved.forEach(function (n) {
+          if (oldInvolved.indexOf(n) === -1) notifyAssignment({ id: id, name: name, deadline: deadline }, n, true);
+        });
       } else {
         logActivity('task_created', 'Added task "' + name + '"');
         notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
+        taskData.involved.forEach(function (n) { notifyAssignment({ id: id, name: name, deadline: deadline }, n, true); });
       }
       if (statusEffect.willFinishProject) celebrateProjectComplete(statusEffect.projectName);
       else if (statusEffect.enteringDone) spawnConfetti();
@@ -7866,6 +7935,14 @@
           '<div class="flex items-center gap-1.5 mt-1.5">' +
             avatarHtml(t.assignee, 'w-4 h-4 shrink-0', 'text-[9px]') +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
+            // Also-involved people: avatars only, no names -- a name list would compete with the
+            // owner for attention. Names are in the tooltip. Capped at 3 with a +N.
+            ((t.involved && t.involved.length)
+              ? '<span class="flex items-center -space-x-1 ml-1 shrink-0" title="Also involved: ' + escapeHtml(t.involved.join(', ')) + '">' +
+                t.involved.slice(0, 3).map(function (n) { return avatarHtml(n, 'w-4 h-4 shrink-0 ring-2 ring-white dark:ring-zinc-800', 'text-[9px]'); }).join('') +
+                (t.involved.length > 3 ? '<span class="pl-1.5 text-[10px] text-zinc-500 dark:text-zinc-400">+' + (t.involved.length - 3) + '</span>' : '') +
+                '</span>'
+              : '') +
           '</div>' +
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
@@ -10563,6 +10640,7 @@
               priority: PRIORITIES.indexOf(t.priority) !== -1 ? t.priority : 'Medium',
               status: STATUSES.indexOf(t.status) !== -1 ? t.status : 'Pipeline',
               assignee: String(t.assignee || 'Unassigned').slice(0, 100),
+              involved: Array.isArray(t.involved) ? t.involved.filter(function (n) { return typeof n === 'string' && n; }).map(function (n) { return n.slice(0, 100); }).slice(0, 20) : [],
               startDate: parseDate(t.startDate) ? t.startDate : toDateInputValue(todayMidnight()),
               deadline: t.deadline ? (parseDate(t.deadline) ? t.deadline : toDateInputValue(todayMidnight())) : '',
               driveLink: t.driveLink ? normalizeUrl(t.driveLink) : '',
@@ -11087,7 +11165,7 @@
           var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
           var verb = n.chatProject
             ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
-            : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : 'commented on');
+            : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'assigned you to' : n.type === 'involved' ? 'added you to' : 'commented on');
           var headlineHtml = systemHeadline
             ? escapeHtml(systemHeadline)
             : '<span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject;
@@ -11221,7 +11299,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-29T07:25:52Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T03:50:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
