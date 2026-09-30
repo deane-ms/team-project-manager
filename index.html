@@ -8999,17 +8999,6 @@
     if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
     if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
-    // Read-only now: which teams have work on this project, DERIVED from its assignees. There
-    // is nothing to file and no control to offer -- the chips move on their own as people are
-    // assigned, and a project with no departmented assignee reads "Unassigned", which is a fact
-    // about its people rather than an unfinished form.
-    var deps = projectDepartments(p.name);
-    badges += (deps.length
-      ? deps.map(function (k) {
-          return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '" title="Has work assigned to ' + escapeHtml(departmentLabel(k)) + '">' + escapeHtml(departmentLabel(k)) + '</span>';
-        }).join('')
-      : '<span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400" title="Nobody assigned here has a department set yet">Unassigned</span>');
-
     // This is the one and only place a project deadline is set. Deliberately not also in the
     // task modal: the same value editable from two places, where changing it inside one task
     // silently moves it for every other task in the project, reads as a bug even when it isn't.
@@ -11299,7 +11288,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:16:04Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:17:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
