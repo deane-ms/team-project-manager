@@ -490,9 +490,9 @@ to bottom:
      deadline is flagged amber in the editor and tooltip rather than blocked. Deliberately NOT fed
      into `dueUrgency`, Focus, the digest or notifications (more overdue signals, more noise); the
      expandable sub-rows alternative (TeamGantt/Monday style) was considered and not built.
-     - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, `.checklist-gcal`): a quiet
-       "· Add to Google Calendar" text link on the item's `Due …` line (not another icon -- the row was
-       already crowded), hidden once the item is done. The add-item row itself carries link, date, TBD and Calendar fields on the
+     - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, ): only offered on the add-item row, as a "Calendar" checkbox next to the date (a per-item link on the
+       `Due …` line and a per-row icon both shipped and were removed as clutter -- an existing item is not
+       re-exportable). The add-item row carries link, date, TBD and Calendar fields on the
        same line (wrapping when narrow -- no disclosure; asked for directly), so all of it can be set before
        adding; a **TBD** option (item field `dueTbd`, a separate boolean -- never a non-date string in `due`, which every Timeline/WIP/import reader parses as a date) shows "Due TBD" and draws no marker; picking a date clears it; its calendar checkbox stays disabled until a date is chosen and opens the event on Add. It opens Google Calendar's
        pre-filled event-template URL (all-day event, task deep link in the description, assignee and
