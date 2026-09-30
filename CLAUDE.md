@@ -492,7 +492,9 @@ to bottom:
      expandable sub-rows alternative (TeamGantt/Monday style) was considered and not built.
      - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, `.checklist-gcal`): a quiet
        "· Add to Google Calendar" text link on the item's `Due …` line (not another icon -- the row was
-       already crowded), hidden once the item is done. It opens Google Calendar's
+       already crowded), hidden once the item is done. The add-item row also has a
+       `+ Link, date & calendar` disclosure (`#task-checklist-extras`) so all of it can be set before
+       adding; a **TBD** option (item field `dueTbd`, a separate boolean -- never a non-date string in `due`, which every Timeline/WIP/import reader parses as a date) shows "Due TBD" and draws no marker; picking a date clears it; its calendar checkbox stays disabled until a date is chosen and opens the event on Add. It opens Google Calendar's
        pre-filled event-template URL (all-day event, task deep link in the description, assignee and
        "involved" emails as guests). **One-way and one-time by design** -- no API, no OAuth; changing
        the date here later does not update the event. A real two-way sync (Meet links, free/busy)

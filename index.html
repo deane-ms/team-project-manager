@@ -1305,6 +1305,13 @@
           <input type="text" id="task-checklist-input" placeholder="Add a checklist item…" class="flex-1 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <button type="button" id="task-checklist-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
+        <button type="button" id="task-checklist-extras-toggle" class="mt-1.5 text-xs text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">+ Link, date &amp; calendar</button>
+        <div id="task-checklist-extras" class="hidden mt-1.5 flex-wrap items-center gap-2">
+          <input type="text" id="task-checklist-link-input" placeholder="Paste a link…" class="flex-1 min-w-[10rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <input type="date" id="task-checklist-due-input" class="text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" id="task-checklist-tbd-check" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> TBD</label>
+          <label id="task-checklist-gcal-label" class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 opacity-50"><input type="checkbox" id="task-checklist-gcal-check" disabled class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> Add to Google Calendar</label>
+        </div>
       </div>
 
       <div id="task-time-section" class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
@@ -5715,6 +5722,7 @@
       return item.id ? item : Object.assign({}, item, { id: uid() });
     });
     renderChecklistEditor();
+    resetChecklistExtras();
     renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
     // Dependencies were removed from the UI. `dependsOn` is still read here and passed straight
     // back through on save so any task saved while the feature existed doesn't get its data
@@ -5853,7 +5861,7 @@
   // when it falls after the task's own deadline (the Timeline would otherwise draw the marker
   // beyond the bar and contradict it).
   function checklistDueLabelHtml(item, i) {
-    if (!item.due) return '';
+    if (!item.due) return item.dueTbd ? '<span class="block text-[11px] text-zinc-400 dark:text-zinc-500">Due TBD</span>' : '';
     var taskDeadline = document.getElementById('task-deadline').value;
     var overdue = !item.done && parseDate(item.due) < todayMidnight();
     var after = taskDeadline && item.due > taskDeadline;
@@ -5884,14 +5892,14 @@
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Rename item" aria-label="Rename item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
-              '<button type="button" class="checklist-due-toggle shrink-0 p-1 ' + (item.due ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.due ? 'Change due date' : 'Set a due date') + '" aria-label="' + (item.due ? 'Change due date' : 'Set a due date') + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + '</button>' +
+              '<button type="button" class="checklist-due-toggle shrink-0 p-1 ' + (item.due || item.dueTbd ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.due ? 'Change due date' : 'Set a due date') + '" aria-label="' + (item.due ? 'Change due date' : 'Set a due date') + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
             (editingLink
               ? '<div class="pl-8 pr-2 pb-1.5"><input type="text" class="checklist-link-input w-full text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '"></div>'
               : '') +
             (editingDue
-              ? '<div class="pl-8 pr-2 pb-1.5 flex items-center gap-2"><input type="date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" value="' + escapeHtml(item.due || '') + '">' + (item.due ? '<button type="button" class="checklist-due-clear text-xs text-zinc-400 hover:text-rose-500" data-checklist-i="' + i + '">Clear</button>' : '') + '</div>'
+              ? '<div class="pl-8 pr-2 pb-1.5 flex items-center gap-2"><input type="date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" data-checklist-i="' + i + '" value="' + escapeHtml(item.due || '') + '">' + '<button type="button" class="checklist-due-tbd text-xs ' + (item.dueTbd ? 'font-semibold text-brand-600 dark:text-brand-400' : 'text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400') + '" data-checklist-i="' + i + '">TBD</button>' + (item.due || item.dueTbd ? '<button type="button" class="checklist-due-clear text-xs text-zinc-400 hover:text-rose-500" data-checklist-i="' + i + '">Clear</button>' : '') + '</div>'
               : '') +
           '</div>';
         }).join('')
@@ -5983,10 +5991,18 @@
       openChecklistInGoogleCalendar(currentChecklist[parseInt(gcalBtn.dataset.checklistI, 10)]);
       return;
     }
+    var dueTbd = e.target.closest('.checklist-due-tbd');
+    if (dueTbd) {
+      var tbdItem = currentChecklist[parseInt(dueTbd.dataset.checklistI, 10)];
+      if (tbdItem) { delete tbdItem.due; tbdItem.dueTbd = true; }
+      checklistDueEditIndex = null;
+      renderChecklistEditor();
+      return;
+    }
     var dueClear = e.target.closest('.checklist-due-clear');
     if (dueClear) {
       var clearItem = currentChecklist[parseInt(dueClear.dataset.checklistI, 10)];
-      if (clearItem) delete clearItem.due;
+      if (clearItem) { delete clearItem.due; delete clearItem.dueTbd; }
       checklistDueEditIndex = null;
       renderChecklistEditor();
       return;
@@ -6052,12 +6068,13 @@
   document.getElementById('task-checklist-editor').addEventListener('change', function (e) {
     if (!e.target.classList.contains('checklist-due-input')) return;
     var dueItem = currentChecklist[parseInt(e.target.dataset.checklistI, 10)];
-    if (dueItem) { if (e.target.value) dueItem.due = e.target.value; else delete dueItem.due; }
+    if (dueItem) { if (e.target.value) { dueItem.due = e.target.value; delete dueItem.dueTbd; } else delete dueItem.due; }
     checklistDueEditIndex = null;
     renderChecklistEditor();
   });
   document.getElementById('task-checklist-editor').addEventListener('focusout', function (e) {
-    if (e.target.classList.contains('checklist-due-input') && checklistDueEditIndex !== null) {
+    var goingTo = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('.checklist-due-tbd, .checklist-due-clear') : null;
+    if (e.target.classList.contains('checklist-due-input') && checklistDueEditIndex !== null && !goingTo) {
       // Deferred one tick so a pick (change event) is applied before this closes the editor.
       setTimeout(function () { if (checklistDueEditIndex !== null) { checklistDueEditIndex = null; renderChecklistEditor(); } }, 0);
     }
@@ -6111,14 +6128,63 @@
     renderChecklistEditor();
   });
 
+  // Optional link / due date / "add to Google Calendar" for a NEW item, set before it is added.
+  // Hidden behind a toggle (most items never need them); `flex` is toggled in JS, not left in the
+  // static class list, so it can't beat the `hidden` class.
+  function setChecklistExtrasOpen(open) {
+    var box = document.getElementById('task-checklist-extras');
+    box.classList.toggle('hidden', !open);
+    box.classList.toggle('flex', open);
+    document.getElementById('task-checklist-extras-toggle').classList.toggle('hidden', open);
+  }
+  function resetChecklistExtras() {
+    document.getElementById('task-checklist-link-input').value = '';
+    document.getElementById('task-checklist-due-input').value = '';
+    document.getElementById('task-checklist-gcal-check').checked = false;
+    document.getElementById('task-checklist-tbd-check').checked = false;
+    syncChecklistGcalCheck();
+    setChecklistExtrasOpen(false);
+  }
+  function syncChecklistGcalCheck() {
+    var dateInput = document.getElementById('task-checklist-due-input');
+    var tbd = document.getElementById('task-checklist-tbd-check').checked;
+    if (tbd) dateInput.value = '';
+    dateInput.disabled = tbd;
+    var hasDate = !!dateInput.value;
+    var check = document.getElementById('task-checklist-gcal-check');
+    check.disabled = !hasDate;
+    if (!hasDate) check.checked = false;
+    document.getElementById('task-checklist-gcal-label').classList.toggle('opacity-50', !hasDate);
+  }
+  document.getElementById('task-checklist-extras-toggle').addEventListener('click', function () {
+    setChecklistExtrasOpen(true);
+    document.getElementById('task-checklist-link-input').focus();
+  });
+  document.getElementById('task-checklist-due-input').addEventListener('change', syncChecklistGcalCheck);
+  document.getElementById('task-checklist-tbd-check').addEventListener('change', syncChecklistGcalCheck);
+  ['task-checklist-link-input', 'task-checklist-due-input'].forEach(function (id) {
+    document.getElementById(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); }
+    });
+  });
+
   function addChecklistItem() {
     var input = document.getElementById('task-checklist-input');
     var text = input.value.trim();
     if (!text) return;
-    currentChecklist.push({ id: uid(), text: sentenceCase(text), done: false });
+    var item = { id: uid(), text: sentenceCase(text), done: false };
+    var link = document.getElementById('task-checklist-link-input').value.trim();
+    if (link) item.link = normalizeUrl(link);
+    var due = document.getElementById('task-checklist-due-input').value;
+    if (due) item.due = due;
+    else if (document.getElementById('task-checklist-tbd-check').checked) item.dueTbd = true;
+    var wantsCalendar = !!due && document.getElementById('task-checklist-gcal-check').checked;
+    currentChecklist.push(item);
     input.value = '';
+    resetChecklistExtras();
     renderChecklistEditor();
     input.focus();
+    if (wantsCalendar) openChecklistInGoogleCalendar(item);
   }
 
   document.getElementById('task-checklist-add-btn').addEventListener('click', addChecklistItem);
@@ -10747,6 +10813,7 @@
       var clean = { id: (item && item.id) ? String(item.id) : uid(), text: String((item && item.text) || '').slice(0, 300), done: !!(item && item.done), link: (item && item.link) ? normalizeUrl(String(item.link)) : '' };
       // Only set when valid: Firestore rejects `undefined` field values.
       if (item && item.due && parseDate(item.due)) clean.due = String(item.due);
+      else if (item && item.dueTbd === true) clean.dueTbd = true;
       return clean;
     }).filter(function (item) { return item.text; });
   }
@@ -11505,7 +11572,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T10:06:41Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T10:19:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
