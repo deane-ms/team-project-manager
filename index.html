@@ -1215,7 +1215,7 @@
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Assignee <span class="text-rose-500">*</span></label>
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Owner <span class="text-rose-500">*</span></label>
           <!-- A picker over the real team roster, not free text. Typing a name from memory is
                how "Sarah", "Sarah L" and "sarah lim" became three different people on one
                board, only one of whom could actually receive a notification. Options are
@@ -6777,7 +6777,7 @@
     // The input allows 200 chars so a pasted Drive URL isn't truncated before absorbProjectLink
     // can pull it out -- the name that's left over still has to be a sane length.
     else if (project.length > 60) { setFieldError(projectEl, 'Keep the project name under 60 characters.'); hasError = true; }
-    if (!assignee) { setFieldError(assigneeEl, 'Assignee is required.'); hasError = true; }
+    if (!assignee) { setFieldError(assigneeEl, 'Owner is required.'); hasError = true; }
     if (deadline && startDate && parseDate(startDate) > parseDate(deadline)) {
       setFieldError(deadlineEl, 'Deadline must be on or after the start date.');
       hasError = true;
@@ -11299,7 +11299,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:03:13Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:13:38Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
