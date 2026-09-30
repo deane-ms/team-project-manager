@@ -5024,6 +5024,15 @@
     return changes;
   }
 
+  // Capitalises the first letter only. Deliberately NOT a full sentence-case (which would
+  // lowercase the rest): that would wreck client names, acronyms and product names inside an
+  // entry ("Google launch", "SG deck"). Leaves entries that start with a digit, symbol or
+  // capital exactly as typed.
+  function sentenceCase(str) {
+    var s = String(str == null ? '' : str);
+    return s.replace(/^(\s*)(\p{Ll})/u, function (m, ws, ch) { return ws + ch.toLocaleUpperCase(); });
+  }
+
   function escapeHtml(str) {
     return String(str == null ? '' : str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -5895,7 +5904,7 @@
     var item = currentChecklist[i];
     if (item) {
       var value = inputEl.value.trim();
-      if (value) item.text = value;
+      if (value) item.text = sentenceCase(value);
     }
     checklistTextEditIndex = null;
     renderChecklistEditor();
@@ -6020,7 +6029,7 @@
     var input = document.getElementById('task-checklist-input');
     var text = input.value.trim();
     if (!text) return;
-    currentChecklist.push({ id: uid(), text: text, done: false });
+    currentChecklist.push({ id: uid(), text: sentenceCase(text), done: false });
     input.value = '';
     renderChecklistEditor();
     input.focus();
@@ -6205,13 +6214,13 @@
     if (timeEntryEditIndex !== null) {
       var existing = currentTimeEntries[timeEntryEditIndex];
       existing.minutes = minutes;
-      existing.note = note;
+      existing.note = sentenceCase(note);
       existing.billable = billable;
       existing.overtime = !!overtime;
       existing.checklistItemId = checklistItemId || null;
     } else {
       var user = auth.currentUser;
-      currentTimeEntries.push({ minutes: minutes, note: note, billable: billable, overtime: !!overtime, checklistItemId: checklistItemId || null, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
+      currentTimeEntries.push({ minutes: minutes, note: sentenceCase(note), billable: billable, overtime: !!overtime, checklistItemId: checklistItemId || null, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
     }
     hoursEl.value = '';
     noteEl.value = '';
@@ -6767,7 +6776,7 @@
     var deadlineEl = document.getElementById('task-deadline');
     var driveEl = document.getElementById('task-drive');
 
-    var name = nameEl.value.trim();
+    var name = sentenceCase(nameEl.value.trim());
     var project = projectEl.value.trim();
     // Not assigneeEl.value: the picker's "+ Someone else..." row keeps the real name in the
     // adjacent text input, and currentAssigneeValue() is what knows which of the two is live.
@@ -11295,7 +11304,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:20:11Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:29:03Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
