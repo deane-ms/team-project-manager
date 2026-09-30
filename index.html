@@ -9462,12 +9462,52 @@
     );
   }
 
+  // renderAll() runs on EVERY people/tasks/projects snapshot, and each teammate's presence
+  // heartbeat (a lastSeen write every 60s) is a people snapshot for everyone -- so with a full
+  // team open this used to rebuild the whole list every few seconds, collapsing "Show technical
+  // details", dropping half-typed replies and jumping the scroll. Two fixes: skip the rebuild
+  // entirely when nothing this view shows has changed, and when it does rebuild, carry the
+  // open panels, reply drafts, focus and scroll position across it.
+  var lastSuggestionsRenderKey = null;
   function renderSuggestions() {
     var container = document.getElementById('suggestions-list');
     var list = suggestions.slice().sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+    var user = auth.currentUser;
+    var key = JSON.stringify([list, isAdminUser(), user ? (user.displayName || user.email) : '']);
+    if (key === lastSuggestionsRenderKey && container.children.length) { syncAiSuggestionsImportUI(); return; }
+    lastSuggestionsRenderKey = key;
+
+    var scroller = document.querySelector('main');
+    var scrollTop = scroller ? scroller.scrollTop : 0;
+    var openDetails = {}, drafts = {};
+    container.querySelectorAll('[id^="ai-details-"]').forEach(function (el) {
+      if (!el.classList.contains('hidden')) openDetails[el.id] = true;
+    });
+    container.querySelectorAll('.suggestion-reply-input').forEach(function (el) {
+      if (el.value) drafts[el.getAttribute('data-suggestion-id')] = el.value;
+    });
+    var focused = document.activeElement;
+    var focusedId = (focused && focused.classList && focused.classList.contains('suggestion-reply-input') && container.contains(focused))
+      ? focused.getAttribute('data-suggestion-id') : null;
+    var caret = focusedId ? focused.selectionStart : null;
+
     container.innerHTML = list.length
       ? list.map(suggestionCardHtml).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No suggestions yet — be the first to share an idea.</p>';
+
+    Object.keys(openDetails).forEach(function (id) {
+      var panel = document.getElementById(id);
+      if (!panel) return;
+      panel.classList.remove('hidden');
+      var toggle = container.querySelector('.suggestion-ai-details-toggle[data-suggestion-id="' + id.replace('ai-details-', '') + '"]');
+      if (toggle) toggle.textContent = 'Hide technical details';
+    });
+    container.querySelectorAll('.suggestion-reply-input').forEach(function (el) {
+      var id = el.getAttribute('data-suggestion-id');
+      if (drafts[id]) el.value = drafts[id];
+      if (id === focusedId) { el.focus(); if (caret !== null) el.setSelectionRange(caret, caret); }
+    });
+    if (scroller) scroller.scrollTop = scrollTop;
     syncAiSuggestionsImportUI();
   }
 
@@ -9587,6 +9627,7 @@
     if (!select) return;
     updateDoc(doc(suggestionsCol, select.getAttribute('data-suggestion-id')), { status: select.value }).catch(function (err) {
       showToast('Could not update status: ' + err.message, 'error');
+      lastSuggestionsRenderKey = null; // force a real rebuild: the data didn't change, the dropdown did
       renderSuggestions(); // snap the dropdown back to the real, unchanged value on failure
     });
   });
@@ -11417,7 +11458,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T05:04:20Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T05:15:30Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
