@@ -1423,6 +1423,13 @@
 <!-- ============ TOASTS ============ -->
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
 
+<!-- Shown by reloadIfPendingAndSafe() once a new version is deployed and the person has stopped
+     editing. `flex` is added by JS (not in the static classes) so [hidden] isn't overridden. -->
+<div id="update-banner" role="status" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] items-center gap-3 bg-zinc-800 text-white text-sm font-medium pl-4 pr-2 py-2 rounded-lg shadow-pop">
+  <span>An update was made, please refresh.</span>
+  <button type="button" id="update-banner-btn" class="text-sm font-semibold px-3 py-1 rounded-md bg-brand-600 hover:bg-brand-700 text-white">Refresh</button>
+</div>
+
 <!-- Shared "add a reaction" emoji picker for the Chat tab -- one instance, repositioned via JS
      (position: fixed) to sit under whichever message's "+" was clicked. Declared here, not
      inside #project-chat-log, so #project-chat-log's own overflow-y-auto can never clip it. -->
@@ -11279,7 +11286,7 @@
   });
 
   /* =========================================================
-     LIVE UPDATE: auto-reload when a new version is deployed
+     LIVE UPDATE: prompt to refresh when a new version is deployed
      GitHub Pages has no push mechanism, so this polls a tiny version.txt
      (bumped on every push, alongside the same stamp baked into this page)
      and reloads once a new one shows up. Never reloads out from under
@@ -11288,16 +11295,34 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:17:00Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:20:11Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
     return !!document.querySelector('.modal-backdrop:not(.hidden)');
   }
 
-  function reloadIfPendingAndSafe() {
-    if (pendingBuildVersion && !anyModalOpen()) location.reload();
+  // Modal open, or focus sitting in a text field (comment/chat box, search, a form field).
+  function isUserEditing() {
+    if (anyModalOpen()) return true;
+    var a = document.activeElement;
+    if (!a) return false;
+    if (a.tagName === 'TEXTAREA' || a.isContentEditable) return true;
+    return a.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|range|color|file)$/.test(a.type);
   }
+
+  // Never reloads on its own any more: once a new version is out AND the person has stopped
+  // editing, a banner asks them to refresh. Requested directly -- a surprise reload could cost an
+  // unsent comment or half-typed message that the modal check alone didn't cover.
+  function reloadIfPendingAndSafe() {
+    if (!pendingBuildVersion || isUserEditing()) return;
+    var banner = document.getElementById('update-banner');
+    if (banner && banner.classList.contains('hidden')) {
+      banner.classList.remove('hidden');
+      banner.classList.add('flex');
+    }
+  }
+  document.getElementById('update-banner-btn').addEventListener('click', function () { location.reload(); });
 
   function checkForNewVersion() {
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })

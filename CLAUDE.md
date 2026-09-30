@@ -128,7 +128,7 @@ It's wired in two places, because neither alone is enough:
 
 Both paths run the same script, so there's one place to fix if the markup ever changes shape.
 
-The deployed page polls `version.txt` every 60s and auto-reloads clients once it changes — but
+The deployed page polls `version.txt` every 60s and, once it changes, shows an "An update was made, please refresh." banner (it no longer reloads by itself; the banner waits until the person stops editing) --- formerly auto-reloaded clients when it changed — but
 `reloadIfPendingAndSafe()` will never reload out from under a user with a modal open, so a stale
 tab can sit on `pendingBuildVersion` for a while. (That modal guard is also the only reason the
 drift loop above is survivable rather than a hard lock-out: anyone mid-edit keeps their draft.)
