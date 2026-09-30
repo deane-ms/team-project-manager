@@ -8471,10 +8471,10 @@
         var dueDate = parseDate(item.due);
         if (dueDate < rangeStart || dueDate > rangeEnd) return;
         var late = !item.done && t.status !== 'Done' && dueDate < todayMidnight();
-        var mColor = item.done ? 'bg-emerald-500' : (late ? 'bg-rose-600' : 'bg-zinc-500 dark:bg-zinc-400');
-        var mLeft = daysBetween(rangeStart, dueDate) * dayWidth + dayWidth / 2 - 6;
+        var mColor = item.done ? 'bg-emerald-500/70' : (late ? 'bg-rose-600' : 'bg-zinc-500/60 dark:bg-zinc-300/60');
+        var mLeft = daysBetween(rangeStart, dueDate) * dayWidth + dayWidth / 2 - 4;
         var afterDeadline = item.due > t.deadline;
-        html += '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : (late ? ' · overdue' : '')) + (afterDeadline ? ' · after the task deadline' : '')) + '" class="absolute w-3 h-3 rotate-45 cursor-pointer ring-2 ring-white dark:ring-zinc-800 ' + mColor + '" style="left:' + mLeft + 'px;top:' + (rowHeight / 2 - 6) + 'px;"></span>';
+        html += '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : (late ? ' · overdue' : '')) + (afterDeadline ? ' · after the task deadline' : '')) + '" class="absolute w-2 h-2 rotate-45 cursor-pointer ring-1 ring-white/80 dark:ring-zinc-800 ' + mColor + '" style="left:' + mLeft + 'px;top:' + (rowHeight / 2 - 4) + 'px;"></span>';
       });
       html += '</div>';
     });
@@ -11398,7 +11398,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:43:08Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:50:29Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
