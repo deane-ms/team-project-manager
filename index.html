@@ -10219,7 +10219,10 @@
       var to = t.deadline > horizon ? n - 1 : daysBetween(rangeStart, parseDate(t.deadline));
       var left = from / n * 100;
       var width = (to - from + 1) / n * 100;
-      var fillPct = { Pipeline: 6, 'In Progress': 50, Review: 80 }[t.status] || 0;
+      // Fill = checklist completion when the task has a checklist (an unticked list reads 0%, so
+      // the bar can't look 80% full with nothing done); otherwise the status stage, as before.
+      var checklistFill = checklistProgressPct(t);
+      var fillPct = checklistFill !== null ? checklistFill : ({ Pipeline: 6, 'In Progress': 50, Review: 80 }[t.status] || 0);
       var overdue = dueUrgency(t).overdue;
 
       var bands = leaveFor(t.assignee).map(function (l) {
@@ -10267,6 +10270,7 @@
     if (list.some(function (t) { return leaveFor(t.assignee).some(function (l) { return l.start <= horizon && l.end >= today; }); })) {
       legend += '<span class="flex items-center gap-1"><span class="gantt-leave w-3 h-2.5 rounded-sm border border-zinc-200 dark:border-zinc-600"></span>Away</span>';
     }
+    legend += '<span class="text-zinc-400 dark:text-zinc-500">Fill: checklist done, or status if no checklist</span>';
     var aside = '<div class="ml-auto flex items-center flex-wrap gap-x-3 gap-y-1 text-xs font-normal normal-case tracking-normal text-zinc-500 dark:text-zinc-400">' + legend + '</div>';
 
     return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto">' + head + rows + '</div>' + note, aside);
@@ -11413,7 +11417,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:51:40Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T05:04:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
