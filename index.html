@@ -4731,6 +4731,7 @@
     trash: '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>',
     alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
     pencil: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
+    calendarPlus: '<path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"></path><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="19" y1="16" x2="19" y2="22"></line><line x1="16" y1="19" x2="22" y2="19"></line>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
     drive: '<line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line>',
     check: '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
@@ -5884,6 +5885,7 @@
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Rename item" aria-label="Rename item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-link-toggle shrink-0 p-1 ' + (item.link ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.link ? 'Edit link' : 'Attach a link') + '" aria-label="' + (item.link ? 'Edit link' : 'Attach a link') + '">' + svgIcon('link', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-due-toggle shrink-0 p-1 ' + (item.due ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400') + '" data-checklist-i="' + i + '" title="' + (item.due ? 'Change due date' : 'Set a due date') + '" aria-label="' + (item.due ? 'Change due date' : 'Set a due date') + '">' + svgIcon('calendar', 'w-3.5 h-3.5') + '</button>' +
+              (item.due ? '<button type="button" class="checklist-gcal shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Add to Google Calendar" aria-label="Add to Google Calendar">' + svgIcon('calendarPlus', 'w-3.5 h-3.5') + '</button>' : '') +
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
             (editingLink
@@ -5903,6 +5905,32 @@
       if (linkInput) { linkInput.focus(); linkInput.select(); }
     }
     renderChecklistItemSuggestions();
+  }
+
+  // One-way "Add to Google Calendar": a pre-filled event-template link, so no API/OAuth is involved.
+  // The user confirms in Google Calendar; later date changes here do not update that event.
+  function openChecklistInGoogleCalendar(item) {
+    if (!item || !item.due || !/^d{4}-d{2}-d{2}$/.test(item.due)) return;
+    var start = item.due.replace(/-/g, '');
+    var d = new Date(item.due + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
+    var end = d.toISOString().slice(0, 10).replace(/-/g, '');
+    var taskName = document.getElementById('task-name').value.trim();
+    var project = document.getElementById('task-project').value.trim();
+    var names = [currentAssigneeValue()].concat(currentInvolved || []);
+    var emails = [];
+    names.forEach(function (n) {
+      var person = teamPeople.find(function (p) { return p.name === n; });
+      if (person && person.email && emails.indexOf(person.email) === -1) emails.push(person.email);
+    });
+    var details = (project ? project + ' — ' : '') + taskName;
+    if (editingTaskId) details += '\n' + location.origin + location.pathname + '#task=' + editingTaskId;
+    var url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+      '&text=' + encodeURIComponent((taskName ? taskName + ': ' : '') + item.text) +
+      '&dates=' + start + '/' + end +
+      '&details=' + encodeURIComponent(details) +
+      (emails.length ? '&add=' + encodeURIComponent(emails.join(',')) : '');
+    window.open(url, '_blank', 'noopener');
   }
 
   function commitChecklistLink(inputEl) {
@@ -5949,6 +5977,11 @@
       checklistLinkEditIndex = null;
       checklistTextEditIndex = parseInt(editToggle.dataset.checklistI, 10);
       renderChecklistEditor();
+      return;
+    }
+    var gcalBtn = e.target.closest('.checklist-gcal');
+    if (gcalBtn) {
+      openChecklistInGoogleCalendar(currentChecklist[parseInt(gcalBtn.dataset.checklistI, 10)]);
       return;
     }
     var dueClear = e.target.closest('.checklist-due-clear');
@@ -11473,7 +11506,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T05:16:44Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T09:49:26Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
