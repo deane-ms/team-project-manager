@@ -6174,7 +6174,7 @@
                 (e.overtime ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
                 '<span class="text-xs text-zinc-400 dark:text-zinc-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
               '</div>' +
-              (linkedItem ? '<p class="text-xs font-medium text-brand-600 dark:text-brand-400 mt-0.5 truncate">' + escapeHtml(linkedItem.text) + '</p>' : '') +
+              (linkedItem ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(linkedItem.text) + '</p>' : '') +
               (e.note && !(linkedItem && e.note.trim().toLowerCase() === String(linkedItem.text).trim().toLowerCase()) ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
@@ -11494,7 +11494,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T10:46:00Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T10:46:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
