@@ -109,12 +109,11 @@ service cloud.firestore {
     match /tasks/{taskId} {
       allow read: if isMediashock();
       allow create: if isMediashock();
-      allow update: if isMediashock() && (
-        isAdmin()
-        || isCreator(resource.data)
-        || isAssignee(resource.data)
-        || changedKeys().hasOnly(['comments', 'status', 'completedAt', 'updatedAt'])
-      );
+      // Update is open to the whole team, on request ("anyone can edit the whole task but it
+      // still gets recorded in activity"). Accountability comes from the append-only `activity`
+      // log (logActivity in index.html, task_updated/task_moved/...), not from this rule.
+      // Delete stays creator-or-admin below.
+      allow update: if isMediashock();
       // Archiving is a MOVE, not a delete: one batch writes the doc into archivedTasks and
       // deletes it from here. Both halves land in the same batch, so existsAfter() -- which
       // reports the state after the whole batch commits -- can tell the two apart. That is
