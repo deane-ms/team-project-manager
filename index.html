@@ -10145,6 +10145,17 @@
      Bar colours, fill stages, overdue dot and leave bands reuse the Gantt's own metadata, so the
      two cannot disagree about what a task looks like.
   --------------------------------------------------------- */
+  // Same checklist due-date diamonds as the Timeline tab (see renderGantt), positioned by
+  // percentage to fit this view's fixed-width grid. Only dates inside the window are drawn.
+  function wipChecklistMarkers(t, today, horizon, rangeStart, n) {
+    return (t.checklist || []).map(function (item) {
+      if (!item.due || item.due < today || item.due > horizon || !parseDate(item.due)) return '';
+      var color = item.done ? 'bg-emerald-500/70' : 'bg-zinc-500/60 dark:bg-zinc-300/60';
+      var pos = (daysBetween(rangeStart, parseDate(item.due)) + 0.5) / n * 100;
+      return '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : '') + (item.due > t.deadline ? ' · after the task deadline' : '')) + '" class="absolute w-2 h-2 rotate-45 cursor-pointer ring-1 ring-white/80 dark:ring-zinc-800 ' + color + '" style="left:calc(' + pos + '% - 4px);top:calc(50% - 4px);"></span>';
+    }).join('');
+  }
+
   function wipTimelineHtml(scoped, open, today, horizon) {
     var withDates = open.filter(function (t) { return t.startDate && t.deadline; });
     var undated = open.length - withDates.length;
@@ -10230,6 +10241,7 @@
             '<div class="' + pm.bar + ' h-full" style="width:' + fillPct + '%;"></div>' +
             (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
           '</button>' +
+          wipChecklistMarkers(t, today, horizon, rangeStart, n) +
         '</div>' +
       '</div>';
     }).join('');
@@ -10248,6 +10260,9 @@
     if (seen.review) legend += sw('bg-purple-400', 'Ready for review');
     if (list.some(function (t) { return dueUrgency(t).overdue; })) {
       legend += '<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span>Overdue</span>';
+    }
+    if (list.some(function (t) { return (t.checklist || []).some(function (i) { return i.due && i.due >= today && i.due <= horizon; }); })) {
+      legend += '<span class="flex items-center gap-1"><span class="w-2 h-2 rotate-45 bg-zinc-500/60 dark:bg-zinc-300/60"></span>Checklist item due</span>';
     }
     if (list.some(function (t) { return leaveFor(t.assignee).some(function (l) { return l.start <= horizon && l.end >= today; }); })) {
       legend += '<span class="flex items-center gap-1"><span class="gantt-leave w-3 h-2.5 rounded-sm border border-zinc-200 dark:border-zinc-600"></span>Away</span>';
@@ -11398,7 +11413,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:50:29Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:51:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
