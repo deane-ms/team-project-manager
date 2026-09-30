@@ -6181,7 +6181,7 @@
                 '<span class="text-xs text-zinc-400 dark:text-zinc-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
               '</div>' +
               (linkedItem ? '<p class="text-xs font-medium text-brand-600 dark:text-brand-400 mt-0.5 truncate">' + escapeHtml(linkedItem.text) + '</p>' : '') +
-              (e.note ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
+              (e.note && !(linkedItem && e.note.trim().toLowerCase() === String(linkedItem.text).trim().toLowerCase()) ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
             '</div>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
               '<button type="button" class="time-entry-edit p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Edit time entry">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
@@ -11500,7 +11500,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T10:39:31Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T10:40:25Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
