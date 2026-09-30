@@ -10945,6 +10945,31 @@
     });
   }
 
+  // One-time tidy for task titles saved before names were capitalised on save (see
+  // sentenceCase). Same fix-forward shape as the backfills above: whoever's session sees a
+  // lowercase title in a `tasks` snapshot fixes it, self-limiting because a fixed title stops
+  // matching. Writes only `name` -- not updatedAt, which the stale-review nudge reads. Ids in
+  // flight are remembered so the snapshot the write itself triggers can't re-send it. Archived
+  // tasks are left alone (their update rule is creator/admin only). Safe to delete once quiet.
+  var titleFixInFlight = {};
+  function fixLowercaseTitles(rawTasks) {
+    var todo = rawTasks.filter(function (t) {
+      return !t.archivedAt && typeof t.name === 'string' && sentenceCase(t.name) !== t.name && !titleFixInFlight[t.id];
+    });
+    if (!todo.length) return;
+    var batch = writeBatch(db);
+    todo.forEach(function (t) {
+      titleFixInFlight[t.id] = true;
+      batch.update(doc(tasksCol, t.id), { name: sentenceCase(t.name) });
+    });
+    batch.commit().then(function () {
+      logActivity('task_updated', 'Capitalised ' + todo.length + ' task title' + (todo.length === 1 ? '' : 's'));
+    }).catch(function (err) {
+      console.error('title capitalisation failed', err);
+      todo.forEach(function (t) { delete titleFixInFlight[t.id]; });
+    });
+  }
+
   // Attached lazily, not from startListeners -- Board/Gantt/Calendar/Focus/People never read
   // archivedTasks, so most sessions never open Projects or Archived and never pay this read cost
   // at all. Once started it stays live for the rest of the session (same always-on shape as the
@@ -11022,6 +11047,7 @@
       var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
       tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       migrateLegacyArchivedTasks(tasks);
+      fixLowercaseTitles(tasks);
       // Before renderAll below, so the board is never painted once through a filter that is
       // about to be dropped.
       reconcileFilters();
@@ -11304,7 +11330,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T04:29:03Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T04:31:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
