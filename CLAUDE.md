@@ -482,6 +482,15 @@ to bottom:
        chart its own scroll container — `#gantt-wrap` currently sets **no `overflow` at all**, so
        the page is the scroll container and `scrollWrap.scrollLeft` in the "keep today in view"
        block is a no-op — not to offset the sticky cells.
+   - **Checklist items can carry an optional `due` date, drawn as diamonds on the task's Timeline
+     bar.** Set from a calendar icon on each checklist row (hidden until clicked, like the link
+     editor). Green = done, rose = overdue and open, grey = upcoming; hover names the item, click
+     opens the task. No extra rows (so the single scroll pane is untouched), skipped if outside
+     the visible range, and a Done task never shows overdue items. A date after the task's own
+     deadline is flagged amber in the editor and tooltip rather than blocked. Deliberately NOT fed
+     into `dueUrgency`, Focus, the digest or notifications (more overdue signals, more noise); the
+     expandable sub-rows alternative (TeamGantt/Monday style) was considered and not built.
+     `due` is only set when valid because Firestore rejects `undefined` field values.
    - `renderGantt`: day-column width is capped (`GANTT_MAX_DAY_WIDTH`) so a short date range doesn't
      stretch into oversized solid-color bars; the sticky Task label column needs a higher `z-index`
      than the today-line and day-grid content or bars paint over it (they're normal-flow siblings
