@@ -5910,7 +5910,7 @@
   // One-way "Add to Google Calendar": a pre-filled event-template link, so no API/OAuth is involved.
   // The user confirms in Google Calendar; later date changes here do not update that event.
   function openChecklistInGoogleCalendar(item) {
-    if (!item || !item.due || !/^d{4}-d{2}-d{2}$/.test(item.due)) return;
+    if (!item || !item.due || !/^\d{4}-\d{2}-\d{2}$/.test(item.due)) return;
     var start = item.due.replace(/-/g, '');
     var d = new Date(item.due + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + 1);
@@ -11506,7 +11506,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T09:49:26Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T09:57:51Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
