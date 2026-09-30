@@ -1563,6 +1563,8 @@
   // Not `people`: renderPeople() declares its own local `people` (the task-derived list of who
   // currently has work), and two same-named lists meaning different things is a trap.
   var teamPeople = [];
+  // Snapshot of the roster minus lastSeen, so heartbeat-only changes don't trigger renderAll().
+  var lastPeopleRenderKey = null;
 
   // Keyed by uid rather than by name so that someone changing their Google display name
   // updates their existing row instead of appearing twice. merge:true because this fires on
@@ -11042,6 +11044,7 @@
     notificationDedupReady = false;
     if (unsubPeople) { unsubPeople(); unsubPeople = null; }
     teamPeople = [];
+    lastPeopleRenderKey = null;
     if (unsubArchivedTasks) { unsubArchivedTasks(); unsubArchivedTasks = null; }
     archivedTasks = [];
     archivedTasksReady = false;
@@ -11215,6 +11218,18 @@
     // itself every time the modal opens.
     unsubPeople = onSnapshot(peopleCol, function (snap) {
       teamPeople = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      // A presence heartbeat rewrites only `lastSeen`, on every teammate's doc, every 60s -- so
+      // with a full team open this listener fired a full renderAll() every few seconds, which
+      // rebuilt Timeline, People, Projects (etc.) under people mid-read: scroll jumping, panels
+      // collapsing, drafts lost. When nothing but lastSeen changed there is nothing to redraw;
+      // teamPeople above is already current for anything that reads it later, and the Chat tab's
+      // online strip (the one thing that shows presence) is refreshed directly.
+      var peopleKey = JSON.stringify(teamPeople.map(function (p) { var c = Object.assign({}, p); delete c.lastSeen; return c; }));
+      if (peopleKey === lastPeopleRenderKey) {
+        if (currentView === 'chat') renderChatOnlineStrip();
+        return;
+      }
+      lastPeopleRenderKey = peopleKey;
       // Needs the roster, so it can't live in loadTeamspace() at module init. Self-limiting --
       // see applyDefaultTeamspaceOnce; it calls setTeamspace, which renders on its own.
       applyDefaultTeamspaceOnce();
@@ -11458,7 +11473,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T05:15:30Z";
+  var CURRENT_BUILD_VERSION = "2026-09-30T05:16:44Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
