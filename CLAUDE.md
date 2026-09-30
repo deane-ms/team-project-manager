@@ -2954,6 +2954,22 @@ polishing an existing deadline grid. Four gaps, all requested together in one li
 
 ### Who can edit what (ownership rules)
 
+> **Current state (supersedes the creator/assignee/admin history below):** `tasks` `update` is open
+> to every `@mediashock.com.sg` account, on request ("anyone can edit the whole task but it still
+> gets recorded in activity"). Accountability is the append-only `activity` log (`task_updated`,
+> `task_moved`, ...), which is written by the browser, so it is not tamper-proof. `delete` is still
+> creator-or-admin (anyone can archive). The table and carve-out notes below describe the earlier
+> model and are kept for the reasoning.
+
+**Also involved (`involved` on a task).** One accountable `assignee` stays the single owner;
+`involved` is an optional array of display names for people who work on it too. Modelled on
+Jira/Linear (owner + watchers) rather than ClickUp/Monday multi-assignee, which would force a
+workload Split-vs-Sum decision and touch every alert. Involved people get comment notifications and
+an "added you to" notification (`type: 'involved'`), and show as avatars on the Board card. They do
+NOT count toward workload, People, Timeline, Focus, or the deadline/stack/leave alerts. The
+assignee is stripped from the list at save. Hidden behind `+ Also involved` in the task modal.
+Round-trips through Import/Export. No rules change was needed.
+
 **`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
 started fully open (`allow read, write: if isMediashock()`), moved to an ownership-scoped model
 once the team grew past five (admin → anything, assignee → their own task, everyone else →
