@@ -490,8 +490,9 @@ to bottom:
      deadline is flagged amber in the editor and tooltip rather than blocked. Deliberately NOT fed
      into `dueUrgency`, Focus, the digest or notifications (more overdue signals, more noise); the
      expandable sub-rows alternative (TeamGantt/Monday style) was considered and not built.
-     - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, `.checklist-gcal`): a small
-       calendar-plus icon that only appears on an item with a due date. It opens Google Calendar's
+     - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, `.checklist-gcal`): a quiet
+       "· Add to Google Calendar" text link on the item's `Due …` line (not another icon -- the row was
+       already crowded), hidden once the item is done. It opens Google Calendar's
        pre-filled event-template URL (all-day event, task deep link in the description, assignee and
        "involved" emails as guests). **One-way and one-time by design** -- no API, no OAuth; changing
        the date here later does not update the event. A real two-way sync (Meet links, free/busy)
