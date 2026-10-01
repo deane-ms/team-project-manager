@@ -9131,6 +9131,12 @@
     );
   }
 
+  // Ongoing/Completed headings: full-size titles with the count as a quiet pill, rather than the
+  // tiny grey uppercase caption they were (reported as not prominent enough).
+  function projectSectionCount(n) {
+    return '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">' + n + '</span>';
+  }
+
   function projectCardHtml(p) {
     var rowsHtml = p.rows.length
       ? p.rows.map(projectTaskRowHtml).join('')
@@ -9211,9 +9217,12 @@
 
     // Collapsed by default; a search hit on this project's tasks opens it so the match is visible.
     var expanded = !!projectExpanded[p.name] || !!p.searchHit;
+    // A Completed project (every task archived) gets the same emerald wash a Done row gets on the
+    // Board (boardTaskRowHtml's rowBg), on its header -- one colour for "finished" everywhere.
+    var isCompleted = p.activeCount === 0;
     return (
-      '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col">' +
-        '<div class="flex items-center gap-2.5 px-4 py-3' + (expanded ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
+      '<div class="bg-white dark:bg-zinc-800 border ' + (isCompleted ? 'border-emerald-200 dark:border-emerald-500/30' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card overflow-hidden flex flex-col">' +
+        '<div class="flex items-center gap-2.5 px-4 py-3' + (isCompleted ? ' bg-emerald-50 dark:bg-emerald-500/10' : '') + (expanded ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
           '<div class="min-w-0 flex-1">' +
             // The name toggles too, as a shortcut; the labelled pill on the right is the obvious
             // control (a bare chevron beside the name was reported as too easy to miss).
@@ -9351,9 +9360,9 @@
     // opened while searching, so a match that only lives in a finished project isn't hidden.
     var completedOpen = projectsCompletedOpen || (completed.length > 0 && (ongoing.length === 0 || !!q));
     var completedHtml = '<details id="projects-completed-details"' + (completedOpen ? ' open' : '') + '>' +
-      '<summary class="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">' +
-        '<svg class="disclosure-chevron w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
-        'Completed (' + completed.length + ')' +
+      '<summary class="flex items-center gap-2 cursor-pointer select-none text-lg font-bold text-zinc-800 dark:text-zinc-100 hover:text-brand-600 dark:hover:text-brand-400 mb-3">' +
+        '<svg class="disclosure-chevron w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
+        'Completed' + projectSectionCount(completed.length) +
       '</summary>' +
       (completed.length
         ? '<div class="' + cardGrid + '">' + completed.map(projectCardHtml).join('') + '</div>'
@@ -9366,7 +9375,7 @@
     container.innerHTML =
       '<div class="flex flex-col gap-6">' +
         '<div>' +
-          '<h3 class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">Ongoing (' + ongoing.length + ')</h3>' +
+          '<h3 class="flex items-center gap-2 text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-3">Ongoing' + projectSectionCount(ongoing.length) + '</h3>' +
           ongoingHtml +
         '</div>' +
         '<div>' + completedHtml + '</div>' +
@@ -11585,7 +11594,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-01T07:10:48Z";
+  var CURRENT_BUILD_VERSION = "2026-10-01T07:12:35Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
