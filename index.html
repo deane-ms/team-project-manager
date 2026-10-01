@@ -6771,23 +6771,6 @@
       confirmArchiveProject(name, count);
       return;
     }
-    var chatCreateBtn = e.target.closest('.project-chat-create');
-    if (chatCreateBtn) {
-      var chatName = chatCreateBtn.getAttribute('data-project');
-      openConfirm(
-        'Create a group chat for "' + chatName + '"?',
-        'Gives this project its own message thread and pinned links, separate from task comments. Anyone on the team can post once it exists.',
-        function () { createProjectChat(chatName); },
-        { tone: 'question', confirmText: 'Create chat', cancelText: 'Cancel' }
-      );
-      return;
-    }
-    var chatOpenBtn = e.target.closest('.project-chat-open');
-    if (chatOpenBtn) {
-      setView('chat');
-      selectChatProject(chatOpenBtn.getAttribute('data-project'));
-      return;
-    }
     var addBtn = e.target.closest('.project-deadline-add');
     if (!addBtn) return;
     projectDeadlineEditing = addBtn.getAttribute('data-project');
@@ -9174,7 +9157,28 @@
     var pLabelClass = pLate ? 'text-rose-600 dark:text-rose-400' : (pSoon ? 'text-violet-600 dark:text-violet-400' : 'text-zinc-400 dark:text-zinc-500');
     var editingThis = projectDeadlineEditing === p.name;
     var deadlineRow;
-    if (!pDeadline && !editingThis) {
+    // No deadline of the project's own: show the one its tasks already imply -- the LATEST open
+    // task deadline (when the whole project is meant to be done; same derivation
+    // checkProjectDeadlinePopups uses). Reported as "isn't the deadline set? why is it empty?"
+    // against a project whose tasks all had dates: an empty "+ Deadline" read as data missing.
+    // Prefer deriving over asking. Clicking it still lets someone set an explicit one.
+    var derivedDeadline = '';
+    if (!pDeadline) {
+      tasks.forEach(function (t) {
+        if (t.project === p.name && t.status !== 'Done' && t.deadline && t.deadline > derivedDeadline) derivedDeadline = t.deadline;
+      });
+    }
+    if (!pDeadline && !editingThis && derivedDeadline) {
+      var dDays = daysUntil(derivedDeadline);
+      var dClass = dDays < 0 ? 'text-rose-600 dark:text-rose-400' : (dDays <= 1 ? 'text-violet-600 dark:text-violet-400' : 'text-zinc-500 dark:text-zinc-400');
+      deadlineRow =
+        '<div class="flex items-center gap-1.5 mt-1.5">' +
+          '<button type="button" class="project-deadline-add text-[11px] font-semibold flex items-center gap-1 hover:text-brand-600 dark:hover:text-brand-400 ' + dClass + '" ' +
+            'data-project="' + escapeHtml(p.name) + '" title="Latest open task deadline in this project. Click to set the project\'s own deadline instead.">' +
+            svgIcon('calendar', 'w-3 h-3') + 'Due ' + escapeHtml(formatShortDate(derivedDeadline)) +
+          '</button>' +
+        '</div>';
+    } else if (!pDeadline && !editingThis) {
       deadlineRow =
         '<div class="flex items-center gap-1.5 mt-1.5">' +
           '<button type="button" class="project-deadline-add text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1" ' +
@@ -9196,21 +9200,8 @@
     // Distinguishes "still being worked on" from "finished but nobody's archived it yet" --
     // the latter only ever applies to an Ongoing card (a Completed card has activeCount 0, so
     // openCount is trivially 0 too and this branch never fires for it).
-    // Manual, not automatic on a project's first task -- most projects never need a dedicated
-    // thread, so this stays a deliberate action rather than something every project gets by
-    // default. Array.isArray(chatDoc.chat) is the only signal a chat exists; there's no
-    // separate boolean to drift out of sync with it.
-    var chatDoc = projectDeadlineDoc(p.name);
-    var chatRow = (chatDoc && Array.isArray(chatDoc.chat))
-      ? '<button type="button" class="project-chat-open text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1 mt-1.5" ' +
-        'data-project="' + escapeHtml(p.name) + '" title="Open this project\'s group chat">' +
-        svgIcon('message', 'w-3 h-3') + 'Group chat' + (chatDoc.chat.length ? ' (' + chatDoc.chat.length + ')' : '') +
-      '</button>'
-      : '<button type="button" class="project-chat-create text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1 mt-1.5" ' +
-        'data-project="' + escapeHtml(p.name) + '" title="Create a dedicated group chat for this project">' +
-        svgIcon('plus', 'w-3 h-3') + 'Group chat' +
-      '</button>';
-
+    // (The Group chat open/create button that used to sit here was removed on request -- chats are
+    // opened and started from the Chat tab, including its own "New chat" picker.)
     var readyToArchive = p.activeCount > 0 && p.openCount === 0;
     var taskCountLabel = readyToArchive
       ? '<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">All ' + p.activeCount + ' task' + (p.activeCount === 1 ? '' : 's') + ' done</span>'
@@ -9234,7 +9225,6 @@
               badges +
             '</div>' +
             deadlineRow +
-            chatRow +
             (readyToArchive
               ? '<button type="button" class="project-archive-btn text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1.5" ' +
                 'data-project="' + escapeHtml(p.name) + '" title="Archive every task in this project and move it to Completed">' +
@@ -11595,7 +11585,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-01T06:41:59Z";
+  var CURRENT_BUILD_VERSION = "2026-10-01T07:10:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

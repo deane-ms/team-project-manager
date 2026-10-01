@@ -2425,6 +2425,12 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     *earliest* active task deadline, while `checkProjectDeadlinePopups` treated the *latest* task
     deadline as the project's due date. Both now read the stored deadline when one is set and fall
     back to their original derivation when it isn't, so undated projects behave exactly as before.
+  - **With no deadline of its own, the card shows the one its tasks imply** — "Due <date>" from
+    the latest open task deadline (same derivation as `checkProjectDeadlinePopups`), rose when
+    past, violet within a day. Reported as "isn't the deadline set? why is it empty?" against a
+    project whose tasks all had dates; "+ Deadline" now only shows when no open task has a date
+    either. Clicking "Due …" still opens the field to set an explicit project deadline. The card's
+    Group chat button was removed in the same pass, on request — chats live in the Chat tab.
   - **Set in one place only — the Projects tab**, and progressively disclosed. A project with no
     deadline shows a quiet `+ Deadline` button (`.project-deadline-add`); the real
     `<input type="date">` (`.project-deadline-input`) is swapped in on click, or shown outright once a
