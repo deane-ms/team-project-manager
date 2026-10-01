@@ -5729,6 +5729,7 @@
     currentInvolved = task && Array.isArray(task.involved) ? task.involved.slice() : [];
     involvedPanelOpen = false;
     renderInvolved();
+    involvedPrevAssignee = currentAssigneeValue();
 
     populateDatalists();
     taskModal.classList.remove('hidden');
@@ -6662,6 +6663,20 @@
   // save), so one person can't be both owner and watcher. A name already on the task stays
   // visible as a chip even if the roster no longer lists them, so an edit can't silently drop it.
   var involvedPanelOpen = false;
+  // The owner as of the last assignee change, so a new owner picked FROM the involved list can
+  // trade places with the old one (the old owner takes their chip) instead of the old owner
+  // silently dropping off the task. Swapping back restores the original lineup.
+  var involvedPrevAssignee = '';
+
+  function swapOwnerIntoInvolved() {
+    var prev = involvedPrevAssignee;
+    var next = currentAssigneeValue();
+    var idx = currentInvolved.indexOf(next);
+    if (prev && next && prev !== next && idx !== -1 && currentInvolved.indexOf(prev) === -1) {
+      currentInvolved[idx] = prev;
+    }
+    involvedPrevAssignee = next;
+  }
 
   function renderInvolved() {
     var assignee = currentAssigneeValue();
@@ -6700,6 +6715,7 @@
 
   document.getElementById('task-assignee').addEventListener('change', function () {
     syncAssigneeOther();
+    swapOwnerIntoInvolved();
     renderInvolved();
     if (document.getElementById('task-assignee').value === ASSIGNEE_OTHER) {
       document.getElementById('task-assignee-other').focus();
@@ -11494,7 +11510,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-09-30T10:47:49Z";
+  var CURRENT_BUILD_VERSION = "2026-10-01T03:24:37Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

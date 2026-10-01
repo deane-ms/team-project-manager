@@ -2985,7 +2985,12 @@ Jira/Linear (owner + watchers) rather than ClickUp/Monday multi-assignee, which 
 workload Split-vs-Sum decision and touch every alert. Involved people get comment notifications and
 an "added you to" notification (`type: 'involved'`), and show as avatars on the Board card. They do
 NOT count toward workload, People, Timeline, Focus, or the deadline/stack/leave alerts. The
-assignee is stripped from the list at save. Hidden behind `+ Also involved` in the task modal.
+assignee is stripped from the list at save. **Picking a new owner from the involved list swaps
+them**: the old owner takes the new owner's chip (`swapOwnerIntoInvolved`, on the assignee
+`change`), so the old owner keeps comment updates instead of dropping off, and swapping back
+restores the original lineup. Picking an owner who was *not* involved leaves the list alone and
+the old owner drops off, as before. The old owner gets an "added you to" notification on save,
+like anyone newly involved. Hidden behind `+ Also involved` in the task modal.
 Round-trips through Import/Export. No rules change was needed.
 
 **`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
