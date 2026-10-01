@@ -9224,9 +9224,10 @@
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col">' +
         '<div class="flex items-center gap-2.5 px-4 py-3' + (expanded ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
           '<div class="min-w-0 flex-1">' +
-            '<button type="button" class="project-expand-toggle flex items-center gap-1.5 w-full min-w-0 text-left group" data-project="' + escapeHtml(p.name) + '" aria-expanded="' + expanded + '">' +
-              '<svg class="w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-transform' + (expanded ? ' rotate-90' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
-              '<span data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate min-w-0">' + escapeHtml(p.name) + '</span>' +
+            // The name toggles too, as a shortcut; the labelled pill on the right is the obvious
+            // control (a bare chevron beside the name was reported as too easy to miss).
+            '<button type="button" class="project-expand-toggle flex w-full min-w-0 text-left" data-project="' + escapeHtml(p.name) + '" aria-expanded="' + expanded + '">' +
+              '<span data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 hover:text-brand-600 dark:hover:text-brand-400 truncate min-w-0">' + escapeHtml(p.name) + '</span>' +
             '</button>' +
             '<div class="flex flex-wrap items-center gap-1.5 mt-0.5">' +
               taskCountLabel +
@@ -9241,7 +9242,17 @@
               '</button>'
               : '') +
           '</div>' +
-          '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
+          '<div class="flex flex-col items-end gap-2 shrink-0">' +
+            '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
+            '<button type="button" class="project-expand-toggle inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border transition ' +
+              (expanded
+                ? 'border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:border-brand-500/40 dark:text-brand-300 dark:bg-brand-500/10 dark:hover:bg-brand-500/20'
+                : 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-400 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-700') +
+              '" data-project="' + escapeHtml(p.name) + '" aria-expanded="' + expanded + '">' +
+              (expanded ? 'Hide tasks' : 'Show ' + p.rows.length + ' task' + (p.rows.length === 1 ? '' : 's')) +
+              '<svg class="w-3.5 h-3.5 transition-transform' + (expanded ? ' rotate-180' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</button>' +
+          '</div>' +
         '</div>' +
         (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' : '') +
       '</div>'
@@ -11584,7 +11595,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-01T06:02:57Z";
+  var CURRENT_BUILD_VERSION = "2026-10-01T06:41:59Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

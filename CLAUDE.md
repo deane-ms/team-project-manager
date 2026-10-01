@@ -660,7 +660,9 @@ to bottom:
        a narrower, always-just-this-person's-work strip that was never part of this request.
    - **Project cards collapse to their header by default, and Ongoing sits above Completed**
      (asked for directly from a screenshot of one project's task list running down the page).
-     The chevron+name is a `.project-expand-toggle`; open state is `projectExpanded[name]`,
+     The toggle is a labelled bordered pill under the hours ("Show N tasks ⌄" / "Hide tasks ⌃",
+     brand-tinted while open) — it started as a bare chevron beside the name and was reported as
+     not obvious enough. The name is also a `.project-expand-toggle`, as a shortcut. Open state is `projectExpanded[name]`,
      session-local, so live snapshots don't snap a card shut. A search hit on a project's tasks
      opens that card (`p.searchHit`) and opens Completed. Completed's own open state is
      `projectsCompletedOpen`, recorded from the summary *click*, not the `toggle` event, which a
