@@ -658,8 +658,15 @@ to bottom:
        — was a real project-card container with a task list inside it, each row still showing
        assignee/deadline. `renderFocus`'s Focus-of-the-Day cards are unaffected by any of this —
        a narrower, always-just-this-person's-work strip that was never part of this request.
+   - **Project cards collapse to their header by default, and Ongoing sits above Completed**
+     (asked for directly from a screenshot of one project's task list running down the page).
+     The chevron+name is a `.project-expand-toggle`; open state is `projectExpanded[name]`,
+     session-local, so live snapshots don't snap a card shut. A search hit on a project's tasks
+     opens that card (`p.searchHit`) and opens Completed. Completed's own open state is
+     `projectsCompletedOpen`, recorded from the summary *click*, not the `toggle` event, which a
+     render forcing it open also fires. Each section lays cards out `lg:grid-cols-2`.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
-     (sorted by `lastArchivedAt` descending, collapsible) side-by-side columns, not one flat list —
+     (sorted by `lastArchivedAt` descending, collapsible) stacked sections (formerly side by side), not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
      billable time. A project is "Completed" purely by every one of its tasks having `archivedAt`
      set (`activeCount === 0`), not by task `status` — a project can be all-`Done` and still show
@@ -915,6 +922,14 @@ to bottom:
      never applied to that list. (An earlier version of this note also excluded Calendar; that stopped
      being true once `renderCalendar` started calling `applyFilters` and the note wasn't updated —
      if you change which views filter, change `SEARCHABLE_VIEWS` and this line together.)
+     - **People and Projects also match the person/project itself, not only tasks** (asked for
+       directly: "make search bar applicable to projects and people"). People: a roster member whose
+       name or department label matches shows with *all* their work (`applyFilters(list, true)`
+       skips the search term for their rows), including someone with no tasks; with priority/
+       project also set they still need work under those. Projects (now in `SEARCHABLE_VIEWS`): a
+       name match shows the whole card; otherwise a project shows if any active or archived task
+       matches `taskMatchesSearch`, listing only those rows, while the card's totals stay
+       project-wide. Projects still ignores the priority/project/people dropdowns, as before.
      - **Activity is searchable too, and it is the one entry in `SEARCHABLE_VIEWS` that does not
        route through `applyFilters()`.** `renderActivityFeed` runs its own match over the summary
        line and the person, because an activity row is not a task — the priority/project/assignee

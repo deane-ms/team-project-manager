@@ -5278,8 +5278,10 @@
     return hay.indexOf(q) !== -1;
   }
 
-  function applyFilters(list) {
-    var q = filters.search.trim().toLowerCase();
+  // ignoreSearch: People/Projects match the search against the person or project itself too,
+  // and once that matches they show all of its work, not just the tasks containing the term.
+  function applyFilters(list, ignoreSearch) {
+    var q = ignoreSearch ? '' : filters.search.trim().toLowerCase();
     return list.filter(function (t) {
       // Teamspace first, and deliberately not part of `filters`: it is a workspace-level scope,
       // not another filter chip. It has its own switcher, its own persistence, and is not
@@ -6737,11 +6739,31 @@
   // only needed for projects that have no deadline yet -- once one is set the field shows anyway.
   var projectDeadlineEditing = null;
 
+  // Project cards are collapsed to their header by default (asked for directly -- a card listing
+  // every task, archived ones included, ran a single project down most of the screen). Session-
+  // local by name, so a live snapshot re-rendering the grid doesn't snap an open card shut.
+  var projectExpanded = {};
+  var projectsCompletedOpen = false;
+
   // All handlers here are delegated: renderProjects() replaces the grid's innerHTML on every
   // snapshot, so anything bound directly to a card would be thrown away.
   var projectsGrid = document.getElementById('projects-grid');
 
   projectsGrid.addEventListener('click', function (e) {
+    // Remember a user's own open/close of Completed. A click, not the 'toggle' event: a render
+    // forcing it open (search, or no ongoing projects) fires 'toggle' too and would latch it open.
+    var completedSummary = e.target.closest('#projects-completed-details > summary');
+    if (completedSummary) {
+      projectsCompletedOpen = !completedSummary.parentNode.open;
+      return;
+    }
+    var expandBtn = e.target.closest('.project-expand-toggle');
+    if (expandBtn) {
+      var expName = expandBtn.getAttribute('data-project');
+      projectExpanded[expName] = !projectExpanded[expName];
+      renderProjects();
+      return;
+    }
     var archiveBtn = e.target.closest('.project-archive-btn');
     if (archiveBtn) {
       var name = archiveBtn.getAttribute('data-project');
@@ -8942,13 +8964,30 @@
     // would read as the search being broken. The people filter is handled inline instead of
     // bailing out, since narrowing to specific people and then seeing those people is coherent.
     var narrowing = !!(filters.search.trim() || filters.priority || filters.project);
-    var belongsHere = narrowing ? [] : teamRoster().filter(function (name) {
+    var inScope = function (name) {
       if (filters.assignees.length && filters.assignees.indexOf(name) === -1) return false;
       if (currentTeamspace === 'all') return true;
       return personInTeamspace(name);
-    });
+    };
+    var belongsHere = narrowing ? [] : teamRoster().filter(inScope);
+    // Search also matches the PERSON (name or department), not only their tasks -- "search
+    // Production" or a teammate with no work yet used to come back empty. A person matched this
+    // way shows all their work (search not applied to their rows). With priority/project also
+    // set, they still need work under those, for the same "reads as broken" reason as above.
+    var q = filters.search.trim().toLowerCase();
+    var nameMatched = {};
+    var unsearched = q ? applyFilters(activeTasks(), true) : filtered;
+    if (q) {
+      teamRoster().forEach(function (name) {
+        if (!inScope(name)) return;
+        var hay = (name + ' ' + personDepartments(name).map(departmentLabel).join(' ')).toLowerCase();
+        if (hay.indexOf(q) === -1) return;
+        if ((filters.priority || filters.project) && !unsearched.some(function (t) { return t.assignee === name; })) return;
+        nameMatched[name] = true;
+      });
+    }
     var seenPerson = {};
-    var people = withWork.concat(belongsHere).filter(function (name) {
+    var people = Object.keys(nameMatched).concat(withWork, belongsHere).filter(function (name) {
       if (seenPerson[name]) return false;
       seenPerson[name] = true;
       return true;
@@ -8960,7 +8999,7 @@
     }
 
     var summaries = people.map(function (name) {
-      var mine = filtered.filter(function (t) { return t.assignee === name; });
+      var mine = (nameMatched[name] ? unsearched : filtered).filter(function (t) { return t.assignee === name; });
       var active = mine.filter(function (t) { return t.status !== 'Done'; });
       var overdue = active.filter(function (t) { return dueUrgency(t).overdue; }).length;
       var high = active.filter(function (t) { return t.priority === 'High'; }).length;
@@ -9179,11 +9218,16 @@
         ? '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>'
         : '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.openCount + ' active, ' + (p.activeCount - p.openCount) + ' done</span>');
 
+    // Collapsed by default; a search hit on this project's tasks opens it so the match is visible.
+    var expanded = !!projectExpanded[p.name] || !!p.searchHit;
     return (
-      '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col h-full">' +
-        '<div class="flex items-center gap-2.5 px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
+      '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden flex flex-col">' +
+        '<div class="flex items-center gap-2.5 px-4 py-3' + (expanded ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
           '<div class="min-w-0 flex-1">' +
-            '<p data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(p.name) + '</p>' +
+            '<button type="button" class="project-expand-toggle flex items-center gap-1.5 w-full min-w-0 text-left group" data-project="' + escapeHtml(p.name) + '" aria-expanded="' + expanded + '">' +
+              '<svg class="w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-transform' + (expanded ? ' rotate-90' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
+              '<span data-tooltip="' + escapeHtml(p.name) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate min-w-0">' + escapeHtml(p.name) + '</span>' +
+            '</button>' +
             '<div class="flex flex-wrap items-center gap-1.5 mt-0.5">' +
               taskCountLabel +
               badges +
@@ -9199,7 +9243,7 @@
           '</div>' +
           '<span class="text-lg font-bold text-zinc-700 dark:text-zinc-200 shrink-0">' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
         '</div>' +
-        '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' +
+        (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' : '') +
       '</div>'
     );
   }
@@ -9217,6 +9261,24 @@
       return;
     }
 
+    // Search: a project matching by NAME shows whole; otherwise it shows if any of its tasks
+    // match (taskMatchesSearch, same matcher as the Board), with only those task rows listed.
+    // The card's totals and counts stay project-wide -- they describe the project, not the hit.
+    var q = filters.search.trim().toLowerCase();
+    var rowMatch = {};
+    if (q) {
+      names = names.filter(function (name) {
+        if (name.toLowerCase().indexOf(q) !== -1) return true;
+        var hit = allTasks.some(function (t) { return t.project === name && taskMatchesSearch(t, q); });
+        if (hit) rowMatch[name] = true;
+        return hit;
+      });
+      if (!names.length) {
+        container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 col-span-full text-center py-10">No projects match “' + escapeHtml(filters.search.trim()) + '”.</p>';
+        return;
+      }
+    }
+
     var summaries = names.map(function (name) {
       var mine = allTasks.filter(function (t) { return t.project === name; });
       var totalMinutes = mine.reduce(function (sum, t) { return sum + taskTimeMinutes(t); }, 0);
@@ -9231,7 +9293,7 @@
       // read as a contradiction even though it wasn't one.
       var activeCount = mine.filter(function (t) { return !t.archivedAt; }).length;
       var openCount = mine.filter(function (t) { return !t.archivedAt && t.status !== 'Done'; }).length;
-      var rows = mine.slice().sort(function (a, b) { return taskTimeMinutes(b) - taskTimeMinutes(a); });
+      var rows = (rowMatch[name] ? mine.filter(function (t) { return taskMatchesSearch(t, q); }) : mine).sort(function (a, b) { return taskTimeMinutes(b) - taskTimeMinutes(a); });
       // Real stored timestamps, not the project *name* text -- some project names embed a
       // date-like prefix as a team naming convention (e.g. "260702[Google]..."), but that's
       // free text a person typed, not a structured field this can sort on reliably.
@@ -9249,7 +9311,7 @@
       return {
         name: name, rows: rows, totalMinutes: totalMinutes, billableMinutes: billableMinutes,
         overtimeMinutes: overtimeMinutes, activeCount: activeCount, openCount: openCount,
-        nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt
+        nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt, searchHit: !!rowMatch[name]
       };
     });
 
@@ -9272,30 +9334,36 @@
       return b.lastArchivedAt - a.lastArchivedAt;
     });
 
+    // Collapsed cards are only a header tall, so each section lays them out two-up on wide screens
+    // rather than one long single column.
+    var cardGrid = 'grid grid-cols-1 lg:grid-cols-2 gap-3 items-start';
     var ongoingHtml = ongoing.length
-      ? '<div class="flex flex-col gap-3">' + ongoing.map(projectCardHtml).join('') + '</div>'
+      ? '<div class="' + cardGrid + '">' + ongoing.map(projectCardHtml).join('') + '</div>'
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No ongoing projects.</p>';
 
     // Completed is a <details> disclosure, collapsed by default (auto-opened only when it's
     // the only thing there is to show) -- it's the bucket most likely to keep growing
     // indefinitely as projects wrap up, and it's rarely what you need day-to-day, so it
     // shouldn't push the ongoing list (the one people actually check regularly) down the page.
-    var completedHtml = '<details' + (ongoing.length === 0 && completed.length > 0 ? ' open' : '') + '>' +
+    // Its open state is remembered (projectsCompletedOpen) because expanding a card re-renders the
+    // whole grid -- without it, opening a Completed project's card would snap Completed shut. Also
+    // opened while searching, so a match that only lives in a finished project isn't hidden.
+    var completedOpen = projectsCompletedOpen || (completed.length > 0 && (ongoing.length === 0 || !!q));
+    var completedHtml = '<details id="projects-completed-details"' + (completedOpen ? ' open' : '') + '>' +
       '<summary class="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">' +
         '<svg class="disclosure-chevron w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
         'Completed (' + completed.length + ')' +
       '</summary>' +
       (completed.length
-        ? '<div class="flex flex-col gap-3">' + completed.map(projectCardHtml).join('') + '</div>'
+        ? '<div class="' + cardGrid + '">' + completed.map(projectCardHtml).join('') + '</div>'
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No completed projects yet.</p>') +
     '</details>';
 
-    // Side by side rather than stacked -- Completed only ever grows (finished projects never
-    // come back), and with the two in one column that growth used to push Ongoing further
-    // down the page over time. As separate columns, each one's height is independent, so
-    // Ongoing -- the list people actually check day-to-day -- always starts at the same spot.
+    // Stacked, Ongoing first (asked for directly). They used to sit side by side so Completed's
+    // growth couldn't push Ongoing down -- with Ongoing on top that can't happen anyway, and now
+    // that cards collapse to a header, Ongoing stays short enough that Completed is in reach.
     container.innerHTML =
-      '<div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">' +
+      '<div class="flex flex-col gap-6">' +
         '<div>' +
           '<h3 class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-3">Ongoing (' + ongoing.length + ')</h3>' +
           ongoingHtml +
@@ -10445,7 +10513,9 @@
   // like Activity, it doesn't route through applyFilters() (renderChatProjectList does its own
   // match against project names, not tasks), but it's still a real, working search.
   // Archived joined on request -- it does its own match via taskMatchesSearch (see renderArchived).
-  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'activity', 'chat', 'archived'];
+  // Projects joined on request -- renderProjects matches project names, then falls back to
+  // taskMatchesSearch over each project's tasks (active and archived).
+  var SEARCHABLE_VIEWS = ['board', 'gantt', 'calendar', 'people', 'projects', 'activity', 'chat', 'archived'];
 
   function syncSearchAvailability() {
     var input = document.getElementById('filter-search');
@@ -10455,7 +10525,11 @@
     input.title = searchable ? '' : 'Search doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView);
     input.placeholder = !searchable
       ? 'Search doesn\'t apply here'
-      : (currentView === 'activity' ? 'Search activity…' : currentView === 'chat' ? 'Search chats and messages…' : 'Search tasks, checklists, comments…');
+      : (currentView === 'activity' ? 'Search activity…'
+        : currentView === 'chat' ? 'Search chats and messages…'
+        : currentView === 'projects' ? 'Search projects and their tasks…'
+        : currentView === 'people' ? 'Search people, departments, tasks…'
+        : 'Search tasks, checklists, comments…');
     input.classList.toggle('opacity-50', !searchable);
     input.classList.toggle('cursor-not-allowed', !searchable);
   }
@@ -11510,7 +11584,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-01T03:24:37Z";
+  var CURRENT_BUILD_VERSION = "2026-10-01T06:02:57Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
