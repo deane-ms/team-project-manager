@@ -667,6 +667,14 @@ to bottom:
      opens that card (`p.searchHit`) and opens Completed. Completed's own open state is
      `projectsCompletedOpen`, recorded from the summary *click*, not the `toggle` event, which a
      render forcing it open also fires. Each section lays cards out `lg:grid-cols-2`.
+     - **The Ongoing/Completed headings are full-size titles** (`text-lg font-bold`, normal case)
+       with the count in a neutral pill (`projectSectionCount`) — they were tiny grey uppercase
+       captions ("ONGOING (12)") and reported as not prominent enough. Completed's summary keeps
+       its disclosure chevron and gains a brand hover, since it's the clickable one.
+     - **A Completed project card (`activeCount === 0`) gets the Board's Done green** — the exact
+       `bg-emerald-50 dark:bg-emerald-500/10` wash `boardTaskRowHtml`'s `rowBg` uses, on the card
+       header, plus an emerald border. One colour for "finished" across views. Header only: the
+       expanded task rows stay neutral so an open card doesn't turn into a block of green.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) stacked sections (formerly side by side), not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
