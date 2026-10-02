@@ -3041,6 +3041,34 @@ moment. The old owner gets an "added you to" notification on save, like anyone n
 (none if you hand off your own task — you never notify yourself). Hidden behind `+ Also involved` in the task modal.
 Round-trips through Import/Export. No rules change was needed.
 
+**Checklist items can be assigned (`item.assignee` on a checklist item).** Asked for as
+"checklist to be able to assign people. If not under [people] the tasks would not register."
+Optional display name, picked from the roster (`checklistAssigneeSelectHtml`) inside the item's
+existing pencil editor — **not** on the add row, which already carries text/link/date/TBD/Calendar.
+Off-roster current values stay selectable, same rule as the owner picker.
+- **Deliberately light — a step, not a half-task.** Agreed after discussing it: an assigned item
+  is visible and notified, but does **not** count toward workload, People-card sort order, WIP,
+  Focus, or deadline/leave alerts. If it is big enough to need those, it should be its own task.
+  Hold this line; "why don't checklist items count toward X" is the predictable next request,
+  and answering it item-by-item rebuilds tasks inside tasks.
+- **People view**: a person's card lists open items assigned to them on *other people's* tasks
+  under "Checklist items on others' tasks", and the count line reads "N active · M checklist".
+  Their own task's items aren't repeated (the task row covers them); done items and items on Done
+  tasks are hidden. A person whose only work is a step still gets a card. Items are not
+  teamspace-scoped per item — the card is the person's — but project/priority filters apply.
+- **Notifications** (`notifyChecklistChanges`, compared by item id against the saved task, so
+  re-saving or reordering never re-sends): `checklist_assigned` to the assignee when an open item
+  is newly given to them; `checklist_done` to the task owner when an item assigned to someone
+  else is ticked. Self-actions never notify.
+- **Teamspace**: an item assignee puts the project in their department, like "Also involved"
+  (`projectDepartments`).
+- **Not built, on purpose (recommended against for now)**: ticking a step from the People card
+  (opening the task is one click); auto-adding item assignees to "Also involved" (they'd get every
+  comment on the whole task).
+- Verified by extracting the real functions into a Node harness (21 checks: notification
+  transitions, picker, import, project departments, People-card rendering). No emulator in this
+  environment, so the modal editor itself has not been clicked through.
+
 **`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
 started fully open (`allow read, write: if isMediashock()`), moved to an ownership-scoped model
 once the team grew past five (admin → anything, assignee → their own task, everyone else →

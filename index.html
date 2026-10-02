@@ -1711,6 +1711,8 @@
       : notif.type === 'assigned' ? (notif.author + ' made you the owner of a task')
       : notif.type === 'involved' ? (notif.author + ' added you to a task')
       : notif.type === 'suggestion_fixed' ? (notif.author + ' marked your suggestion as fixed')
+      : notif.type === 'checklist_assigned' ? (notif.author + ' assigned you a checklist item')
+      : notif.type === 'checklist_done' ? (notif.author + ' finished a checklist item')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
     // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
@@ -2346,11 +2348,15 @@
   // is a team's business if anyone on that team is working on it. This is project-level only --
   // taskInTeamspace stays owner-only, so involved people still never count toward the Board,
   // Focus, workload or Timeline of their teamspace (see "Also involved" in CLAUDE.md).
+  //
+  // Checklist-item assignees count for the same reason: someone handed a step of the project is
+  // working on it.
   function projectDepartments(name) {
     var seen = {};
     tasks.concat(archivedTasks).forEach(function (t) {
       if (t.project !== name) return;
-      [t.assignee].concat(Array.isArray(t.involved) ? t.involved : []).forEach(function (n) {
+      var checklistPeople = (t.checklist || []).map(function (it) { return it && it.assignee; }).filter(Boolean);
+      [t.assignee].concat(Array.isArray(t.involved) ? t.involved : [], checklistPeople).forEach(function (n) {
         personDepartments(n).forEach(function (d) { seen[d] = true; });
       });
     });
@@ -4478,6 +4484,43 @@
     }).catch(function (e) { console.error('Failed to notify assignment', e); });
   }
 
+  // Both ends of a handed-off checklist step, compared item-by-id against the saved task so
+  // re-saving or reordering never re-sends anything:
+  //  - newly assigned (and still open) -> tell the assignee;
+  //  - an assigned step ticked off -> tell the task's owner. Recommended alongside assignment
+  //    and agreed: without it the owner has to keep opening the task to see whether it's done.
+  // Only steps assigned to someone OTHER than the owner report completion; an owner ticking
+  // their own list is not news to anyone. Nobody is ever notified about their own action.
+  function notifyChecklistChanges(task, oldList, newList) {
+    var user = auth.currentUser;
+    var myName = user ? (user.displayName || user.email) : null;
+    var before = {};
+    (oldList || []).forEach(function (it) { if (it && it.id) before[it.id] = it; });
+    function send(recipient, type, it) {
+      setDoc(doc(notificationsCol), {
+        recipient: recipient,
+        type: type,
+        taskId: task.id,
+        taskName: task.name,
+        chatProject: null,
+        author: myName || 'unknown',
+        snippet: String(it.text || '').slice(0, 140),
+        at: new Date().toISOString(),
+        read: false
+      }).catch(function (e) { console.error('Failed to notify checklist change', e); });
+    }
+    (newList || []).forEach(function (it) {
+      if (!it || !it.assignee) return;
+      var old = before[it.id];
+      if (!it.done && it.assignee !== myName && (!old || old.assignee !== it.assignee)) {
+        send(it.assignee, 'checklist_assigned', it);
+      }
+      if (it.done && old && !old.done && it.assignee !== task.assignee && task.assignee && task.assignee !== myName) {
+        send(task.assignee, 'checklist_done', it);
+      }
+    });
+  }
+
   // Tells a suggestion's author it was marked Fixed -- asked for directly ("when a suggestion is
   // fixed, can the author be notified?"). Sent only on the transition INTO Fixed (the caller
   // checks), so re-saving an already-Fixed suggestion doesn't repeat it. AI-imported suggestions
@@ -5903,6 +5946,29 @@
     return '<span class="block text-[11px] ' + cls + '">Due ' + formatShortDate(item.due) + (overdue ? ' · overdue' : '') + (after ? ' · after the task deadline' : '');
   }
 
+  /* Checklist items can be handed to a person -- asked for directly: "checklist to be able to
+     assign people. If not under [people] the tasks would not register." A sub-step done by
+     someone other than the task's owner was invisible to them everywhere: not on their People
+     card, not in their notifications. `item.assignee` is an optional display name (same
+     convention as `task.assignee`), picked from the roster rather than typed, for the same
+     reason the task owner is -- free text mints a second, un-notifiable person on a typo.
+
+     Lives inside the item's existing pencil editor, not on the add row: the add row already
+     carries text, link, date, TBD and Calendar, and most items are the owner's own. The name
+     shows under the item text only once set. */
+  function checklistAssigneeSelectHtml(item) {
+    var names = teamRoster();
+    // Keep the current value selectable even if the roster lost them, or an edit silently
+    // unassigns the item -- same rule as the task owner picker.
+    if (item.assignee && names.indexOf(item.assignee) === -1) names = [item.assignee].concat(names);
+    return '<select class="checklist-assignee-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" aria-label="Assign this item to">' +
+      '<option value="">No one assigned</option>' +
+      names.map(function (n) {
+        return '<option value="' + escapeHtml(n) + '"' + (n === item.assignee ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
+      }).join('') +
+      '</select>';
+  }
+
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
     el.innerHTML = currentChecklist.length
@@ -5920,12 +5986,14 @@
                       '<input type="text" class="checklist-link-input flex-1 min-w-[8rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '">' +
                       '<input type="date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" value="' + escapeHtml(item.due || '') + '"' + (item.dueTbd && !item.due ? ' disabled' : '') + '>' +
                       '<label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" class="checklist-tbd-input brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"' + (item.dueTbd && !item.due ? ' checked' : '') + '> TBD</label>' +
+                      checklistAssigneeSelectHtml(item) +
                       '<button type="button" class="checklist-edit-done text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Done</button>' +
                     '</div>' +
                   '</div>'
                 : '<div class="flex-1 min-w-0">' +
                   '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
                   (item.link ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-brand-600 dark:text-brand-400 truncate hover:underline">' + escapeHtml(item.link) + '</a>' : '') +
+                  (item.assignee ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + avatarHtml(item.assignee, 'w-3.5 h-3.5 shrink-0', 'text-[8px]') + escapeHtml(item.assignee) + '</span>' : '') +
                   checklistDueLabelHtml(item, i) +
                 '</div>') +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
@@ -5987,6 +6055,9 @@
       var tbd = box.querySelector('.checklist-tbd-input').checked;
       delete item.due; delete item.dueTbd;
       if (due) item.due = due; else if (tbd) item.dueTbd = true;
+      // Deleted rather than stored as '' when cleared, like due/dueTbd above.
+      var who = box.querySelector('.checklist-assignee-input').value;
+      if (who) item.assignee = who; else delete item.assignee;
     }
     renderChecklistEditor();
   }
@@ -7009,6 +7080,7 @@
         notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
         taskData.involved.forEach(function (n) { notifyAssignment({ id: id, name: name, deadline: deadline }, n, true); });
       }
+      notifyChecklistChanges({ id: id, name: name, assignee: assignee }, isEditing ? oldTask.checklist : [], taskData.checklist);
       if (statusEffect.willFinishProject) celebrateProjectComplete(statusEffect.projectName);
       else if (statusEffect.enteringDone) spawnConfetti();
       closeTaskModal();
@@ -8873,6 +8945,25 @@
     );
   }
 
+  // A checklist step on someone else's task, on the People card of whoever it is assigned to.
+  // Same row shape as personTaskRowHtml so the card reads as one list; the checklist icon in place
+  // of the priority dot is what marks it as a step rather than a whole task. Opens the task.
+  function personChecklistRowHtml(s) {
+    var t = s.task, it = s.item;
+    var overdue = it.due && parseDate(it.due) < todayMidnight();
+    var dueLabel = it.due ? formatShortDate(it.due) : '';
+    return (
+      '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition w-full">' +
+        svgIcon('checklist', 'w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500') +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(it.text) + '</p>' +
+          '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.name) + ' · ' + escapeHtml(t.assignee || 'Unassigned') + '</p>' +
+        '</div>' +
+        (dueLabel ? '<span class="text-xs font-semibold shrink-0 ' + (overdue ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-400 dark:text-zinc-500') + '">' + dueLabel + '</span>' : '') +
+      '</button>'
+    );
+  }
+
   // Which person's "add time off" row is currently revealed. Same progressive-disclosure shape as
   // the Projects tab's deadline field, and for the same reason: an always-visible pair of empty
   // date boxes on every person card reads as a form you are required to fill in, for a value most
@@ -8989,6 +9080,36 @@
     var withWork = uniqueValues('assignee').filter(function (name) {
       return filtered.some(function (t) { return t.assignee === name; });
     });
+    // Open checklist items handed to someone OTHER than the task's owner (an owner's own items
+    // are already covered by the task row). Not teamspace-scoped per item: the card belongs to
+    // the person, and these are their steps wherever the task lives. Project/priority still
+    // narrow them, as they do the task rows.
+    var checklistSource = activeTasks().filter(function (t) {
+      if (t.status === 'Done') return false;
+      if (filters.project && t.project !== filters.project) return false;
+      if (filters.priority && t.priority !== filters.priority) return false;
+      return true;
+    });
+    function checklistItemsFor(name, applySearch) {
+      var out = [];
+      checklistSource.forEach(function (t) {
+        if (t.assignee === name) return;
+        (t.checklist || []).forEach(function (it) {
+          if (!it || it.done || it.assignee !== name) return;
+          if (applySearch && q && String(it.text || '').toLowerCase().indexOf(q) === -1 && !taskMatchesSearch(t, q)) return;
+          out.push({ task: t, item: it });
+        });
+      });
+      return out.sort(function (a, b) { return (a.item.due || '9999') < (b.item.due || '9999') ? -1 : 1; });
+    }
+    // Someone whose only work here is a checklist step still gets a card -- the whole point of
+    // assigning it. Same teamspace test as withWork: the step's task has to be in this teamspace.
+    filtered.forEach(function (t) {
+      (t.checklist || []).forEach(function (it) {
+        if (it && !it.done && it.assignee && it.assignee !== t.assignee && withWork.indexOf(it.assignee) === -1 &&
+            (!filters.assignees.length || filters.assignees.indexOf(it.assignee) !== -1)) withWork.push(it.assignee);
+      });
+    });
     // ...but only while nothing is actively narrowing the board. Search/priority/project are
     // "find me this work" modes, and a roster member with no matching tasks showing up anyway
     // would read as the search being broken. The people filter is handled inline instead of
@@ -9033,14 +9154,19 @@
       var active = mine.filter(function (t) { return t.status !== 'Done'; });
       var overdue = active.filter(function (t) { return dueUrgency(t).overdue; }).length;
       var high = active.filter(function (t) { return t.priority === 'High'; }).length;
-      return { name: name, mine: mine, active: sortTasksForDisplay(active), overdue: overdue, high: high };
+      var steps = checklistItemsFor(name, !nameMatched[name]);
+      return { name: name, mine: mine, active: sortTasksForDisplay(active), overdue: overdue, high: high, steps: steps };
     });
 
     summaries.sort(function (a, b) { return (b.overdue - a.overdue) || (b.active.length - a.active.length) || (b.high - a.high); });
 
     container.innerHTML = summaries.map(function (p) {
-      var rowsHtml = p.active.length
-        ? p.active.map(personTaskRowHtml).join('')
+      var rowsHtml = (p.active.length || p.steps.length)
+        ? p.active.map(personTaskRowHtml).join('') +
+          (p.steps.length
+            ? '<p class="px-4 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Checklist items on others\' tasks</p>' +
+              p.steps.map(personChecklistRowHtml).join('')
+            : '')
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">All caught up — no active tasks.</p>';
 
       /* TWO groups on two lines -- identity beside the name, workload underneath.
@@ -9084,7 +9210,7 @@
               // Workload on its own line, so the counts start at the same x on every card and
               // can actually be compared down the column.
               '<div class="flex flex-wrap items-center gap-1.5 mt-1">' +
-                '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.active.length + ' active</span>' +
+                '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.active.length + ' active' + (p.steps.length ? ' · ' + p.steps.length + ' checklist' : '') + '</span>' +
                 workloadChips +
               '</div>' +
             '</div>' +
@@ -10890,6 +11016,7 @@
       // Only set when valid: Firestore rejects `undefined` field values.
       if (item && item.due && parseDate(item.due)) clean.due = String(item.due);
       else if (item && item.dueTbd === true) clean.dueTbd = true;
+      if (item && typeof item.assignee === 'string' && item.assignee) clean.assignee = item.assignee.slice(0, 100);
       return clean;
     }).filter(function (item) { return item.text; });
   }
@@ -11514,7 +11641,7 @@
           var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
           var verb = n.chatProject
             ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
-            : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : 'commented on');
+            : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you a checklist item on' : n.type === 'checklist_done' ? 'finished a checklist item on' : 'commented on');
           var headlineHtml = systemHeadline
             ? escapeHtml(systemHeadline)
             : n.type === 'suggestion_fixed'
@@ -11651,7 +11778,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-02T04:45:42Z";
+  var CURRENT_BUILD_VERSION = "2026-10-02T07:21:46Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
