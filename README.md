@@ -4,7 +4,7 @@ A shared project & task prioritization kanban board for creative, fast-paced tea
 as a single client-side HTML file (no build step), backed by Firebase (Firestore + Authentication)
 so the whole team edits one live board together, with live updates.
 
-**Live:** https://deane-ms.github.io/team-project-manager/
+**Live:** https://mediashock-apac.github.io/ms-project-manager/
 
 ## Access
 
