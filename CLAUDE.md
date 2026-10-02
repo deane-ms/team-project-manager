@@ -2570,7 +2570,11 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   subcollection. Shared read/write like `tasks`, with two carve-outs: a doc can only be *created*
   with `source: 'ai'` by an admin, and its `status` field (Open/WIP/Fixed — every suggestion, not
   just AI ones) can only be *changed* by an admin — see "AI Product Insights (Suggestions tab)"
-  below for both.
+  below for both. **Moving a suggestion INTO Fixed notifies its author** (`notifySuggestionFixed`,
+  notification `type: 'suggestion_fixed'`, carries `suggestionId`; clicking it opens the
+  Suggestions view). Not sent for AI-imported suggestions, nor when the admin is the author, nor
+  when it was already Fixed. "Unable to Fix" deliberately sends nothing — only Fixed was asked for.
+  The author is matched by stored display name, same as every other notification.
 - **`aiSuggestionImports`** — one doc per imported GitHub issue number, dedup bookkeeping for the
   AI Product Insights import flow (below). Same shape as `notificationDedup`, but write is
   admin-only rather than whole-team, since only an admin can trigger an import at all.
@@ -2670,6 +2674,14 @@ rule, and it is the *second* rule this feature had.
 - **`projectDepartments(name)` is DERIVED, never stored** — computed from the project's
   assignees, for the Projects/Chat lists and the read-only chips on a project card. Nothing to
   maintain, and it cannot drift the way a manual field does the moment someone is reassigned.
+  - **It counts "Also involved" people, not just owners.** Reported: a project a Suits member was
+    involved in vanished from Suits once someone from another team became the owner. A project is
+    a team's business if anyone on that team works on it. **Project-level only** —
+    `taskInTeamspace` stays owner-only, so involved people still don't count toward the Board,
+    Focus, WIP or Timeline of their teamspace. Consequence: a project can show under Suits with
+    none of its tasks on the Suits Board. A handoff now keeps the old owner as involved (see
+    "Also involved"), but tasks handed off *before* that change may have dropped them — adding
+    them back under `+ Also involved` restores the project to their teamspace.
   Old `projects` docs may still carry a `departments` array from the filed-by-hand version; it is
   **deliberately ignored rather than migrated**, since reading it would restore the second,
   conflicting source of truth this change removed. Harmless to leave in Firestore.
@@ -3015,13 +3027,18 @@ polishing an existing deadline grid. Four gaps, all requested together in one li
 Jira/Linear (owner + watchers) rather than ClickUp/Monday multi-assignee, which would force a
 workload Split-vs-Sum decision and touch every alert. Involved people get comment notifications and
 an "added you to" notification (`type: 'involved'`), and show as avatars on the Board card. They do
-NOT count toward workload, People, Timeline, Focus, or the deadline/stack/leave alerts. The
+NOT count toward workload, People, Timeline, Focus, or the deadline/stack/leave alerts — but they
+DO put the project in their teamspace (`projectDepartments`, Projects tab and Chat). The
 assignee is stripped from the list at save. **Picking a new owner from the involved list swaps
 them**: the old owner takes the new owner's chip (`swapOwnerIntoInvolved`, on the assignee
 `change`), so the old owner keeps comment updates instead of dropping off, and swapping back
-restores the original lineup. Picking an owner who was *not* involved leaves the list alone and
-the old owner drops off, as before. The old owner gets an "added you to" notification on save,
-like anyone newly involved. Hidden behind `+ Also involved` in the task modal.
+restores the original lineup. **Picking an owner who was *not* involved now keeps the old owner
+too** — added as an involved chip the moment the owner changes, so a clean handoff is one `×`
+away. It used to drop them, which also dropped the project out of their teamspace (see
+`projectDepartments`). Only people on the task *as saved* (`involvedOriginalPeople`) are kept,
+so clicking through the dropdown doesn't leave a trail of people who were only selected for a
+moment. The old owner gets an "added you to" notification on save, like anyone newly involved
+(none if you hand off your own task — you never notify yourself). Hidden behind `+ Also involved` in the task modal.
 Round-trips through Import/Export. No rules change was needed.
 
 **`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
