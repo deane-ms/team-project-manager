@@ -25,7 +25,7 @@ Google Auth) so the whole team edits one live board together with real-time upda
 Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**,
 Activity, Suggestions, Archived.
 
-Live at https://deane-ms.github.io/team-project-manager/ (deployed via GitHub Pages, not Firebase
+Live at https://mediashock-apac.github.io/ms-project-manager/ (deployed via GitHub Pages, not Firebase
 Hosting — `firebase.json` only configures Firestore + emulators).
 
 ## Standing design rule: count the clutter, not just the feature
