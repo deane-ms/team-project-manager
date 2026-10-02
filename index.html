@@ -2325,9 +2325,24 @@
      It is also why this is not "two competing answers" any more, which was the original
      objection to using a person's department for scoping: there is now only one answer, and the
      project no longer has an opinion at all. */
+  //
+  // "Also involved" people and checklist-item assignees count too, not just the owner. Reported:
+  // SMB Q4 vanished from the Suits Board once Calcium (another team) became owner, even though a
+  // Suits member was still involved. Same people projectDepartments() counts, so a project and
+  // its tasks can't disagree about which teamspace they're in. Workload/People counts stay
+  // owner-only -- those are per person, not per teamspace.
+  function taskTeamspacePeople(t) {
+    if (!t) return [];
+    var checklistPeople = (t.checklist || []).map(function (it) { return it && it.assignee; }).filter(Boolean);
+    return [t.assignee].concat(Array.isArray(t.involved) ? t.involved : [], checklistPeople);
+  }
+
   function taskInTeamspace(t) {
     if (currentTeamspace === 'all') return true;
-    var deps = personDepartments(t && t.assignee);
+    var deps = [];
+    taskTeamspacePeople(t).forEach(function (n) {
+      personDepartments(n).forEach(function (d) { if (deps.indexOf(d) === -1) deps.push(d); });
+    });
     // Unassigned is not a department -- it is the catch-all for work whose assignee has not
     // picked one yet (or answered "Not now", or is a hand-typed name with no roster row). It is
     // meant to empty out, not to be lived in.
@@ -2345,9 +2360,8 @@
   //
   // "Also involved" people count here, not just owners. Reported: a project someone was involved
   // in vanished from Suits once a member of another team became the owner of its tasks. A project
-  // is a team's business if anyone on that team is working on it. This is project-level only --
-  // taskInTeamspace stays owner-only, so involved people still never count toward the Board,
-  // Focus, workload or Timeline of their teamspace (see "Also involved" in CLAUDE.md).
+  // is a team's business if anyone on that team is working on it. taskInTeamspace now uses the
+  // same people (taskTeamspacePeople), so the Board/Timeline/Calendar agree with this.
   //
   // Checklist-item assignees count for the same reason: someone handed a step of the project is
   // working on it.
@@ -2355,8 +2369,7 @@
     var seen = {};
     tasks.concat(archivedTasks).forEach(function (t) {
       if (t.project !== name) return;
-      var checklistPeople = (t.checklist || []).map(function (it) { return it && it.assignee; }).filter(Boolean);
-      [t.assignee].concat(Array.isArray(t.involved) ? t.involved : [], checklistPeople).forEach(function (n) {
+      taskTeamspacePeople(t).forEach(function (n) {
         personDepartments(n).forEach(function (d) { seen[d] = true; });
       });
     });
@@ -11778,7 +11791,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-02T07:21:46Z";
+  var CURRENT_BUILD_VERSION = "2026-10-02T09:33:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

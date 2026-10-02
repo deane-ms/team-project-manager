@@ -2676,10 +2676,14 @@ rule, and it is the *second* rule this feature had.
   maintain, and it cannot drift the way a manual field does the moment someone is reassigned.
   - **It counts "Also involved" people, not just owners.** Reported: a project a Suits member was
     involved in vanished from Suits once someone from another team became the owner. A project is
-    a team's business if anyone on that team works on it. **Project-level only** —
-    `taskInTeamspace` stays owner-only, so involved people still don't count toward the Board,
-    Focus, WIP or Timeline of their teamspace. Consequence: a project can show under Suits with
-    none of its tasks on the Suits Board. A handoff now keeps the old owner as involved (see
+    a team's business if anyone on that team works on it. **Task-level too, since a follow-up
+    report** ("SMB Q4 isn't under Suits because Calcium is the owner", on the Board):
+    `taskInTeamspace` uses the same people via `taskTeamspacePeople` (owner + involved +
+    checklist-item assignees), so a task shows on the Board/Timeline/Calendar/Focus/WIP of every
+    teamspace someone on it belongs to. It was owner-only at first, which let a project show under
+    Suits with none of its tasks on the Suits Board. Workload counts stay per person and
+    owner-only; the People view under a teamspace may now list an owner from another team, which
+    it already did for "whoever is working on its projects". A handoff now keeps the old owner as involved (see
     "Also involved"), but tasks handed off *before* that change may have dropped them — adding
     them back under `+ Also involved` restores the project to their teamspace.
   Old `projects` docs may still carry a `departments` array from the filed-by-hand version; it is
@@ -3027,8 +3031,9 @@ polishing an existing deadline grid. Four gaps, all requested together in one li
 Jira/Linear (owner + watchers) rather than ClickUp/Monday multi-assignee, which would force a
 workload Split-vs-Sum decision and touch every alert. Involved people get comment notifications and
 an "added you to" notification (`type: 'involved'`), and show as avatars on the Board card. They do
-NOT count toward workload, People, Timeline, Focus, or the deadline/stack/leave alerts — but they
-DO put the project in their teamspace (`projectDepartments`, Projects tab and Chat). The
+NOT count toward workload or the deadline/stack/leave alerts — but they DO put the task and its
+project in their teamspace (`taskTeamspacePeople`, used by both `taskInTeamspace` and
+`projectDepartments`). The
 assignee is stripped from the list at save. **Picking a new owner from the involved list swaps
 them**: the old owner takes the new owner's chip (`swapOwnerIntoInvolved`, on the assignee
 `change`), so the old owner keeps comment updates instead of dropping off, and swapping back
